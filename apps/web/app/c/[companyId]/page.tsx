@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { api, type Company, type EntryRow } from '@/lib/api';
+import type { Company, EntryRow } from '@/lib/api';
+import { serverApi } from '@/lib/server-api';
 import { isoToThai, monthLabel, todayIso } from '@/lib/date';
 import { Money } from '@/components/Money';
 import { th } from '@/i18n/th';
@@ -8,8 +9,8 @@ export default async function CompanyHome({ params }: { params: Promise<{ compan
   const { companyId } = await params;
   const month = todayIso().slice(0, 7);
   const [company, entries] = await Promise.all([
-    api<Company>(`/companies/${companyId}`),
-    api<EntryRow[]>(`/companies/${companyId}/journal?month=${month}`),
+    serverApi<Company>(`/companies/${companyId}`),
+    serverApi<EntryRow[]>(`/companies/${companyId}/journal?month=${month}`),
   ]);
 
   return (

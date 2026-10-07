@@ -1,4 +1,5 @@
 import { th } from '@/i18n/th';
+import { LogoutButton } from './LogoutButton';
 
 type Props = {
   company: string;
@@ -6,10 +7,11 @@ type Props = {
   mode: keyof typeof th.mode;
   status: string;
   watchedBy?: string; // ชื่อครูที่กำลังดู (เฟส 1: มาจาก realtime)
+  user: string;
 };
 
 // แสดงเสมอ: ชื่อบริษัท | งวด | โหมด | สถานะบันทึก (+ ป้ายครูกำลังดู)
-export function Topbar({ company, month, mode, status, watchedBy }: Props) {
+export function Topbar({ company, month, mode, status, watchedBy, user }: Props) {
   const cell = 'border-l border-rule px-4 max-sm:border-0 max-sm:px-0';
   return (
     <header className="border-b border-rule-strong bg-paper">
@@ -29,6 +31,10 @@ export function Topbar({ company, month, mode, status, watchedBy }: Props) {
             {th.topbar.teacherWatching(watchedBy)}
           </span>
         )}
+        <span className="hidden items-center gap-4 border-l border-rule px-4 text-sm sm:ml-auto sm:flex">
+          {user}
+          <LogoutButton />
+        </span>
       </div>
     </header>
   );

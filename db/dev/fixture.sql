@@ -25,7 +25,6 @@ begin
   if not exists (select 1 from acc.companies where owner_id = '00000000-0000-4000-8000-000000000020') then
     perform set_config('app.user_id', '00000000-0000-4000-8000-000000000020', true);
     v := acc.create_company('บริษัท ก. จำกัด', '00000000-0000-4000-8000-000000000100');
-    raise notice 'DEV_COMPANY_ID=%', v;
   end if;
 end $$;
-select 'DEV_COMPANY_ID=' || id from acc.companies where owner_id = '00000000-0000-4000-8000-000000000020';
+select 'บริษัทตัวอย่าง: ' || name from acc.companies where owner_id = '00000000-0000-4000-8000-000000000020';

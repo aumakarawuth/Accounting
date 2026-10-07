@@ -2,16 +2,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
+import { requireUser } from '../guard.js';
 import { HttpError } from '../errors.js';
 import { CompanyParams, EntryParams, IdempotencyKey, MonthQuery, PostJournal, Reverse } from '../schemas.js';
 
 // ชั้นบาง: ตรวจรูปแบบด้วย Zod แล้วเรียกฟังก์ชันใน Postgres; สิทธิ์ตัดสินที่ RLS/ฟังก์ชัน
 export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapter) {
-  async function user(req: FastifyRequest): Promise<AuthUser> {
-    const u = await auth.authenticate(req);
-    if (!u) throw new HttpError(401, 'unauthenticated', 'ต้องเข้าใช้งานก่อน');
-    return u;
-  }
+  const user = (req: FastifyRequest): Promise<AuthUser> => requireUser(auth, req);
 
   // กัน IDOR: บริษัทที่อ่านไม่ได้ตอบ 404 เหมือนไม่มีอยู่
   async function requireReadable(c: pg.PoolClient, companyId: string) {
@@ -27,6 +24,13 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
   function idemKey(req: FastifyRequest) {
     return IdempotencyKey.parse(req.headers['idempotency-key']);
   }
+
+  // บริษัทที่ตัวเองเป็นเจ้าของ (หน้าแรกหลังล็อกอิน)
+  app.get('/me/companies', async (req) => {
+    const u = await user(req);
+    return withUser(pool, u, async (c) =>
+      (await c.query('select id, name from acc.companies where owner_id = $1 order by created_at', [u.id])).rows);
+  });
 
   app.get('/companies/:companyId', async (req) => {
     const { companyId } = CompanyParams.parse(req.params);

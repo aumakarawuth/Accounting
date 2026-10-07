@@ -7,21 +7,26 @@ pnpm install
 # 1) ฐานข้อมูล (ใช้ superuser เฉพาะตอน migrate/สร้าง fixture)
 createdb accounting_dev
 DATABASE_URL=postgres://postgres@localhost/accounting_dev pnpm db:migrate --seed
-psql postgres://postgres@localhost/accounting_dev -f db/dev/fixture.sql   # พิมพ์ DEV_COMPANY_ID ออกมา
+psql postgres://postgres@localhost/accounting_dev -f db/dev/fixture.sql
+# ตั้งรหัสผ่านตัวอย่าง (ไม่ใส่รหัส = สุ่มรหัสชั่วคราว บังคับเปลี่ยนตอนเข้าครั้งแรก)
+export ADMIN_DATABASE_URL=postgres://postgres@localhost/accounting_dev
+pnpm --filter @accounting/api set-password teacher@example.test    # ครู (อีเมล)
+pnpm --filter @accounting/api set-password 65012                   # นักเรียน (รหัสนักเรียน)
 
 # 2) API (Fastify) — ต่อด้วยบทบาท app_dev ซึ่งเป็นสมาชิก app_rw
-cp .env.example .env   # แล้วใส่ DEV_COMPANY_ID
-DATABASE_URL=postgres://app_dev:app_dev@localhost/accounting_dev AUTH_ADAPTER=dev \
-  DEV_USER_ID=00000000-0000-4000-8000-000000000020 pnpm --filter @accounting/api dev
+DATABASE_URL=postgres://app_dev:app_dev@localhost/accounting_dev COOKIE_SECURE=false \
+  WEB_ORIGIN=http://localhost:3000 pnpm --filter @accounting/api dev
 
 # 3) เว็บ (Next.js)
-API_URL=http://127.0.0.1:4000 DEV_COMPANY_ID=<จากข้อ 1> pnpm --filter @accounting/web dev
+API_URL=http://127.0.0.1:4000 pnpm --filter @accounting/web dev
+# เปิด http://localhost:3000 → /login
 ```
 
-- `AUTH_ADAPTER=dev` เชื่อ header `x-dev-user-id` หรือ `DEV_USER_ID` ใช้บนเครื่องเท่านั้น API ไม่ยอมเริ่มถ้า `NODE_ENV=production`
+- ล็อกอินจริงเป็นค่าเริ่มต้น (`AUTH_ADAPTER=session`); `AUTH_ADAPTER=dev` (เชื่อ header `x-dev-user-id`) ใช้ในเทสต์เท่านั้น API ไม่ยอมเริ่มถ้า `NODE_ENV=production`
+- ตัวแปรทั้งหมดดู `.env.example`; production ต้อง `COOKIE_SECURE=true` และ `WEB_ORIGIN` เป็นโดเมนจริง
 - เบราว์เซอร์เรียก `/api/*` ที่ origin เดียวกัน Next.js rewrite ไปที่ `API_URL`
 - เทสต์ทั้งหมด: `pnpm test` (สร้างฐาน `accounting_test` ใหม่ทุกครั้ง)
-- ตรวจ UI ด้วยมือ 3 ขนาดจอ: `node tests/e2e-smoke.mjs http://127.0.0.1:3000 <DEV_COMPANY_ID> <โฟลเดอร์ภาพ>` (ลงรายการจริงผ่านหน้าจอแล้วถ่ายภาพ)
+- ตรวจ UI ด้วยมือ 3 ขนาดจอ: `node tests/e2e-smoke.mjs http://127.0.0.1:3000 <รหัสนักเรียน> <รหัสผ่าน> <โฟลเดอร์ภาพ>` (ล็อกอิน ลงรายการจริงผ่านหน้าจอ แล้วถ่ายภาพ)
 
 ## โครงสร้าง
 

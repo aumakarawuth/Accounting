@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { buildApp } from '../apps/api/src/app';
 import { devAuth } from '../apps/api/src/auth';
 import { createPool } from '../apps/api/src/db';
+import { authConfigFromEnv } from '../apps/api/src/config';
 import { apiUrl } from './global-setup';
 import { pool as adminPool, newSchool, newUser, newClassroom, newCompany } from './helpers';
 
 const apiPool = createPool(apiUrl());
-const app = buildApp({ pool: apiPool, auth: devAuth() });
+// devAuth ไม่ใช้ cookie จึงไม่ตรวจ Origin (CSRF ทดสอบใน auth.test.ts)
+const app = buildApp({ pool: apiPool, auth: devAuth(), cfg: { ...authConfigFromEnv({}), allowedOrigins: false } });
 let a: string, b: string, teacher: string, coA: string, coB: string;
 
 beforeAll(async () => {

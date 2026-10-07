@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 
 export class HttpError extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(public status: number, public code: string, message: string, public extra: Record<string, unknown> = {}) {
     super(message);
   }
 }
@@ -23,8 +23,8 @@ const STATUS: Record<string, number> = {
   '23505': 409,
 };
 
-export function toHttp(err: unknown): { status: number; body: { code: string; message: string; ref?: string } } {
-  if (err instanceof HttpError) return { status: err.status, body: { code: err.code, message: err.message } };
+export function toHttp(err: unknown): { status: number; body: { code: string; message: string; ref?: string; [k: string]: unknown } } {
+  if (err instanceof HttpError) return { status: err.status, body: { code: err.code, message: err.message, ...err.extra } };
   if (err instanceof ZodError) {
     return { status: 400, body: { code: 'invalid', message: err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') } };
   }

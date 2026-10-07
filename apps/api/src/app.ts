@@ -1,15 +1,44 @@
 import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
 import type pg from 'pg';
 import type { AuthAdapter } from './auth.js';
-import { toHttp } from './errors.js';
+import type { AuthConfig } from './config.js';
+import { HttpError, toHttp } from './errors.js';
+import { memoryLimiter, type RateLimiter } from './ratelimit.js';
+import { authRoutes } from './routes/auth.js';
 import { companyRoutes } from './routes/companies.js';
+import { teacherRoutes } from './routes/teacher.js';
 
-export function buildApp(opts: { pool: pg.Pool; auth: AuthAdapter; logger?: boolean }) {
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 256 * 1024, trustProxy: true });
+const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+export function buildApp(opts: {
+  pool: pg.Pool;
+  auth: AuthAdapter;
+  cfg: AuthConfig;
+  limiter?: RateLimiter;
+  logger?: boolean;
+  trustProxy?: boolean | string;
+}) {
+  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 256 * 1024, trustProxy: opts.trustProxy ?? 'loopback' });
+  const limiter = opts.limiter ?? memoryLimiter();
+  app.register(cookie);
+
+  // CSRF: คำขอที่เปลี่ยนข้อมูลต้องมาจาก origin ของเว็บเรา (เสริม cookie SameSite=Lax)
+  app.addHook('onRequest', async (req) => {
+    const wait = await limiter.hit(`ip:${req.ip}`, opts.cfg.requestsPerIpPerMinute, 60);
+    if (wait) throw new HttpError(429, 'rate_limited', 'ส่งคำขอถี่เกินไป', { retryAfter: wait });
+    if (SAFE.has(req.method) || opts.cfg.allowedOrigins === false) return;
+    let origin = req.headers.origin;
+    if (!origin && req.headers.referer) origin = new URL(req.headers.referer).origin;
+    if (!origin || !opts.cfg.allowedOrigins.includes(origin)) {
+      throw new HttpError(403, 'csrf', 'คำขอนี้ไม่ได้มาจากหน้าเว็บของระบบ');
+    }
+  });
 
   app.setErrorHandler((err, req, reply) => {
     const { status, body } = toHttp(err);
     if (status >= 500) req.log.error({ err, ref: body.ref }, 'unhandled');
+    if (status === 429 && typeof body.retryAfter === 'number') reply.header('retry-after', String(body.retryAfter));
     reply.code(status).send(body);
   });
 
@@ -18,6 +47,10 @@ export function buildApp(opts: { pool: pg.Pool; auth: AuthAdapter; logger?: bool
     return { ok: true };
   });
 
-  companyRoutes(app, opts.pool, opts.auth);
+  app.register(async (scope) => {
+    authRoutes(scope, { pool: opts.pool, auth: opts.auth, cfg: opts.cfg, limiter });
+    companyRoutes(scope, opts.pool, opts.auth);
+    teacherRoutes(scope, { pool: opts.pool, auth: opts.auth });
+  });
   return app;
 }
