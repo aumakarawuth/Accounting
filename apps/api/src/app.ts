@@ -10,6 +10,7 @@ import { authRoutes } from './routes/auth.js';
 import { companyRoutes } from './routes/companies.js';
 import { liveRoutes } from './routes/live.js';
 import { masterDataRoutes } from './routes/masterdata.js';
+import { salesRoutes } from './routes/sales.js';
 import type { RealtimeBus } from './realtime.js';
 import { teacherRoutes } from './routes/teacher.js';
 
@@ -68,6 +69,7 @@ export function buildApp(opts: {
     authRoutes(scope, { pool: opts.pool, auth, cfg: opts.cfg, limiter });
     companyRoutes(scope, opts.pool, auth);
     masterDataRoutes(scope, opts.pool, auth);
+    salesRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
     liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs });

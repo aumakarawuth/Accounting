@@ -136,3 +136,47 @@ export const NewItem = z.object({ code: MasterCode, ...itemFields }).partial({
 }).strict();
 export const EditItem = z.object({ version: Version, active: z.boolean(), ...itemFields }).partial().required({ version: true }).strict();
 export const ItemParams = z.object({ companyId: Uuid, code: MasterCode });
+
+// ---- เฟส 2.2 เอกสารขาย (ตรวจรูปแบบที่นี่ กติกาบัญชีตรวจที่ฟังก์ชันใน DB) ----
+const Qty = z.string().regex(/^\d{1,11}(\.\d{1,3})?$/, 'จำนวนเป็นตัวเลข ทศนิยมไม่เกิน 3 ตำแหน่ง');
+export const SalesKind = z.enum(['invoice', 'cash-sale', 'credit-note', 'debit-note']);
+export const SALES_KIND_SQL = { invoice: 'sales_invoice', 'cash-sale': 'cash_sale', 'credit-note': 'credit_note', 'debit-note': 'debit_note' } as const;
+export const SalesKindParams = z.object({ companyId: Uuid, kind: SalesKind });
+export const DocumentParams = z.object({ companyId: Uuid, documentId: Uuid });
+const SalesLine = z.object({
+  itemCode: MasterCode.optional(),
+  description: z.string().trim().max(200).optional(),
+  qty: Qty,
+  unit: z.string().trim().max(20).optional(),
+  unitPrice: Money,
+  accountCode: AccountCode.optional(),
+}).strict();
+export const NewSalesDocument = z.object({
+  date: IsoDate,
+  partyCode: MasterCode.optional(),
+  isService: z.boolean().optional(),
+  priceMode: z.enum(['exclusive', 'inclusive']).optional(),
+  discount: Money.optional(),
+  description: z.string().trim().max(300).optional(),
+  creditDays: z.number().int().min(0).max(365).optional(),
+  cashAccount: AccountCode.optional(),
+  whtAmount: Money.optional(),
+  refDocumentId: Uuid.optional(),
+  reason: z.string().trim().max(300).optional(),
+  lines: z.array(SalesLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+}).strict();
+export const NewReceipt = z.object({
+  date: IsoDate,
+  partyCode: MasterCode,
+  cashAccount: AccountCode.optional(),
+  whtAmount: Money.optional(),
+  description: z.string().trim().max(300).optional(),
+  allocations: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).min(1, 'เลือกใบที่รับชำระอย่างน้อย 1 ใบ').max(50),
+}).strict();
+export const VoidDocument = z.object({ date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
+export const SalesListQuery = z.object({
+  kind: z.enum(['sales_invoice', 'cash_sale', 'receipt', 'credit_note', 'debit_note']).optional(),
+  party: MasterCode.optional(),
+  month: Month.optional(),
+}).strict();
+export const AsOfQuery = z.object({ asOf: IsoDate.optional() }).strict();
