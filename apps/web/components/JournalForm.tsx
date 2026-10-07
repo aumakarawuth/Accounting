@@ -108,16 +108,20 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
   const addLine = useCallback(() => setLines((ls) => [...ls, blank()]), []);
 
   // ยอดรวมเป็นสตางค์ BigInt (ไม่ใช้ float)
+  // problems: เหตุที่บรรทัดนั้นทำให้ผ่านรายการไม่ได้ (แสดงใต้บรรทัด) — ปุ่มเทาโดยไม่บอกเหตุ ผู้เรียนแก้ไม่ถูก
   const calc = useMemo(() => {
-    let dr = 0n, cr = 0n, filled = 0, invalid = false;
+    let dr = 0n, cr = 0n, filled = 0;
+    const problems = new Map<number, string>();
     for (const l of lines) {
       const d = toCents(l.debit), c = toCents(l.credit);
-      if (d === null || c === null) { invalid = true; continue; }
+      if (d === null || c === null) { problems.set(l.key, th.journal.lineBadAmount); continue; }
       if (d === 0n && c === 0n) continue;
-      if ((d > 0n) === (c > 0n) || !byCode.has(l.code)) invalid = true;
+      if (d > 0n && c > 0n) problems.set(l.key, th.journal.lineBothSides);
+      else if (!l.code.trim()) problems.set(l.key, th.journal.lineNoAccount);
+      else if (!byCode.has(l.code)) problems.set(l.key, th.journal.lineUnknownAccount(l.code));
       dr += d; cr += c; filled++;
     }
-    return { dr, cr, diff: dr - cr, filled, invalid };
+    return { dr, cr, diff: dr - cr, filled, problems, invalid: problems.size > 0 };
   }, [lines, byCode]);
 
   // กู้ร่างที่ค้างในเครื่อง (ปิดแท็บ/แบตหมด/เซสชันหมดอายุ) ครั้งเดียวตอนเปิดฟอร์ม
@@ -172,6 +176,16 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
 
   const isoDate = thaiToIso(date);
   const canPost = !locked && !busy && !calc.invalid && calc.filled >= 2 && calc.diff === 0n && calc.dr > 0n && isoDate !== null;
+  const lineNo = new Map(lines.map((l, i) => [l.key, i + 1]));
+  const [firstBad] = calc.problems;
+  // ข้อความที่แถบล่าง: บอกเหตุแรกที่ยังผ่านรายการไม่ได้ (ฟอร์มว่างไม่ต้องเตือน)
+  const blocked = firstBad
+    ? th.journal.lineAt(lineNo.get(firstBad[0]) ?? 0, firstBad[1])
+    : calc.diff > 0n ? `${th.journal.debitExceeds(formatMoney(fromCents(calc.diff)))} ${th.journal.postableWhenZero}`
+    : calc.diff < 0n ? `${th.journal.creditExceeds(formatMoney(fromCents(-calc.diff)))} ${th.journal.postableWhenZero}`
+    : calc.filled === 1 ? th.journal.needTwoLines
+    : calc.filled > 1 && isoDate === null ? th.journal.badDate
+    : '';
 
   const submit = useCallback(async () => {
     if (!canPost || !isoDate) return;
@@ -284,6 +298,8 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
           {lines.map((l, i) => {
             const acc = byCode.get(l.code);
             const isCredit = (toCents(l.credit) ?? 0n) > 0n;
+            const problem = calc.problems.get(l.key);
+            const amountBad = problem === th.journal.lineBothSides;
             return (
               <div
                 key={l.key}
@@ -310,7 +326,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
                   <span className="sm:sr-only">{th.money.debit}</span>
                   <input
                     inputMode="decimal"
-                    aria-invalid={toCents(l.debit) === null}
+                    aria-invalid={toCents(l.debit) === null || amountBad}
                     className={`${cellIn} num border-b border-rule-input text-base text-ink sm:border-0 sm:px-2`}
                     value={l.debit}
                     onChange={(e) => update(l.key, { debit: e.target.value })}
@@ -320,7 +336,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
                   <span className="sm:sr-only">{th.money.credit}</span>
                   <input
                     inputMode="decimal"
-                    aria-invalid={toCents(l.credit) === null}
+                    aria-invalid={toCents(l.credit) === null || amountBad}
                     className={`${cellIn} num border-b border-rule-input text-base text-ink sm:border-0 sm:px-2`}
                     value={l.credit}
                     onChange={(e) => update(l.key, { credit: e.target.value })}
@@ -334,6 +350,9 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
                 >
                   {th.journal.removeLine}
                 </button>
+                {problem && (
+                  <p className="neg col-span-2 pb-2 text-sm sm:col-span-6 sm:px-2 sm:pt-1">{problem}</p>
+                )}
               </div>
             );
           })}
@@ -363,13 +382,11 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
           <dt>{th.money.credit}</dt><dd className="num">{money(calc.cr)}</dd>
           <dt className={calc.diff === 0n ? '' : 'neg font-semibold'}>{th.money.difference}</dt>
           <dd className={`num ${calc.diff === 0n ? '' : 'neg font-semibold'}`}>
-            {money(calc.diff)}{calc.diff === 0n && calc.dr > 0n ? ` · ${th.money.balanced}` : ''}
+            {money(calc.diff)}{calc.diff === 0n && calc.dr > 0n && !calc.invalid ? ` · ${th.money.balanced}` : ''}
           </dd>
         </dl>
-        <div role={result?.ok ? 'status' : 'alert'} className={`text-sm ${result && !result.ok ? 'neg' : ''}`}>
-          {result?.text ??
-            (calc.diff > 0n ? th.journal.debitExceeds(money(calc.diff)) : calc.diff < 0n ? th.journal.creditExceeds(money(calc.diff)) : '')}
-          {calc.diff !== 0n && !result && ` ${th.journal.postableWhenZero}`}
+        <div role={result?.ok ? 'status' : 'alert'} className={`text-sm ${(result && !result.ok) || (!result && blocked) ? 'neg' : ''}`}>
+          {result?.text ?? blocked}
           {result?.href && <> · <Link href={result.href} className="underline">{th.journal.viewPosted}</Link></>}
         </div>
         <Button type="submit" shortcut="F9" disabled={!canPost} className="max-sm:w-full sm:ml-auto">

@@ -22,6 +22,18 @@ test('สมุดรายวัน: ไม่ดุลกดผ่านรา
 
   await money.nth(3).fill('12500');
   await expect(post).toBeEnabled();
+
+  // ใส่ทั้งเดบิตและเครดิตในบรรทัดเดียว: ยอดรวมยังเท่ากันแต่ผ่านไม่ได้ ต้องบอกเหตุ ไม่ขึ้นว่า "ดุล"
+  await money.nth(1).fill('100');
+  await money.nth(2).fill('100');
+  await expect(post).toBeDisabled();
+  await expect(page.locator('footer').getByRole('alert')).toHaveText(/^บรรทัดที่ 1: บรรทัดเดียวใส่ได้ฝั่งเดียว/);
+  await expect(page.getByText('บรรทัดเดียวใส่ได้ฝั่งเดียว', { exact: false })).toHaveCount(3); // ใต้บรรทัด 1, 2 และแถบล่าง
+  await expect(page.locator('footer dd').last()).toHaveText('0.00');
+  await checkScreen(page, info, 'journal-both-sides');
+  await money.nth(1).fill('');
+  await money.nth(2).fill('');
+  await expect(post).toBeEnabled();
   await post.click();
   await expect(page.getByText(/ผ่านรายการเลขที่ JV-\d{4}/)).toBeVisible();
   await checkScreen(page, info, 'journal-posted');
