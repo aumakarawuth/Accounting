@@ -41,6 +41,9 @@ export function toHttp(err: unknown): { status: number; body: { code: string; me
     return { status: fe.statusCode === 413 ? 413 : 400, body: { code: 'invalid', message: 'รูปแบบคำขอไม่ถูกต้อง' } };
   }
   const pgErr = err as PgError;
+  // check/FK ของ DB เป็นด่านสุดท้าย (Zod ตรวจก่อนแล้ว) ข้อความ DB เป็นชื่อ constraint ภาษาอังกฤษ จึงไม่ส่งต่อ
+  if (pgErr?.code === '23514') return { status: 422, body: { code: '23514', message: 'ข้อมูลไม่ผ่านเงื่อนไขของระบบ ตรวจช่องที่กรอกอีกครั้ง' } };
+  if (pgErr?.code === '23503') return { status: 422, body: { code: '23503', message: 'ข้อมูลที่อ้างถึงไม่มีอยู่ในบริษัทนี้' } };
   const status = pgErr?.code ? STATUS[pgErr.code] : undefined;
   if (status) return { status, body: { code: pgErr.code!, message: pgErr.message } };
   const ref = randomUUID().slice(0, 8);

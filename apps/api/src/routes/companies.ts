@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
-import { requireUser } from '../guard.js';
+import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
 import {
   AccountParams, CommentParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, NewComment, PeriodParams,
@@ -12,19 +12,6 @@ import {
 // ชั้นบาง: ตรวจรูปแบบด้วย Zod แล้วเรียกฟังก์ชันใน Postgres; สิทธิ์ตัดสินที่ RLS/ฟังก์ชัน
 export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapter) {
   const user = (req: FastifyRequest): Promise<AuthUser> => requireUser(auth, req);
-
-  // กัน IDOR: บริษัทที่อ่านไม่ได้ตอบ 404 เหมือนไม่มีอยู่
-  async function requireReadable(c: pg.PoolClient, companyId: string) {
-    const r = await c.query('select app.can_read_company($1) ok', [companyId]);
-    if (!r.rows[0]?.ok) throw new HttpError(404, 'not_found', 'ไม่พบบริษัทนี้');
-  }
-
-  // อ่านได้แต่เขียนไม่ได้ (ครู/ผู้ช่วยสอน) = 403 บอกตรง ๆ
-  async function requireWritable(c: pg.PoolClient, companyId: string) {
-    await requireReadable(c, companyId);
-    const r = await c.query('select app.can_write_company($1) ok', [companyId]);
-    if (!r.rows[0]?.ok) throw new HttpError(403, '42501', 'บัญชีนี้ไม่มีสิทธิ์ทำรายการในบริษัทนี้');
-  }
 
   async function docNo(c: pg.PoolClient, companyId: string, id: string) {
     const r = await c.query('select id, doc_no from acc.journal_entries where company_id = $1 and id = $2', [companyId, id]);

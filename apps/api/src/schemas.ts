@@ -62,3 +62,77 @@ export const NewComment = z.object({
   body: z.string().trim().min(1, 'ต้องมีข้อความ').max(1000),
 }).strict();
 export const CommentParams = z.object({ companyId: Uuid, commentId: Uuid });
+
+// ---- เฟส 2.1 ข้อมูลหลัก (ตรงกับ check ใน migration 014) ----
+
+/** หลักตรวจสอบเลขผู้เสียภาษี 13 หลัก (สูตรเดียวกับ app.valid_tax_id) */
+export function validTaxId(s: string) {
+  if (!/^\d{13}$/.test(s)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(s[i]) * (13 - i);
+  return (11 - (sum % 11)) % 10 === Number(s[12]);
+}
+const TaxId = z.string().trim().refine(validTaxId, 'เลขประจำตัวผู้เสียภาษีไม่ถูกต้อง (13 หลัก หลักสุดท้ายไม่ตรงหลักตรวจสอบ)');
+const BranchNo = z.string().regex(/^\d{5}$/, 'สาขาต้องเป็นเลข 5 หลัก (สำนักงานใหญ่ = 00000)');
+const Address = z.string().trim().max(400);
+const MasterCode = z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9-]{0,19}$/, 'รหัสใช้ตัวอักษรอังกฤษ ตัวเลข และขีด ไม่เกิน 20 ตัว');
+const MasterName = z.string().trim().min(1, 'ต้องมีชื่อ').max(160);
+const Version = z.number().int().positive();
+const Rate = z.string().regex(/^\d{1,2}(\.\d{1,2})?$/, 'อัตราต้องเป็นตัวเลข เช่น 3 หรือ 1.5');
+
+export const CompanyProfile = z.object({
+  version: Version,
+  taxId: TaxId.nullable().optional(),
+  branchNo: BranchNo.optional(),
+  address: Address.optional(),
+  vatRegistered: z.boolean().optional(),
+  vatRate: Rate.optional(),
+}).strict();
+
+// อัตราหัก ณ ที่จ่ายมาตรฐาน (docs/phase2-spec.md T5) อื่น ๆ ใส่เอง
+export const WHT_STANDARD = { transport: '1.00', advertising: '2.00', service: '3.00', professional: '3.00', rent: '5.00' } as const;
+const WhtKind = z.enum(['transport', 'advertising', 'service', 'professional', 'rent', 'other']);
+
+const partyFields = {
+  name: MasterName,
+  isCustomer: z.boolean(),
+  isVendor: z.boolean(),
+  taxId: TaxId.nullable(),
+  branchNo: BranchNo,
+  address: Address,
+  vatRegistered: z.boolean(),
+  creditDays: z.number().int().min(0, 'เครดิตต้องไม่ติดลบ').max(365, 'เครดิตไม่เกิน 365 วัน'),
+  whtKind: WhtKind.nullable(),
+  whtRate: Rate.nullable(),
+};
+type PartyCheck = { isCustomer?: boolean; isVendor?: boolean; vatRegistered?: boolean; taxId?: string | null; whtKind?: string | null; whtRate?: string | null };
+function partyRules(p: PartyCheck, ctx: z.RefinementCtx) {
+  if (p.isCustomer === false && p.isVendor === false) ctx.addIssue({ code: 'custom', path: ['isCustomer'], message: 'ต้องเป็นลูกค้าหรือผู้ขายอย่างน้อยหนึ่งอย่าง' });
+  if (p.vatRegistered && !p.taxId) ctx.addIssue({ code: 'custom', path: ['taxId'], message: 'คู่ค้าที่จด VAT ต้องมีเลขประจำตัวผู้เสียภาษี' });
+  if (p.whtKind === 'other' && !p.whtRate) ctx.addIssue({ code: 'custom', path: ['whtRate'], message: 'หัก ณ ที่จ่ายประเภทอื่นต้องใส่อัตรา' });
+  if (p.whtRate && Number(p.whtRate) > 15) ctx.addIssue({ code: 'custom', path: ['whtRate'], message: 'อัตราหัก ณ ที่จ่ายไม่เกิน 15%' });
+  if (p.whtRate && Number(p.whtRate) <= 0) ctx.addIssue({ code: 'custom', path: ['whtRate'], message: 'อัตราหัก ณ ที่จ่ายต้องมากกว่า 0' });
+}
+export const NewParty = z.object({ code: MasterCode, ...partyFields }).partial({
+  taxId: true, branchNo: true, address: true, vatRegistered: true, creditDays: true, whtKind: true, whtRate: true,
+}).strict().superRefine(partyRules);
+// แก้บางช่อง: กติกาที่ข้ามช่อง (เช่น จด VAT ต้องมีเลขภาษี) ตรวจกับแถวที่รวมค่าเดิมแล้วด้วย PartyRules ใน route
+export const EditParty = z.object({ version: Version, active: z.boolean(), ...partyFields }).partial().required({ version: true }).strict();
+export const PartyRules = z.custom<PartyCheck>().superRefine(partyRules);
+export const PartyParams = z.object({ companyId: Uuid, code: MasterCode });
+export const PartyQuery = z.object({ kind: z.enum(['customer', 'vendor']).optional() });
+
+const itemFields = {
+  name: MasterName,
+  unit: z.string().trim().max(20),
+  isService: z.boolean(),
+  salePrice: Money.nullable(),
+  purchasePrice: Money.nullable(),
+  salesAccount: AccountCode.nullable(),
+  purchaseAccount: AccountCode.nullable(),
+};
+export const NewItem = z.object({ code: MasterCode, ...itemFields }).partial({
+  unit: true, isService: true, salePrice: true, purchasePrice: true, salesAccount: true, purchaseAccount: true,
+}).strict();
+export const EditItem = z.object({ version: Version, active: z.boolean(), ...itemFields }).partial().required({ version: true }).strict();
+export const ItemParams = z.object({ companyId: Uuid, code: MasterCode });

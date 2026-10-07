@@ -1,14 +1,25 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { buildApp } from '../apps/api/src/app';
+import { devAuth } from '../apps/api/src/auth';
+import { authConfigFromEnv } from '../apps/api/src/config';
+import { createPool } from '../apps/api/src/db';
+import { apiUrl } from './global-setup';
 import { pool as db, asUser, newSchool, newUser, newClassroom, newCompany, sqlstate, taxId } from './helpers';
 
-// เฟส 2.1 ข้อมูลหลัก: เลขผู้เสียภาษี โปรไฟล์ภาษีบริษัท ลูกค้า/ผู้ขาย สินค้า/บริการ (ชั้นฐานข้อมูล)
-afterAll(async () => { await db.end(); });
+// เฟส 2.1 ข้อมูลหลัก: เลขผู้เสียภาษี โปรไฟล์ภาษีบริษัท ลูกค้า/ผู้ขาย สินค้า/บริการ (ฐานข้อมูล + API)
+const apiPool = createPool(apiUrl());
+const app = buildApp({ pool: apiPool, auth: devAuth(), cfg: { ...authConfigFromEnv({}), allowedOrigins: false } });
+afterAll(async () => { await app.close(); await apiPool.end(); await db.end(); });
+const teachers = new Set<string>();
+const as = (user: string, method: 'GET' | 'POST' | 'PATCH', url: string, payload?: unknown) =>
+  app.inject({ method, url, payload, headers: { 'x-dev-user-id': user, 'x-dev-role': teachers.has(user) ? 'teacher' : 'student' } });
 
 let school: string, teacher: string, s1: string, s2: string, room: string, co1: string, co2: string;
 
 beforeAll(async () => {
   school = await newSchool();
   teacher = await newUser(school, 'teacher');
+  teachers.add(teacher);
   s1 = await newUser(school, 'student');
   s2 = await newUser(school, 'student');
   room = await newClassroom(school, teacher, [s1, s2]);
@@ -134,5 +145,77 @@ describe('ส่งงานแล้ว (ล็อก)', () => {
     await expect(insertParty(lockedOwner, co, { code: 'C001' })).rejects.toMatchObject({ code: 'ACC10' });
     await expect(asUser(lockedOwner, (c) => c.query(
       `update acc.companies set address = 'x', version = version + 1 where id = $1`, [co]))).rejects.toMatchObject({ code: 'ACC10' });
+  });
+});
+
+describe('API ข้อมูลหลัก', () => {
+  let co: string, owner: string;
+  beforeAll(async () => {
+    owner = await newUser(school, 'student');
+    await db.query('insert into acc.enrollments values ($1, $2)', [room, owner]);
+    co = await newCompany(owner, room);
+  });
+
+  it('โปรไฟล์ภาษี: เจ้าของแก้ได้ ครูอ่านได้แต่แก้ไม่ได้ เลขภาษีผิดบอกเหตุ แก้ทับกันได้ 409', async () => {
+    const t = taxId(777);
+    const p0 = (await as(owner, 'GET', `/companies/${co}/profile`)).json();
+    expect(p0).toMatchObject({ taxId: null, branchNo: '00000', vatRegistered: true, vatRate: '7.00', canEdit: true, locked: false });
+    const r = await as(owner, 'PATCH', `/companies/${co}/profile`, { version: p0.version, taxId: t, address: 'กรุงเทพฯ', vatRegistered: false });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ taxId: t, address: 'กรุงเทพฯ', vatRegistered: false, version: p0.version + 1 });
+    expect((await as(owner, 'PATCH', `/companies/${co}/profile`, { version: p0.version, address: 'x' })).statusCode).toBe(409);
+    const bad = await as(owner, 'PATCH', `/companies/${co}/profile`, { version: p0.version + 1, taxId: '1234567890120' });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().message).toContain('หลักตรวจสอบ');
+    expect((await as(teacher, 'GET', `/companies/${co}/profile`)).json()).toMatchObject({ canEdit: false, taxId: t });
+    expect((await as(teacher, 'PATCH', `/companies/${co}/profile`, { version: p0.version + 1, address: 'x' })).statusCode).toBe(403);
+    expect((await as(s2, 'GET', `/companies/${co}/profile`)).statusCode).toBe(404);
+  });
+
+  it('ลูกค้า/ผู้ขาย: อัตราหัก ณ ที่จ่ายมาตรฐานใส่ให้เอง กติกาข้ามช่องตรวจตอนแก้ด้วย', async () => {
+    const add = (body: object) => as(owner, 'POST', `/companies/${co}/parties`, body);
+    const v = await add({ code: 'v-001', name: 'บริษัท ออกแบบ จำกัด', isCustomer: false, isVendor: true, whtKind: 'service' });
+    expect(v.statusCode).toBe(201);
+    expect(v.json()).toMatchObject({ code: 'V-001', whtKind: 'service', whtRate: '3.00', vatRegistered: false, creditDays: 0 });
+    expect((await add({ code: 'V-002', name: 'อื่น', isCustomer: false, isVendor: true, whtKind: 'other' })).statusCode).toBe(400);
+    const noTax = await add({ code: 'C-001', name: 'ลูกค้า', isCustomer: true, isVendor: false, vatRegistered: true });
+    expect(noTax.statusCode).toBe(400);
+    expect(noTax.json().message).toContain('ต้องมีเลขประจำตัวผู้เสียภาษี');
+    expect((await add({ code: 'C-001', name: 'ลูกค้า', isCustomer: true, isVendor: false, taxId: taxId(5), creditDays: 30 })).statusCode).toBe(201);
+    expect((await add({ code: 'C-001', name: 'ซ้ำ', isCustomer: true, isVendor: false })).statusCode).toBe(409);
+
+    // จด VAT: รายที่มีเลขภาษีอยู่แล้วแก้ได้ รายที่ไม่มีแก้ไม่ได้
+    expect((await as(owner, 'PATCH', `/companies/${co}/parties/C-001`, { version: 1, vatRegistered: true })).statusCode).toBe(200);
+    const fail = await as(owner, 'PATCH', `/companies/${co}/parties/V-001`, { version: 1, vatRegistered: true });
+    expect(fail.statusCode).toBe(400);
+    const rent = await as(owner, 'PATCH', `/companies/${co}/parties/V-001`, { version: 1, whtKind: 'rent' });
+    expect(rent.json()).toMatchObject({ whtKind: 'rent', whtRate: '5.00', version: 2 });
+    expect((await as(owner, 'PATCH', `/companies/${co}/parties/V-001`, { version: 1, name: 'ช้า' })).statusCode).toBe(409);
+    expect((await as(owner, 'PATCH', `/companies/${co}/parties/X-404`, { version: 1, name: 'x' })).statusCode).toBe(404);
+
+    const vendors = (await as(teacher, 'GET', `/companies/${co}/parties?kind=vendor`)).json();
+    expect(vendors.map((p: { code: string }) => p.code)).toEqual(['V-001']);
+    expect((await as(teacher, 'POST', `/companies/${co}/parties`, { code: 'T-1', name: 'ครู', isCustomer: true, isVendor: false })).statusCode).toBe(403);
+  });
+
+  it('สินค้า/บริการ: บัญชีขายต้องเป็นหมวดรายได้ บัญชีซื้อเป็นค่าใช้จ่ายหรือสินทรัพย์', async () => {
+    const add = (body: object) => as(owner, 'POST', `/companies/${co}/items`, body);
+    const ok = await add({ code: 'SV-1', name: 'ค่าออกแบบ', unit: 'งาน', isService: true, salePrice: '5000', salesAccount: '4120' });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toMatchObject({ code: 'SV-1', isService: true, salePrice: '5000.00', salesAccount: '4120', purchaseAccount: null });
+    expect((await add({ code: 'SV-2', name: 'ผิดหมวด', salesAccount: '1110' })).statusCode).toBe(422);
+    expect((await add({ code: 'SV-3', name: 'ไม่มีบัญชี', salesAccount: '9999' })).statusCode).toBe(422);
+    expect((await add({ code: 'SV-4', name: 'ราคาผิด', salePrice: '12.345' })).statusCode).toBe(400);
+    const e = await as(owner, 'PATCH', `/companies/${co}/items/SV-1`, { version: 1, salePrice: '5500', purchaseAccount: '5260' });
+    expect(e.json()).toMatchObject({ salePrice: '5500.00', purchaseAccount: '5260', salesAccount: '4120', version: 2 });
+    expect((await as(owner, 'PATCH', `/companies/${co}/items/SV-1`, { version: 2, salesAccount: null })).json()).toMatchObject({ salesAccount: null });
+  });
+
+  it('ส่งงานแล้วแก้โปรไฟล์/เพิ่มคู่ค้าไม่ได้ (409 ACC10)', async () => {
+    await db.query(`insert into acc.submissions (company_id, status) values ($1, 'submitted')`, [co]);
+    const v = (await as(owner, 'GET', `/companies/${co}/profile`)).json().version;
+    const r = await as(owner, 'PATCH', `/companies/${co}/profile`, { version: v, address: 'x' });
+    expect([r.statusCode, r.json().code]).toEqual([409, 'ACC10']);
+    expect((await as(owner, 'POST', `/companies/${co}/parties`, { code: 'L-1', name: 'x', isCustomer: true, isVendor: false })).statusCode).toBe(409);
   });
 });
