@@ -31,7 +31,7 @@ export async function migrate(connectionString, { seed = false } = {}) {
         await client.query('commit');
       } catch (e) {
         await client.query('rollback');
-        throw new Error(`migration ${f}: ${e.message}`);
+        throw new Error(`migration ${f}: ${e.message}`, { cause: e });
       }
     }
     if (seed) {

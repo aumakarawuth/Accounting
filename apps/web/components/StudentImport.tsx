@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { postJson, type ApiError } from '@/lib/api';
 import { decodeCsv, parseCsv, toStudentRows, type StudentRow } from '@/lib/csv';
 import { th } from '@/i18n/th';
-import type { Slip } from './PasswordSlips';
+import { nextSlipKey, type Slip } from './PasswordSlips';
 
 type Result = { studentCode: string; name: string; status: 'created' | 'enrolled' | 'already'; tempPassword?: string };
 
@@ -34,7 +34,7 @@ export function StudentImport({
       const count = (s: Result['status']) => r.results.filter((x) => x.status === s).length;
       setMessage({ ok: true, text: th.import.done(count('created'), count('enrolled'), count('already')) });
       onIssued(r.results.filter((x) => x.tempPassword).map((x) => ({
-        key: `${x.studentCode}-${Date.now()}`, idLabel: th.slips.studentCode, id: x.studentCode, name: x.name,
+        key: nextSlipKey(), idLabel: th.slips.studentCode, id: x.studentCode, name: x.name,
         room: roomName, temp: x.tempPassword!,
       })));
       setRows(null);

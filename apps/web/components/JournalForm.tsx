@@ -22,7 +22,12 @@ function AccountField({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();
-  useEffect(() => setQ(value), [value]);
+  // ค่าจากภายนอกเปลี่ยน (เช่น ล้างฟอร์ม) ให้ช่องพิมพ์ตาม — ทำระหว่าง render ตามแนวทาง React ไม่ใช้ effect
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setQ(value);
+  }
 
   const matches = useMemo(() => {
     const s = q.trim();

@@ -8,7 +8,7 @@ export function decodeCsv(bytes: ArrayBuffer | Uint8Array): string {
   } catch {
     text = new TextDecoder('windows-874').decode(bytes);
   }
-  return text.replace(/^﻿/, '');
+  return text.replace(/^\uFEFF/, '');
 }
 
 /** CSV ตาม RFC 4180 (เครื่องหมายคำพูด, ขึ้นบรรทัดในช่อง) ตัวคั่น , ; หรือ tab เดาจากบรรทัดแรก */

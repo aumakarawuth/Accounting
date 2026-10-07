@@ -7,3 +7,4 @@ dist
 next-env.d.ts
 *.tsbuildinfo
 tests/load/data/
+tests/e2e-results/

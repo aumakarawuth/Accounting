@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { postJson, type ApiError, type Classroom } from '@/lib/api';
 import { th } from '@/i18n/th';
-import { PasswordSlips, type Slip } from './PasswordSlips';
+import { nextSlipKey, PasswordSlips, type Slip } from './PasswordSlips';
 import { OpenCompanies } from './OpenCompanies';
 import { StudentImport } from './StudentImport';
 
@@ -25,7 +25,7 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
     try {
       const r = await postJson<{ tempPassword: string }>(`/teacher/students/${s.id}/reset-password`, {});
       set(s.id, { note: th.teacher.tempPassword(r.tempPassword) });
-      addSlips([{ key: `${s.id}-${Date.now()}`, idLabel: th.slips.studentCode, id: s.studentCode, name: s.name, room: room.name, temp: r.tempPassword }]);
+      addSlips([{ key: nextSlipKey(), idLabel: th.slips.studentCode, id: s.studentCode, name: s.name, room: room.name, temp: r.tempPassword }]);
     } catch (e) {
       set(s.id, { error: (e as ApiError).message });
     }

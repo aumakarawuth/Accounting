@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { postJson, type ApiError, type Staff } from '@/lib/api';
 import { th } from '@/i18n/th';
-import type { Slip } from '../PasswordSlips';
+import { nextSlipKey, type Slip } from '../PasswordSlips';
 
 type RowState = { confirm?: 'reset' | 'deactivate'; busy?: boolean; note?: string; error?: string };
 
@@ -18,7 +18,7 @@ export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: 
   const btn = 'min-h-11 rounded-doc border border-ink px-3 text-sm';
   const cell = 'border border-rule px-3 py-2';
   const slip = (s: { email: string; name: string }, temp: string): Slip =>
-    ({ key: `${s.email}-${Date.now()}`, idLabel: th.admin.email, id: s.email, name: s.name, temp, staff: true });
+    ({ key: nextSlipKey(), idLabel: th.admin.email, id: s.email, name: s.name, temp, staff: true });
 
   async function act(s: Staff, kind: 'reset' | 'deactivate' | 'activate') {
     if (rows[s.id]?.busy) return;

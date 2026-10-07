@@ -1,0 +1,24 @@
+import { defineConfig } from '@playwright/test';
+
+// เทสต์หน้าจอจริง 3 ขนาด (PLAN.md ข้อ 8: มือถือ > iPad > คอม) ต้องมีเว็บ + API + ฐานข้อมูลรันอยู่
+// CI: .github/workflows/ci.yml (job e2e) · เครื่องตัวเอง: docs/dev.md
+export default defineConfig({
+  testDir: './e2e',
+  outputDir: './e2e-results/artifacts',
+  fullyParallel: false,
+  workers: 1, // ใช้ฐานข้อมูลชุดเดียวกัน
+  retries: 0,
+  reporter: [['list'], ['html', { outputFolder: './e2e-results/report', open: 'never' }]],
+  use: {
+    baseURL: process.env.E2E_BASE ?? 'http://localhost:3000',
+    locale: 'th-TH',
+    timezoneId: 'Asia/Bangkok',
+    trace: 'retain-on-failure',
+    launchOptions: process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
+  },
+  projects: [
+    { name: 'phone', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } },
+    { name: 'ipad', use: { viewport: { width: 1180, height: 820 }, hasTouch: true } },
+    { name: 'pc', use: { viewport: { width: 1440, height: 900 } } },
+  ],
+});
