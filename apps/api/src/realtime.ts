@@ -29,14 +29,18 @@ export function pgListenBus(connectionString: string, log: (msg: string) => void
     c.on('error', (err) => {
       log(`realtime: ${err.message}`);
       client = null;
-      if (!closed) setTimeout(() => void connect().catch(() => {}), delay = Math.min(delay * 2, 30_000));
+      retry();
     });
     await c.connect();
     await c.query('listen acc_events');
     client = c;
     delay = 1000;
   }
-  const ready = connect();
+  // ต่อไม่ได้ (รวมครั้งแรก) ลองใหม่แบบถอยเวลา ไม่ทำให้ทั้ง process ล้ม
+  function retry() {
+    if (!closed) setTimeout(() => void connect().catch((e) => { log(`realtime: ${e.message}`); retry(); }), delay = Math.min(delay * 2, 30_000));
+  }
+  const ready = connect().catch((e) => { log(`realtime: ${e.message}`); retry(); });
 
   return {
     subscribe(channel, fn) {

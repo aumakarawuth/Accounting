@@ -43,7 +43,7 @@ function isActive(path: string, href: string) {
 
 /** แถบข้าง (iPad/คอม) */
 export function SideNav({ companyId }: { companyId: string }) {
-  const path = usePathname();
+  const path = usePathname() ?? ''; // มีโฟลเดอร์ pages/ (API ฝังบน Vercel) ชนิดจึงเป็น null ได้
   return (
     <nav aria-label="เมนูหลัก" className="hidden w-[220px] shrink-0 overflow-y-auto border-r border-rule-strong bg-band py-1 sm:block lg:w-[232px]">
       {studentNav(companyId).map((g, i) => (
@@ -67,7 +67,7 @@ export function SideNav({ companyId }: { companyId: string }) {
 
 /** แถบล่าง (มือถือ) 5 ช่อง */
 export function BottomTabs({ companyId }: { companyId: string }) {
-  const path = usePathname();
+  const path = usePathname() ?? ''; // มีโฟลเดอร์ pages/ (API ฝังบน Vercel) ชนิดจึงเป็น null ได้
   const c = (p: string) => `/c/${companyId}${p}`;
   const tabs: Item[] = [
     { label: th.nav.home, href: c('') },

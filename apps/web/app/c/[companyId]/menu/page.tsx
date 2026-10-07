@@ -8,7 +8,7 @@ import { th } from '@/i18n/th';
 
 // "เมนูทั้งหมด" บนมือถือ: ทุกเมนู + ออกจากระบบ
 export default function AllMenu() {
-  const { companyId } = useParams<{ companyId: string }>();
+  const { companyId } = useParams<{ companyId: string }>() ?? { companyId: '' };
   return (
     <nav aria-label="เมนูทั้งหมด" className="flex flex-col pb-6">
       {studentNav(companyId).map((g, i) => (

@@ -74,7 +74,11 @@ test('ออฟไลน์: แถบบนบอกสถานะ ผ่า�
   await checkScreen(page, info, 'journal-offline');
 
   await page.goto(`${home}/trial-balance`).catch(() => {});
-  await expect(page.getByRole('heading', { name: 'ไม่มีอินเทอร์เน็ต' })).toBeVisible();
+  const seen = await page.evaluate(() => ({
+    url: location.href, controlled: !!navigator.serviceWorker?.controller, title: document.title,
+    text: document.body?.innerText.slice(0, 160),
+  })).catch((e) => String(e));
+  await expect(page.getByRole('heading', { name: 'ไม่มีอินเทอร์เน็ต' }), `หน้าออฟไลน์ไม่ขึ้น: ${JSON.stringify(seen)}`).toBeVisible();
   await checkScreen(page, info, 'offline-page');
 
   await context.setOffline(false);
@@ -91,7 +95,7 @@ test('ออกจากระบบแล้วร่างในเครื�
   await page.getByRole('button', { name: 'ออกจากระบบ' }).filter({ visible: true }).first().click();
   await page.waitForURL('**/login');
   await login(page, 'student', env.studentCode, env.studentPassword);
-  await page.waitForURL(/\/c\/[0-9a-f-]{36}$|\/$/);
+  await page.waitForURL(/\/c\/[0-9a-f-]{36}$/); // รอ redirect ไปบริษัทจบก่อน (Safari เร็วจน goto ชนกับ redirect)
   await page.goto(`${home}/journal/new`);
   await expect(page.getByLabel('คำอธิบายรายการ')).toHaveValue('');
   await expect(page.getByText('กู้ร่างที่ยังไม่ได้ผ่านรายการ', { exact: false })).toHaveCount(0);

@@ -12,7 +12,12 @@ export const env = {
 /** เก็บ error ของหน้าเว็บทั้งหมด (pageerror + console.error) เพื่อยืนยันตอนจบว่าไม่มี */
 export function watchErrors(page: Page): string[] {
   const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('pageerror', (e) => {
+    // WebKit รายงาน prefetch ของ Next (?_rsc=) ที่ถูกยกเลิกเพราะเทสต์ page.goto ออกจากหน้ากลางคัน ว่า "access control checks"
+    // ไม่ใช่ปัญหาของแอป (ผู้ใช้จริงเปลี่ยนหน้าผ่านลิงก์ ไม่ unload หน้า) จึงข้ามเฉพาะข้อความนี้กับคำขอ _rsc เท่านั้น
+    if (/\?_rsc=.*due to access control checks/.test(e.message)) return;
+    errors.push(`pageerror: ${e.message}`);
+  });
   page.on('console', (m) => {
     // 401/404 ที่ตั้งใจทดสอบ (เช่น รหัสผิด) เบราว์เซอร์รายงานเป็น console error ของ network
     if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`);

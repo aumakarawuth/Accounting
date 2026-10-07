@@ -35,6 +35,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm --filter @accounting/api typecheck
+      - run: pnpm --filter @accounting/api build   # เว็บ import API ในตัว (Vercel) ต้องมี dist + .d.ts ก่อน
       - run: pnpm --filter @accounting/web build   # สร้าง next-env.d.ts ก่อน typecheck
       - run: pnpm --filter @accounting/web typecheck
       - run: pnpm test

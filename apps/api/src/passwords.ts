@@ -1,6 +1,7 @@
 import { hash, verify, type Algorithm } from '@node-rs/argon2';
 import { randomInt } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+// import แบบ JSON module: ใช้ได้ทั้ง Node และตอนถูก bundle ใน Next (API ฝังบน Vercel) ไม่ต้องอ่านไฟล์ตาม path
+import commonList from './data/common-passwords.json' with { type: 'json' };
 
 // Argon2id ตามค่าแนะนำ OWASP (m=19 MiB, t=2, p=1); ปรับเมื่อวัดโหลดจริง
 const OPTIONS = { algorithm: 2 as Algorithm /* Argon2id */, memoryCost: 19_456, timeCost: 2, parallelism: 1 };
@@ -15,10 +16,7 @@ export async function verifyPassword(stored: string | null, pw: string): Promise
 }
 const dummy = hash('dummy-password-for-timing', OPTIONS);
 
-const common = new Set(
-  readFileSync(new URL('../data/common-passwords.txt', import.meta.url), 'utf8')
-    .split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean),
-);
+const common = new Set((commonList as string[]).map((s) => s.trim().toLowerCase()).filter(Boolean));
 
 export type WeakReason = 'length' | 'student_code' | 'common';
 
