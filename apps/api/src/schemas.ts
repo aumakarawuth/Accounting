@@ -56,3 +56,9 @@ export const EditAccount = z.object({
   version: z.number().int().positive(),
 }).strict();
 export const PeriodParams = z.object({ companyId: Uuid, month: Month });
+
+export const NewComment = z.object({
+  lineNo: z.number().int().positive().nullable().default(null),
+  body: z.string().trim().min(1, 'ต้องมีข้อความ').max(1000),
+}).strict();
+export const CommentParams = z.object({ companyId: Uuid, commentId: Uuid });

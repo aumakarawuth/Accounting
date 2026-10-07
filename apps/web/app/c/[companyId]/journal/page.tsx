@@ -59,7 +59,10 @@ export default async function JournalList({
                   <td className={`${cell} font-num`}>
                     <Link href={href(e.id)} aria-label={th.journal.open(e.doc_no)} className={`underline decoration-rule-input ${e.reverses_doc_no ? 'neg' : ''}`}>{e.doc_no}</Link>
                   </td>
-                  <td className={cell}>{e.reverses_doc_no ? th.journal.reversalOf(e.reverses_doc_no) : e.description}</td>
+                  <td className={cell}>
+                    {e.reverses_doc_no ? th.journal.reversalOf(e.reverses_doc_no) : e.description}
+                    {e.comments > 0 && <span className="neg ml-2 text-[13px] italic">{th.comment.count(e.comments)}</span>}
+                  </td>
                   <td className={`${cell} text-right`}><Money value={e.reverses_doc_no ? `-${e.total}` : e.total} /></td>
                 </tr>
               ))}
@@ -74,6 +77,7 @@ export default async function JournalList({
                   <Money value={e.reverses_doc_no ? `-${e.total}` : e.total} />
                   <span className={`font-num text-[13px] ${e.reverses_doc_no ? 'neg' : 'text-ink2'}`}>{e.doc_no}</span>
                   <span className="text-right font-num text-[13px] text-ink2">{isoToThai(e.date)}</span>
+                  {e.comments > 0 && <span className="neg col-span-2 text-[13px] italic">{th.comment.count(e.comments)}</span>}
                 </Link>
               </li>
             ))}

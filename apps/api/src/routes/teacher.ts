@@ -1,20 +1,23 @@
+import { randomInt } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import type { AuthAdapter } from '../auth.js';
 import { withUser } from '../db.js';
 import { requireUser } from '../guard.js';
 import { hashPassword, temporaryPassword } from '../passwords.js';
-import { ClassroomParams, ImportStudents, OpenCompanies, StudentParams } from '../schemas-auth.js';
+import { HttpError } from '../errors.js';
+import type { RateLimiter } from '../ratelimit.js';
+import { ClassroomParams, ImportStudents, JoinClassroom, JoinCodeChars, OpenCompanies, SetJoinCode, StudentParams } from '../schemas-auth.js';
 
 // ครู: ห้องเรียน, รีเซ็ตรหัส, เตะอุปกรณ์, การแจ้งเตือนบัญชีถูกล็อก (สิทธิ์ตรวจใน DB อีกชั้น)
-export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter }) {
-  const { pool, auth } = deps;
+export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter; limiter: RateLimiter }) {
+  const { pool, auth, limiter } = deps;
   const teacher = (req: Parameters<typeof requireUser>[1]) => requireUser(auth, req, ['teacher']);
 
   app.get('/teacher/classrooms', async (req) =>
     withUser(pool, await teacher(req), async (c) => {
       const r = await c.query(
-        `select r.id, r.name,
+        `select r.id, r.name, r.join_code as "joinCode",
                 coalesce(json_agg(json_build_object('id', u.id, 'studentCode', u.student_code, 'name', u.display_name,
                          'companies', (select count(*) from acc.companies c where c.owner_id = u.id and c.classroom_id = r.id))
                          order by u.student_code) filter (where u.id is not null), '[]') as students
@@ -22,10 +25,38 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
            left join acc.enrollments e on e.classroom_id = r.id
            left join acc.users u on u.id = e.user_id
           where r.teacher_id = app.current_user_id()
-          group by r.id, r.name order by r.name`,
+          group by r.id, r.name, r.join_code order by r.name`,
       );
       return r.rows;
     }));
+
+  // รหัสห้องใหม่ (รหัสเดิมใช้ไม่ได้ทันที) หรือปิดรหัส; สุ่มด้วย crypto ชนกันก็สุ่มใหม่
+  app.post('/classrooms/:classroomId/join-code', async (req) => {
+    const { classroomId } = ClassroomParams.parse(req.params);
+    const { enabled } = SetJoinCode.parse(req.body);
+    const user = await requireUser(auth, req, ['teacher', 'admin']);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = enabled ? Array.from({ length: 6 }, () => JoinCodeChars[randomInt(JoinCodeChars.length)]).join('') : null;
+      try {
+        await withUser(pool, user, (c) => c.query('select acc.set_join_code($1, $2)', [classroomId, code]));
+        return { joinCode: code };
+      } catch (e) {
+        if ((e as { code?: string }).code !== '23505') throw e;
+      }
+    }
+    throw new HttpError(503, 'retry', 'สุ่มรหัสห้องไม่สำเร็จ ลองอีกครั้ง');
+  });
+
+  // นักเรียนเข้าห้องด้วยรหัส (จากการสแกน QR หรือพิมพ์เอง) จำกัด 20 ครั้ง/15 นาที กันเดารหัส
+  app.post('/classrooms/join', async (req) => {
+    const user = await requireUser(auth, req, ['student']);
+    const wait = await limiter.hit(`join:${user.id}`, 20, 15 * 60);
+    if (wait > 0) throw new HttpError(429, 'rate_limited', `ลองรหัสห้องหลายครั้งเกินไป รอ ${Math.ceil(wait / 60)} นาทีแล้วลองใหม่`, { retryAfter: wait });
+    const { code } = JoinClassroom.parse(req.body);
+    const r = await withUser(pool, user, (c) => c.query('select * from acc.join_classroom($1)', [code]));
+    const row = r.rows[0];
+    return { classroomId: row.classroom_id, name: row.name, already: row.already };
+  });
 
   app.get('/teacher/alerts', async (req) =>
     withUser(pool, await teacher(req), async (c) => {

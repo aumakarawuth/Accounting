@@ -5,6 +5,7 @@ import { postJson, type ApiError, type Classroom } from '@/lib/api';
 import { th } from '@/i18n/th';
 import { nextSlipKey, PasswordSlips, type Slip } from './PasswordSlips';
 import { OpenCompanies } from './OpenCompanies';
+import { JoinCodePanel } from './JoinCodePanel';
 import { StudentImport } from './StudentImport';
 
 type RowState = { confirm?: boolean; busy?: boolean; note?: string; error?: string };
@@ -53,6 +54,7 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
                 {importing === room.id ? th.import.close : th.import.open}
               </button>
             </div>
+            <JoinCodePanel classroomId={room.id} initial={room.joinCode} />
             {importing === room.id && (
               <StudentImport classroomId={room.id} roomName={room.name} existingCodes={room.students.map((s) => s.studentCode)} onIssued={addSlips} />
             )}

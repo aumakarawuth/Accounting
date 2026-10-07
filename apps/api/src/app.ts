@@ -65,7 +65,7 @@ export function buildApp(opts: {
   app.register(async (scope) => {
     authRoutes(scope, { pool: opts.pool, auth, cfg: opts.cfg, limiter });
     companyRoutes(scope, opts.pool, auth);
-    teacherRoutes(scope, { pool: opts.pool, auth });
+    teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
     liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus });
   });

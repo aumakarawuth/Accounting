@@ -31,11 +31,11 @@ export function OpenCompanies({ classroomId }: { classroomId: string }) {
         }
       }}
     >
-      <label htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+      <label htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-1 text-sm max-sm:basis-full">
         {th.teacher.openCompanies} · {th.teacher.companyName}
         <input id={id} required maxLength={120} className="h-11 rounded-doc border border-rule-input bg-paper px-3 text-base" value={name} onChange={(e) => setName(e.target.value)} />
       </label>
-      <label className="flex flex-col gap-1 text-sm">{th.submission.mode}
+      <label className="flex flex-col gap-1 text-sm max-sm:basis-full">{th.submission.mode}
         <select value={mode} onChange={(e) => setMode(e.target.value as 'practice' | 'submit')} className="h-11 rounded-doc border border-rule-input bg-paper px-2 text-base">
           <option value="submit">{th.submission.modeSubmit}</option>
           <option value="practice">{th.submission.modePractice}</option>

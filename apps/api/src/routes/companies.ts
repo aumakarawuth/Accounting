@@ -5,7 +5,7 @@ import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireUser } from '../guard.js';
 import { HttpError } from '../errors.js';
 import {
-  AccountParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, PeriodParams,
+  AccountParams, CommentParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, NewComment, PeriodParams,
   PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery,
 } from '../schemas.js';
 
@@ -80,7 +80,8 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       await requireReadable(c, companyId);
       const r = await c.query(
         `select e.id, e.doc_no, e.entry_date::text as date, e.description, e.total_amount::text as total,
-                r.doc_no as reverses_doc_no
+                r.doc_no as reverses_doc_no,
+                (select count(*)::int from acc.comments m where m.company_id = e.company_id and m.entry_id = e.id) as comments
            from acc.journal_entries e
            left join acc.journal_entries r on r.company_id = e.company_id and r.id = e.reverses_entry_id
           where e.company_id = $1
@@ -332,15 +333,42 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
                           'lineNo', l.line_no, 'code', a.code, 'name', a.name,
                           'debit', l.debit::text, 'credit', l.credit::text, 'memo', l.memo) order by l.line_no), '[]')
                    from acc.journal_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
-                  where l.company_id = e.company_id and l.entry_id = e.id) as lines
+                  where l.company_id = e.company_id and l.entry_id = e.id) as lines,
+                -- ชื่อผู้เขียน: RLS ของ users ไม่ให้นักเรียนเห็นชื่อครู (ได้ null) หน้าจอแสดงคำว่า "ครู" แทน
+                (select coalesce(json_agg(json_build_object(
+                          'id', m.id, 'lineNo', m.line_no, 'body', m.body, 'at', m.created_at,
+                          'authorName', u.display_name, 'mine', m.author_id = app.current_user_id()) order by m.created_at), '[]')
+                   from acc.comments m left join acc.users u on u.id = m.author_id
+                  where m.company_id = e.company_id and m.entry_id = e.id) as comments
            from acc.journal_entries e
            join acc.periods p on p.company_id = e.company_id and p.id = e.period_id
            left join acc.journal_entries r on r.company_id = e.company_id and r.id = e.reverses_entry_id
           where e.company_id = $1 and e.id = $2`,
         [companyId, entryId])).rows[0];
       if (!e) throw new HttpError(404, 'not_found', 'ไม่พบรายการนี้');
+      await c.query('select app.log_company_view($1)', [companyId]); // ครูเปิดดู = บันทึก
       return e;
     });
+  });
+
+  // คอมเมนต์ปากกาแดง: ครูประจำห้องเขียนที่รายการหรือบรรทัด (สิทธิ์ตรวจในฟังก์ชัน DB) เขียนได้แม้งานถูกล็อกระหว่างตรวจ
+  app.post('/companies/:companyId/journal/:entryId/comments', async (req, reply) => {
+    const { companyId, entryId } = EntryParams.parse(req.params);
+    const body = NewComment.parse(req.body);
+    const id = await withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      return (await c.query('select acc.add_comment($1, $2, $3, $4) id', [companyId, entryId, body.lineNo, body.body])).rows[0].id as string;
+    });
+    return reply.code(201).send({ id });
+  });
+
+  app.delete('/companies/:companyId/comments/:commentId', async (req) => {
+    const { companyId, commentId } = CommentParams.parse(req.params);
+    await withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      await c.query('select acc.delete_comment($1)', [commentId]);
+    });
+    return { deleted: true };
   });
 
   // ผังบัญชีเต็ม (รวมบัญชีที่ปิดใช้) พร้อมบอกว่ามีรายการแล้วหรือยัง: ใช้หน้าจัดการผังบัญชี

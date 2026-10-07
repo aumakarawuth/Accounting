@@ -28,7 +28,9 @@ export function watchErrors(page: Page): string[] {
 export async function checkScreen(page: Page, info: TestInfo, name: string) {
   // ไม่ใช้ networkidle: หน้าที่เปิด SSE ค้างไว้ (ป้ายครูกำลังดู) ไม่มีวันนิ่ง
   await page.waitForLoadState('load');
-  const r = await page.evaluate((touch) => {
+  // เทียบกับความกว้างจอที่ตั้งไว้ ไม่ใช่ innerWidth: มือถือจำลองขยาย layout viewport ตามเนื้อหาที่ล้น (ย่อทั้งหน้า) innerWidth จึงโตตาม
+  const width = page.viewportSize()!.width;
+  const r = await page.evaluate(({ touch, width }) => {
     const visible = (el: Element) => {
       const b = el.getBoundingClientRect();
       const s = getComputedStyle(el);
@@ -36,7 +38,7 @@ export async function checkScreen(page: Page, info: TestInfo, name: string) {
     };
     const label = (el: Element) => (el.getAttribute('aria-label') || el.textContent || el.getAttribute('name') || el.tagName).trim().slice(0, 40);
     return {
-      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      overflow: document.documentElement.scrollWidth - width,
       smallInputs: [...document.querySelectorAll('input:not([type=file]):not([type=hidden]), select, textarea')]
         .filter(visible).filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16).map(label),
       smallButtons: touch
@@ -44,7 +46,7 @@ export async function checkScreen(page: Page, info: TestInfo, name: string) {
             .filter((el) => el.getBoundingClientRect().height < 43.5).map(label)
         : [],
     };
-  }, info.project.use.hasTouch === true);
+  }, { touch: info.project.use.hasTouch === true, width });
   // tests/e2e-results/screens/<จอ>/<ชื่อ>.png (CI อัปโหลดเป็น artifact)
   const file = path.resolve(info.config.rootDir, '..', 'e2e-results', 'screens', info.project.name, `${name}.png`);
   await page.screenshot({ path: file, fullPage: true });

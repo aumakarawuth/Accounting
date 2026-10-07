@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { studentNav } from '@/components/Nav';
 import { LogoutButton } from '@/components/LogoutButton';
+import { th } from '@/i18n/th';
 
 // "เมนูทั้งหมด" บนมือถือ: ทุกเมนู + ออกจากระบบ
 export default function AllMenu() {
@@ -20,6 +21,7 @@ export default function AllMenu() {
           ))}
         </div>
       ))}
+      <Link href="/join" className="flex min-h-12 items-center border-b border-rule bg-paper px-4">{th.join.title}</Link>
       <div className="px-4 pt-4"><LogoutButton /></div>
     </nav>
   );

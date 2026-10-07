@@ -15,8 +15,8 @@ export type Me = { id: string; role: 'admin' | 'teacher' | 'student' | 'ta'; dis
 export type WorkStatus = 'draft' | 'submitted' | 'reviewing' | 'returned' | 'passed' | 'closed';
 export type Company = { id: string; name: string; version: number; can_write: boolean; mode: 'practice' | 'submit'; status: WorkStatus | null; locked: boolean };
 export type Account = { code: string; name: string; type: string; normal_side: 'debit' | 'credit' };
-export type EntryRow = { id: string; doc_no: string; date: string; description: string; total: string; reverses_doc_no: string | null };
-export type Classroom = { id: string; name: string; students: { id: string; studentCode: string; name: string; companies: number }[] };
+export type EntryRow = { id: string; doc_no: string; date: string; description: string; total: string; reverses_doc_no: string | null; comments: number };
+export type Classroom = { id: string; name: string; joinCode: string | null; students: { id: string; studentCode: string; name: string; companies: number }[] };
 export type Alert = { id: number; kind: 'locked'; at: string; studentCode: string; name: string };
 export type Staff = { id: string; email: string; name: string; role: 'teacher' | 'admin' | 'ta'; active: boolean; classrooms: number };
 export type AdminClassroom = { id: string; name: string; teacherId: string; teacherName: string; students: number };
@@ -65,7 +65,9 @@ export type JournalEntry = {
   id: string; docNo: string; date: string; description: string; total: string; postedAt: string; periodClosed: boolean;
   reverses: { id: string; docNo: string } | null; reversedBy: { id: string; docNo: string } | null;
   lines: { lineNo: number; code: string; name: string; debit: string; credit: string; memo: string }[];
+  comments: EntryComment[];
 };
+export type EntryComment = { id: string; lineNo: number | null; body: string; at: string; authorName: string | null; mine: boolean };
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
 export type ChartRow = { code: string; name: string; type: AccountType; normalSide: 'debit' | 'credit'; active: boolean; version: number; used: boolean };
 export type Periods = {

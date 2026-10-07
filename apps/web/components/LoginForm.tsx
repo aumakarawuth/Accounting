@@ -23,7 +23,8 @@ function message(kind: Kind, e: ApiError): string {
   }
 }
 
-export function LoginForm({ kind }: { kind: Kind }) {
+/** next: หน้าที่จะกลับไปหลังเข้าสู่ระบบ (ต้องเป็น path ภายใน เช่น /join/ABC234) */
+export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
   const router = useRouter();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +41,7 @@ export function LoginForm({ kind }: { kind: Kind }) {
         setError(null);
         try {
           const r = await postJson<{ mustChange: boolean }>('/auth/login', { kind, identifier, password });
-          router.replace(r.mustChange ? '/change-password' : '/');
+          router.replace(r.mustChange ? '/change-password' : next?.startsWith('/') && !next.startsWith('//') ? next : '/');
           router.refresh();
         } catch (err) {
           setError(message(kind, err as ApiError));

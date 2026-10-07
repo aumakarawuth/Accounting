@@ -48,7 +48,10 @@ export default async function CompanyHome({ params }: { params: Promise<{ compan
                     <Link href={`/c/${companyId}/journal/${e.id}`} aria-label={th.journal.open(e.doc_no)} className={`underline decoration-rule-input ${e.reverses_doc_no ? 'neg' : ''}`}>{e.doc_no}</Link>
                   </td>
                   <td className="h-11 border border-rule px-2.5 font-num max-sm:hidden">{isoToThai(e.date)}</td>
-                  <td className="h-11 border border-rule px-2.5">{e.reverses_doc_no ? th.journal.reversalOf(e.reverses_doc_no) : e.description}</td>
+                  <td className="h-11 border border-rule px-2.5">
+                    {e.reverses_doc_no ? th.journal.reversalOf(e.reverses_doc_no) : e.description}
+                    {e.comments > 0 && <span className="neg ml-2 text-[13px] italic">{th.comment.count(e.comments)}</span>}
+                  </td>
                   <td className="h-11 border border-rule px-2.5 text-right">
                     <Money value={e.reverses_doc_no ? `-${e.total}` : e.total} />
                   </td>

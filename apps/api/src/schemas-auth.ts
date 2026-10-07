@@ -37,3 +37,10 @@ export const OpenCompanies = z.object({
   name: z.string().trim().min(1).max(120),
   mode: z.enum(['practice', 'submit']).default('practice'),
 }).strict();
+
+// รหัสห้อง: 6 ตัวจากชุดที่อ่านไม่สับสน (ตรงกับ check ใน DB) พิมพ์ตัวเล็ก/มีช่องว่างได้
+export const JoinCodeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const JoinClassroom = z.object({
+  code: z.string().trim().toUpperCase().regex(/^[A-HJ-NP-Z2-9]{6}$/, 'รหัสห้องมี 6 ตัว (ตัวอักษรอังกฤษและตัวเลข)'),
+}).strict();
+export const SetJoinCode = z.object({ enabled: z.boolean() }).strict();

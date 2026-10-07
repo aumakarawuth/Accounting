@@ -61,7 +61,10 @@ export default async function ReviewPage({ params }: { params: Promise<{ company
               <tbody>
                 {entries.map((e) => (
                   <tr key={e.id}>
-                    <td className={`${cell} font-num ${e.reverses_doc_no ? 'neg' : ''}`}>{e.doc_no}</td>
+                    <td className={`${cell} font-num`}>
+                      <Link href={`/teacher/review/${companyId}/entry/${e.id}`} aria-label={th.teacher.review.openEntry(e.doc_no)} className={`underline decoration-rule-input ${e.reverses_doc_no ? 'neg' : ''}`}>{e.doc_no}</Link>
+                      {e.comments > 0 && <span className="neg ml-2 text-[13px] italic">{th.comment.count(e.comments)}</span>}
+                    </td>
                     <td className={`${cell} font-num`}>{isoToThai(e.date)}</td>
                     <td className={cell}>{e.reverses_doc_no ? th.journal.reversalOf(e.reverses_doc_no) : e.description}</td>
                     <td className={`${cell} text-right`}><Money value={e.reverses_doc_no ? `-${e.total}` : e.total} /></td>
