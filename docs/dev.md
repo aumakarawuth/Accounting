@@ -49,3 +49,11 @@ API_URL=http://127.0.0.1:4000 pnpm --filter @accounting/web dev
 | `apps/api/src/auth.ts` | `AuthAdapter` จุดเดียวที่จะสลับเป็นระบบล็อกอินจริงในเฟส 1 |
 | `apps/web/app/c/[companyId]/…` | หน้าของบริษัท (โครงหลัก + สมุดรายวัน) |
 | `apps/web/components/JournalForm.tsx` | ฟอร์มสมุดรายวัน คำนวณผลต่างเป็นสตางค์ BigInt |
+
+## PWA / service worker
+
+- ลงทะเบียนเฉพาะ build จริง (`pnpm build && pnpm start`) ตอน `pnpm dev` ไม่มี service worker
+- คุมเฉพาะ `/c/` (หน้าบริษัทของนักเรียน) ดูเหตุผลใน `docs/assumptions.md` ข้อ 24
+- ถ้าแก้ `public/sw.js` ให้เปลี่ยนชื่อ cache (`static-vN`/`offline-vN`) เครื่องที่ติดตั้งแล้วจะล้าง cache เก่าเอง
+- ทำ Docker ของเว็บ (output standalone) ต้องคัดลอก `public/` และ `.next/static/` ไปด้วย ไม่อย่างนั้นไม่มีไอคอน/sw.js
+

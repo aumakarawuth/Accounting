@@ -11,6 +11,10 @@ const config: NextConfig = {
   },
   async headers() {
     return [{
+      // service worker ต้องได้ตัวล่าสุดเสมอ (ไม่ให้เบราว์เซอร์/CDN cache)
+      source: '/sw.js',
+      headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }],
+    }, {
       source: '/:path*',
       headers: [
         { key: 'X-Content-Type-Options', value: 'nosniff' },

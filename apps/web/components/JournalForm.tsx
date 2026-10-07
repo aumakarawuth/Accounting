@@ -8,6 +8,7 @@ import { fromCents, formatMoney, toCents } from '@/lib/money';
 import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { th } from '@/i18n/th';
 import { clearDraft, setDraft } from '@/lib/presence';
+import { deleteDraft, hasContent, loadDraft, saveDraft } from '@/lib/drafts';
 
 type Line = { key: number; code: string; debit: string; credit: string; memo: string };
 
@@ -98,6 +99,8 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
   const idem = useRef(newKey()); // คีย์เดิมจนกว่าจะผ่านรายการสำเร็จ (กดซ้ำ/เน็ตหลุดไม่เกิดรายการซ้ำ)
+  const [restored, setRestored] = useState<number | null>(null); // เวลาที่เก็บร่างที่กู้คืนมา
+  const loaded = useRef(false); // ยังไม่โหลดร่างเก่า = ยังไม่เขียนทับ
 
   const byCode = useMemo(() => new Map(accounts.map((a) => [a.code, a])), [accounts]);
   const update = (key: number, patch: Partial<Line>) =>
@@ -116,6 +119,50 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
     }
     return { dr, cr, diff: dr - cr, filled, invalid };
   }, [lines, byCode]);
+
+  // กู้ร่างที่ค้างในเครื่อง (ปิดแท็บ/แบตหมด/เซสชันหมดอายุ) ครั้งเดียวตอนเปิดฟอร์ม
+  useEffect(() => {
+    if (locked) return;
+    let alive = true;
+    void loadDraft(companyId).then((d) => {
+      if (!alive) return;
+      if (d && hasContent(d)) {
+        setDate(d.date);
+        setDescription(d.description);
+        setLines(d.lines.length >= 2 ? d.lines.map((l) => ({ ...blank(), ...l })) : [blank(), blank()]);
+        if (d.idemKey) idem.current = d.idemKey;
+        setRestored(d.savedAt);
+      }
+      loaded.current = true;
+    });
+    return () => { alive = false; };
+  }, [companyId, locked]);
+
+  // เก็บร่างลงเครื่องทุกครั้งที่แก้ (หน่วง 150ms) ฟอร์มว่าง = ลบร่าง
+  // ที่ค้างอยู่ต้องเก็บทันทีเมื่อออกจากหน้า (กดเมนู/ปิดแท็บ/สลับแอป) ไม่อย่างนั้นสิ่งที่พิมพ์ล่าสุดหาย
+  const pendingSave = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (locked || !loaded.current) return;
+    const write = () => {
+      pendingSave.current = null;
+      const d = { date, description, lines: lines.map(({ code, debit, credit, memo }) => ({ code, debit, credit, memo })), idemKey: idem.current };
+      void (hasContent(d) ? saveDraft(companyId, d) : deleteDraft(companyId));
+    };
+    pendingSave.current = write;
+    const t = setTimeout(write, 150);
+    return () => clearTimeout(t);
+  }, [date, description, lines, locked, companyId]);
+  useEffect(() => {
+    const flush = () => pendingSave.current?.();
+    const onHidden = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHidden);
+      flush(); // ออกจากหน้าภายในแอป (component ถูกถอด)
+    };
+  }, []);
 
   // ส่งร่างให้ครูดูสด (หน่วงใน lib/presence) — ไม่ส่งเมื่อถูกล็อก
   useEffect(() => {
@@ -149,6 +196,9 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
       });
       setResult({ ok: true, text: th.journal.posted(r.docNo), href: `/c/${companyId}/journal/${r.id}` });
       void clearDraft();
+      pendingSave.current = null;
+      void deleteDraft(companyId);
+      setRestored(null);
       setLines([blank(), blank()]);
       setDescription('');
       idem.current = newKey();
@@ -179,6 +229,18 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
       onSubmit={(e) => { e.preventDefault(); void submit(); }}
     >
       {locked && <p role="status" className="mx-3 mt-3 border border-rule-strong bg-band px-4 py-2.5 sm:mx-5">{th.submission.lockedNote}</p>}
+      {restored !== null && (
+        <p role="status" className="mx-3 mt-3 flex flex-wrap items-center gap-x-4 border border-rule-strong bg-band px-4 py-1 sm:mx-5">
+          <span className="py-1.5">{th.journal.draftRestored(new Date(restored).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }))}</span>
+          <button
+            type="button"
+            className="min-h-11 text-sm underline"
+            onClick={() => { setLines([blank(), blank()]); setDescription(''); setRestored(null); idem.current = newKey(); void deleteDraft(companyId); }}
+          >
+            {th.journal.discardDraft}
+          </button>
+        </p>
+      )}
       <section className="m-3 flex flex-col gap-4 border border-rule-strong bg-paper p-4 sm:m-5 sm:p-6">
         <div className="flex items-start justify-between border-b-2 border-ink pb-2.5">
           <h1 className="font-doc text-[19px] font-bold sm:text-2xl">{th.journal.title}</h1>
@@ -285,7 +347,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
             type="button"
             variant="secondary"
             className="max-sm:hidden"
-            onClick={() => { setLines([blank(), blank()]); setDescription(''); setResult(null); }}
+            onClick={() => { setLines([blank(), blank()]); setDescription(''); setResult(null); setRestored(null); void deleteDraft(companyId); }}
           >
             {th.journal.clear}
           </Button>

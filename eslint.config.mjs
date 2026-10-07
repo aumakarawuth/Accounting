@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', 'apps/web/next-env.d.ts', 'tests/load/**'] },
+  { ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', 'apps/web/next-env.d.ts', 'tests/load/**', 'tests/e2e-results/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -1,19 +1,19 @@
 import { th } from '@/i18n/th';
 import { LogoutButton } from './LogoutButton';
 import { WatchBanner } from './WatchBanner';
+import { SaveStatus } from './SaveStatus';
 
 type Props = {
   company: string;
   month: string; // "ต.ค. 2569"
   mode: keyof typeof th.mode;
-  status: string;
   work?: keyof typeof th.work.state | null; // สถานะงานในโหมดส่งงาน
   userId: string; // ฟังช่อง student:<id> เพื่อแสดงป้ายครูกำลังดู
   user: string;
 };
 
 // แสดงเสมอ: ชื่อบริษัท | งวด | โหมด | สถานะบันทึก (+ ป้ายครูกำลังดู)
-export function Topbar({ company, month, mode, status, work, userId, user }: Props) {
+export function Topbar({ company, month, mode, work, userId, user }: Props) {
   const cell = 'border-l border-rule px-4 max-sm:border-0 max-sm:px-0';
   return (
     <header className="border-b border-rule-strong bg-paper">
@@ -25,7 +25,7 @@ export function Topbar({ company, month, mode, status, work, userId, user }: Pro
           <span className="sm:hidden"> · </span>
           <span className={cell}>{th.mode[mode]}{work ? ` · ${th.work.state[work]}` : ''}</span>
           <span className="sm:hidden"> · </span>
-          <span className={`${cell} sm:text-ink2`}>{status}</span>
+          <SaveStatus className={`${cell} sm:text-ink2`} />
         </span>
         <WatchBanner userId={userId} />
         <span className="hidden items-center gap-4 border-l border-rule px-4 text-sm sm:ml-auto sm:flex">
