@@ -33,6 +33,11 @@ export function toHttp(err: unknown): { status: number; body: { code: string; me
   if (err instanceof ZodError) {
     return { status: 400, body: { code: 'invalid', message: err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') } };
   }
+  // error ฝั่งคำขอของ Fastify (body ว่าง/JSON เสีย/ใหญ่เกิน) = ผู้ส่งผิด ไม่ใช่ 500
+  const fe = err as { statusCode?: number; code?: string };
+  if (typeof fe?.statusCode === 'number' && fe.statusCode >= 400 && fe.statusCode < 500 && fe.code?.startsWith('FST_')) {
+    return { status: fe.statusCode === 413 ? 413 : 400, body: { code: 'invalid', message: 'รูปแบบคำขอไม่ถูกต้อง' } };
+  }
   const pgErr = err as PgError;
   const status = pgErr?.code ? STATUS[pgErr.code] : undefined;
   if (status) return { status, body: { code: pgErr.code!, message: pgErr.message } };

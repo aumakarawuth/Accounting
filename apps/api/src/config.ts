@@ -7,7 +7,8 @@ export type AuthConfig = {
   lockMinutes: number;
   ipMaxFailures: number; // ต่อ IP ในช่วงเดียวกัน (สูง เพราะทั้งโรงเรียนอาจออกเน็ต IP เดียว)
   loginPerIpPerMinute: number;
-  requestsPerIpPerMinute: number;
+  requestsPerIpPerMinute: number; // กันน้ำท่วมเท่านั้น: ทั้งโรงเรียนอาจออกเน็ต IP เดียว (NAT)
+  requestsPerUserPerMinute: number; // ตัวจำกัดหลัก
   allowedOrigins: string[] | false; // false = ไม่ตรวจ Origin (เฉพาะ adapter ที่ไม่ใช้ cookie)
 };
 
@@ -21,8 +22,11 @@ export function authConfigFromEnv(env = process.env): AuthConfig {
     maxFailures: 5,
     lockMinutes: 15,
     ipMaxFailures: Number(env.LOGIN_IP_MAX_FAILURES ?? 300),
-    loginPerIpPerMinute: Number(env.LOGIN_PER_IP_PER_MINUTE ?? 300),
-    requestsPerIpPerMinute: Number(env.REQUESTS_PER_IP_PER_MINUTE ?? 6000),
+    // k6 500 คนจาก IP เดียว (docs/load-test.md): ค่าเดิม 300/6000 ทำให้คำขอล้ม 78% ตอนเริ่มคาบ
+    // การเดารหัสยังถูกจำกัดด้วยล็อกต่อบัญชี (5 ครั้ง) และเพดานล็อกอินผิดต่อ IP (ipMaxFailures)
+    loginPerIpPerMinute: Number(env.LOGIN_PER_IP_PER_MINUTE ?? 1200),
+    requestsPerIpPerMinute: Number(env.REQUESTS_PER_IP_PER_MINUTE ?? 60000),
+    requestsPerUserPerMinute: Number(env.REQUESTS_PER_USER_PER_MINUTE ?? 600),
     allowedOrigins: (env.WEB_ORIGIN ?? 'http://localhost:3000').split(',').map((s) => s.trim()),
   };
 }

@@ -30,6 +30,7 @@ API_URL=http://127.0.0.1:4000 pnpm --filter @accounting/web dev
 - เทสต์ทั้งหมด: `pnpm test` (สร้างฐาน `accounting_test` ใหม่ทุกครั้ง)
 - ตรวจเส้นทางผู้ดูแล → ครูนำเข้า CSV → ใบรหัสผ่าน → นักเรียนเข้าใช้: `node tests/e2e-admin.mjs <base> <อีเมลผู้ดูแล> <รหัสชั่วคราว> <โฟลเดอร์ csv> <โฟลเดอร์ภาพ>`
 - ตรวจครูเปิดบริษัททั้งห้อง → นักเรียนลงรายการ → งบทดลอง/แยกประเภท 3 ขนาดจอ: `node tests/e2e-reports.mjs <base> <อีเมลครู> <รหัสครู> <รหัสนักเรียน> <รหัสผ่าน> <โฟลเดอร์ภาพ>`
+- ทดสอบโหลด k6 (500 คน): ดู `docs/load-test.md`
 - ตรวจดูสด (ครูกับนักเรียนสองเบราว์เซอร์พร้อมกัน): `node tests/e2e-live.mjs <base> <อีเมลครู> <รหัสครู> <รหัสนักเรียน> <รหัสผ่าน> <ชื่อบริษัท> <โฟลเดอร์ภาพ>`
 - realtime: API ฟัง Postgres `LISTEN acc_events` ด้วยการเชื่อมต่อตรง (ตั้ง `REALTIME_DATABASE_URL` เมื่อ `DATABASE_URL` ผ่าน PgBouncer แบบ transaction pooling)
 - ตรวจวงจรส่งงาน: `node tests/e2e-submit.mjs <base> <อีเมลครู> <รหัสครู> <รหัสนักเรียน> <รหัสผ่าน> <โฟลเดอร์ภาพ>`

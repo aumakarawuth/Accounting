@@ -55,6 +55,14 @@ describe('API (Fastify → post_journal)', () => {
     expect(r2.statusCode).toBe(400);
   });
 
+  it('body เสียหรือว่างทั้งที่บอกว่าเป็น JSON ได้ 400 ไม่ใช่ 500', async () => {
+    for (const payload of ['', '{ไม่ใช่ json']) {
+      const r = await app.inject({ method: 'POST', url: `/companies/${coA}/journal`, payload,
+        headers: { 'x-dev-user-id': a, 'content-type': 'application/json', 'idempotency-key': randomUUID() } });
+      expect([r.statusCode, r.json().code], JSON.stringify(payload)).toEqual([400, 'invalid']);
+    }
+  });
+
   it('ไม่มี idempotency key ได้ 400, ไม่ระบุผู้ใช้ได้ 401', async () => {
     expect((await post(a, coA, { date: '2026-10-15', lines }, null)).statusCode).toBe(400);
     const r = await app.inject({ method: 'GET', url: `/companies/${coA}/journal` });

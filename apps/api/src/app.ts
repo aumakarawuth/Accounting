@@ -25,6 +25,17 @@ export function buildApp(opts: {
 }) {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 256 * 1024, trustProxy: opts.trustProxy ?? 'loopback' });
   const limiter = opts.limiter ?? memoryLimiter();
+  // จำกัดต่อผู้ใช้ทุกคำขอที่ล็อกอินแล้ว (PLAN.md ข้อ 5: ต่อ IP และต่อผู้ใช้)
+  const auth: AuthAdapter = {
+    async authenticate(req) {
+      const u = await opts.auth.authenticate(req);
+      if (u) {
+        const wait = await limiter.hit(`user:${u.id}`, opts.cfg.requestsPerUserPerMinute, 60);
+        if (wait) throw new HttpError(429, 'rate_limited', 'ส่งคำขอถี่เกินไป', { retryAfter: wait });
+      }
+      return u;
+    },
+  };
   app.register(cookie);
 
   // CSRF: คำขอที่เปลี่ยนข้อมูลต้องมาจาก origin ของเว็บเรา (เสริม cookie SameSite=Lax)
@@ -52,11 +63,11 @@ export function buildApp(opts: {
   });
 
   app.register(async (scope) => {
-    authRoutes(scope, { pool: opts.pool, auth: opts.auth, cfg: opts.cfg, limiter });
-    companyRoutes(scope, opts.pool, opts.auth);
-    teacherRoutes(scope, { pool: opts.pool, auth: opts.auth });
-    adminRoutes(scope, { pool: opts.pool, auth: opts.auth });
-    liveRoutes(scope, { pool: opts.pool, auth: opts.auth, bus: opts.bus });
+    authRoutes(scope, { pool: opts.pool, auth, cfg: opts.cfg, limiter });
+    companyRoutes(scope, opts.pool, auth);
+    teacherRoutes(scope, { pool: opts.pool, auth });
+    adminRoutes(scope, { pool: opts.pool, auth });
+    liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus });
   });
   return app;
 }

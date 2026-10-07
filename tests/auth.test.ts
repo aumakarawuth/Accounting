@@ -110,6 +110,27 @@ describe('ล็อกอินและเซสชัน', () => {
   });
 });
 
+describe('จำกัดอัตรา', () => {
+  it('ต่อผู้ใช้: คนที่ส่งถี่เกินได้ 429 แต่คนอื่นจาก IP เดียวกันยังใช้ได้ (ทั้งโรงเรียนอาจใช้ IP เดียว)', async () => {
+    const lim = buildApp({ pool: apiPool, auth: sessionAuth(apiPool, cfg.cookieName), cfg: { ...cfg, requestsPerUserPerMinute: 5 } });
+    const ip = freshIp();
+    const loginAt = async (code: string, pw: string) => {
+      const r = await lim.inject({ method: 'POST', url: '/auth/login', remoteAddress: ip, headers: { origin: ORIGIN }, payload: { kind: 'student', identifier: code, password: pw } });
+      return `${cfg.cookieName}=${r.cookies.find((x) => x.name === cfg.cookieName)!.value}`;
+    };
+    const ca = await loginAt(aCode, 'ลงบัญชีทุกวัน');
+    const bCode = (await admin.query('select student_code from acc.users where id=$1', [b])).rows[0].student_code;
+    const cb = await loginAt(bCode, 'ปิดงบสิ้นเดือน');
+    const me = (c: string) => lim.inject({ method: 'GET', url: '/auth/me', remoteAddress: ip, headers: { cookie: c } });
+    const codes = [];
+    for (let i = 0; i < 7; i++) codes.push((await me(ca)).statusCode);
+    expect(codes.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+    expect(codes.slice(5)).toEqual([429, 429]);
+    expect((await me(cb)).statusCode).toBe(200);
+    await lim.close();
+  });
+});
+
 describe('ล็อกชั่วคราว', () => {
   it('ผิด 5 ครั้งล็อก 15 นาที (รหัสถูกก็เข้าไม่ได้) และครูประจำห้องได้รับแจ้ง', async () => {
     const lefts: number[] = [];
