@@ -80,11 +80,25 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
 
   app.post('/classrooms/:classroomId/companies', async (req) => {
     const { classroomId } = ClassroomParams.parse(req.params);
-    const { name } = OpenCompanies.parse(req.body);
+    const { name, mode } = OpenCompanies.parse(req.body);
     const user = await requireUser(auth, req, ['teacher', 'admin']);
     return withUser(pool, user, async (c) =>
-      (await c.query('select created, existing from acc.open_classroom_companies($1, $2)', [classroomId, name])).rows[0]);
+      (await c.query('select created, existing from acc.open_classroom_companies($1, $2, $3)', [classroomId, name, mode])).rows[0]);
   });
+
+  // งานที่ส่ง: ทุกห้องที่สอน เรียงงานที่รอตรวจก่อน
+  app.get('/teacher/submissions', async (req) =>
+    withUser(pool, await teacher(req), async (c) => (await c.query(
+      `select c.id as "companyId", c.name as company, r.name as classroom,
+              u.student_code as "studentCode", u.display_name as "studentName",
+              s.status, s.round, s.score::text, s.max_score::text as "maxScore", s.updated_at as "updatedAt"
+         from acc.submissions s
+         join acc.companies c on c.id = s.company_id
+         join acc.classrooms r on r.id = c.classroom_id and r.teacher_id = app.current_user_id()
+         join acc.users u on u.id = c.owner_id
+        order by case s.status when 'submitted' then 0 when 'reviewing' then 1 when 'returned' then 2
+                               when 'draft' then 3 when 'passed' then 4 else 5 end,
+                 s.updated_at, u.student_code`)).rows));
 
   app.post('/teacher/students/:studentId/revoke-sessions', async (req) => {
     const { studentId } = StudentParams.parse(req.params);

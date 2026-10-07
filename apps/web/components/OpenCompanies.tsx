@@ -10,6 +10,7 @@ export function OpenCompanies({ classroomId }: { classroomId: string }) {
   const router = useRouter();
   const id = useId();
   const [name, setName] = useState<string>(th.teacher.companyNameDefault);
+  const [mode, setMode] = useState<'practice' | 'submit'>('submit');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   return (
@@ -20,7 +21,7 @@ export function OpenCompanies({ classroomId }: { classroomId: string }) {
         setBusy(true);
         setMsg(null);
         try {
-          const r = await postJson<{ created: number; existing: number }>(`/classrooms/${classroomId}/companies`, { name });
+          const r = await postJson<{ created: number; existing: number }>(`/classrooms/${classroomId}/companies`, { name, mode });
           setMsg({ ok: true, text: th.teacher.opened(r.created, r.existing) });
           router.refresh();
         } catch (err) {
@@ -33,6 +34,12 @@ export function OpenCompanies({ classroomId }: { classroomId: string }) {
       <label htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
         {th.teacher.openCompanies} · {th.teacher.companyName}
         <input id={id} required maxLength={120} className="h-11 rounded-doc border border-rule-input bg-paper px-3 text-base" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">{th.submission.mode}
+        <select value={mode} onChange={(e) => setMode(e.target.value as 'practice' | 'submit')} className="h-11 rounded-doc border border-rule-input bg-paper px-2 text-base">
+          <option value="submit">{th.submission.modeSubmit}</option>
+          <option value="practice">{th.submission.modePractice}</option>
+        </select>
       </label>
       <button type="submit" disabled={busy} className="min-h-11 rounded-doc bg-ink px-4 font-medium text-paper disabled:bg-disabled disabled:text-ink2">
         {th.teacher.openSubmit}

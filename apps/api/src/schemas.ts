@@ -32,4 +32,11 @@ export const IdempotencyKey = z.string().min(8).max(100);
 const Month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'เดือนต้องเป็น YYYY-MM');
 export const MonthQuery = z.object({ month: Month.optional() });
 export const TrialBalanceQuery = z.object({ month: Month, all: z.enum(['0', '1']).default('0') });
+export const StatementsQuery = z.object({ month: Month, scope: z.enum(['month', 'ytd']).default('ytd') });
+export const SubmissionAction = z.object({
+  action: z.enum(['submit', 'review', 'return', 'pass', 'close']),
+  expected: z.enum(['draft', 'submitted', 'reviewing', 'returned', 'passed', 'closed']),
+  note: z.string().trim().max(2000).optional(),
+  score: z.string().regex(/^\d{1,3}(\.\d{1,2})?$/, 'คะแนนต้องเป็นตัวเลข').optional(),
+}).strict();
 export const LedgerQuery = z.object({ month: Month, account: z.string().min(1).max(20) });

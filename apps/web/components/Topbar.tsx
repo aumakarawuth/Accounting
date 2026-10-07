@@ -6,12 +6,13 @@ type Props = {
   month: string; // "ต.ค. 2569"
   mode: keyof typeof th.mode;
   status: string;
+  work?: keyof typeof th.work.state | null; // สถานะงานในโหมดส่งงาน
   watchedBy?: string; // ชื่อครูที่กำลังดู (เฟส 1: มาจาก realtime)
   user: string;
 };
 
 // แสดงเสมอ: ชื่อบริษัท | งวด | โหมด | สถานะบันทึก (+ ป้ายครูกำลังดู)
-export function Topbar({ company, month, mode, status, watchedBy, user }: Props) {
+export function Topbar({ company, month, mode, status, work, watchedBy, user }: Props) {
   const cell = 'border-l border-rule px-4 max-sm:border-0 max-sm:px-0';
   return (
     <header className="border-b border-rule-strong bg-paper">
@@ -21,7 +22,7 @@ export function Topbar({ company, month, mode, status, watchedBy, user }: Props)
         <span className="text-ink2 max-sm:text-[13px] sm:contents">
           <span className={cell}>{th.topbar.period(month)}</span>
           <span className="sm:hidden"> · </span>
-          <span className={cell}>{th.mode[mode]}</span>
+          <span className={cell}>{th.mode[mode]}{work ? ` · ${th.work.state[work]}` : ''}</span>
           <span className="sm:hidden"> · </span>
           <span className={`${cell} sm:text-ink2`}>{status}</span>
         </span>

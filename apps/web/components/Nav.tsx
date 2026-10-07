@@ -17,6 +17,7 @@ export function studentNav(companyId: string): Group[] {
       { label: n.journal, href: c('/journal/new') },
       { label: n.ledger, href: c('/ledger') },
       { label: n.trialBalance, href: c('/trial-balance') },
+      { label: n.statements, href: c('/statements') },
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [

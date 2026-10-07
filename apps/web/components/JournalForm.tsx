@@ -84,7 +84,7 @@ function AccountField({
   );
 }
 
-export function JournalForm({ companyId, accounts }: { companyId: string; accounts: Account[] }) {
+export function JournalForm({ companyId, accounts, locked = false }: { companyId: string; accounts: Account[]; locked?: boolean }) {
   const [date, setDate] = useState(isoToThai(todayIso()));
   const [description, setDescription] = useState('');
   const [lines, setLines] = useState<Line[]>(() => [blank(), blank()]);
@@ -111,7 +111,7 @@ export function JournalForm({ companyId, accounts }: { companyId: string; accoun
   }, [lines, byCode]);
 
   const isoDate = thaiToIso(date);
-  const canPost = !busy && !calc.invalid && calc.filled >= 2 && calc.diff === 0n && calc.dr > 0n && isoDate !== null;
+  const canPost = !locked && !busy && !calc.invalid && calc.filled >= 2 && calc.diff === 0n && calc.dr > 0n && isoDate !== null;
 
   const submit = useCallback(async () => {
     if (!canPost || !isoDate) return;
@@ -164,6 +164,7 @@ export function JournalForm({ companyId, accounts }: { companyId: string; accoun
       className="flex min-h-full flex-col"
       onSubmit={(e) => { e.preventDefault(); void submit(); }}
     >
+      {locked && <p role="status" className="mx-3 mt-3 border border-rule-strong bg-band px-4 py-2.5 sm:mx-5">{th.submission.lockedNote}</p>}
       <section className="m-3 flex flex-col gap-4 border border-rule-strong bg-paper p-4 sm:m-5 sm:p-6">
         <div className="flex items-start justify-between border-b-2 border-ink pb-2.5">
           <h1 className="font-doc text-[19px] font-bold sm:text-2xl">{th.journal.title}</h1>

@@ -4,7 +4,7 @@ import { withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireUser } from '../guard.js';
 import { HttpError } from '../errors.js';
-import { CompanyParams, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, PostJournal, Reverse, TrialBalanceQuery } from '../schemas.js';
+import { CompanyParams, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery } from '../schemas.js';
 
 // ชั้นบาง: ตรวจรูปแบบด้วย Zod แล้วเรียกฟังก์ชันใน Postgres; สิทธิ์ตัดสินที่ RLS/ฟังก์ชัน
 export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapter) {
@@ -40,7 +40,10 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const r = await c.query(
-        `select id, name, version, app.can_write_company(id) as can_write from acc.companies where id = $1`,
+        `select c.id, c.name, c.version, c.mode, app.can_write_company(c.id) as can_write,
+                coalesce(s.status, case c.mode when 'submit' then 'draft' end) as status,
+                app.company_locked(c.id) as locked
+           from acc.companies c left join acc.submissions s on s.company_id = c.id where c.id = $1`,
         [companyId],
       );
       return r.rows[0];
@@ -193,6 +196,89 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
         ...r.rows[0],
       };
     });
+  });
+
+  // งบการเงิน: กำไรขาดทุน (เดือนนี้หรือต้นปีถึงเดือนนี้) + ฐานะการเงิน ณ สิ้นเดือน
+  // ยอดหันตามด้านปกติ (บัญชีปรับลด เช่น ค่าเสื่อมราคาสะสม/ถอนใช้ส่วนตัว/ส่วนลด จึงติดลบ = หักออก)
+  // ยังไม่มีปิดบัญชีสิ้นปี: กำไรสะสมตั้งแต่เริ่มบริษัทแสดงเป็น "ยังไม่ได้ปิดบัญชี" ในส่วนทุน
+  app.get('/companies/:companyId/statements', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const { month, scope } = StatementsQuery.parse(req.query);
+    const to = `${month}-01`;
+    const from = scope === 'month' ? to : `${month.slice(0, 4)}-01-01`;
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const r = await c.query(
+        `with b as (
+           select a.code, a.name, a.type, case a.normal_side when 'debit' then 1 else -1 end as s,
+                  coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date between $2::date and $3::date), 0) as period_net,
+                  coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date <= $3::date), 0) as cum_net
+             from acc.chart_of_accounts a
+             left join acc.account_balances x on x.company_id = a.company_id and x.account_id = a.id
+             left join acc.periods p on p.company_id = x.company_id and p.id = x.period_id
+            where a.company_id = $1
+            group by a.code, a.name, a.type, a.normal_side
+         ), lines as (
+           select type, code, name, (period_net * s) as period_amt, (cum_net * s) as balance from b
+         ), t as (
+           select coalesce(sum(period_amt) filter (where type = 'revenue'), 0) as rev,
+                  coalesce(sum(period_amt) filter (where type = 'expense'), 0) as exp,
+                  coalesce(sum(balance) filter (where type = 'revenue'), 0) - coalesce(sum(balance) filter (where type = 'expense'), 0) as unclosed,
+                  coalesce(sum(balance) filter (where type = 'asset'), 0) as assets,
+                  coalesce(sum(balance) filter (where type = 'liability'), 0) as liabilities,
+                  coalesce(sum(balance) filter (where type = 'equity'), 0) as equity
+             from lines
+         )
+         select json_build_object(
+           'revenue', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', period_amt::numeric(18,2)::text) order by code), '[]') from lines where type = 'revenue' and period_amt <> 0),
+           'expense', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', period_amt::numeric(18,2)::text) order by code), '[]') from lines where type = 'expense' and period_amt <> 0),
+           'assets', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', balance::numeric(18,2)::text) order by code), '[]') from lines where type = 'asset' and balance <> 0),
+           'liabilities', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', balance::numeric(18,2)::text) order by code), '[]') from lines where type = 'liability' and balance <> 0),
+           'equity', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', balance::numeric(18,2)::text) order by code), '[]') from lines where type = 'equity' and balance <> 0),
+           'totalRevenue', rev::numeric(18,2)::text,
+           'totalExpense', exp::numeric(18,2)::text,
+           'netIncome', (rev - exp)::numeric(18,2)::text,
+           'unclosedProfit', unclosed::numeric(18,2)::text,
+           'totalAssets', assets::numeric(18,2)::text,
+           'totalLiabilities', liabilities::numeric(18,2)::text,
+           'totalEquity', (equity + unclosed)::numeric(18,2)::text,
+           'totalLiabilitiesEquity', (liabilities + equity + unclosed)::numeric(18,2)::text,
+           'balanced', assets = liabilities + equity + unclosed
+         ) as st from t`,
+        [companyId, from, to],
+      );
+      return { month, scope, from: from.slice(0, 7), ...r.rows[0].st };
+    });
+  });
+
+  // สถานะงานและประวัติ (เจ้าของและครูประจำห้อง); ครูเปิดดูถูกบันทึกทุกครั้ง
+  app.get('/companies/:companyId/submission', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      await c.query('select app.log_company_view($1)', [companyId]);
+      const co = (await c.query('select mode from acc.companies where id = $1', [companyId])).rows[0];
+      const s = (await c.query(
+        `select status, round, score::text, max_score::text as "maxScore" from acc.submissions where company_id = $1`, [companyId])).rows[0];
+      const events = (await c.query(
+        `select e.id, e.at, e.action, e.from_status as "from", e.to_status as "to", e.round, e.note, e.score::text,
+                u.display_name as "actorName", e.actor = c.owner_id as "byOwner"
+           from acc.submission_events e
+           join acc.companies c on c.id = e.company_id
+           left join acc.users u on u.id = e.actor   -- RLS: นักเรียนไม่เห็นชื่อครู (ได้ null) หน้าจอแสดงบทบาทแทน
+          where e.company_id = $1 order by e.id`, [companyId])).rows;
+      return { mode: co.mode, status: s?.status ?? (co.mode === 'submit' ? 'draft' : null), round: s?.round ?? 0,
+               score: s?.score ?? null, maxScore: s?.maxScore ?? '10.00', events };
+    });
+  });
+
+  app.post('/companies/:companyId/submission', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const body = SubmissionAction.parse(req.body);
+    const status = await withUser(pool, await user(req), async (c) =>
+      (await c.query('select acc.submission_action($1, $2, $3, $4, $5::numeric) s',
+        [companyId, body.action, body.expected, body.note ?? null, body.score ?? null])).rows[0].s);
+    return { status };
   });
 
   app.post('/companies/:companyId/journal', async (req, reply) => {

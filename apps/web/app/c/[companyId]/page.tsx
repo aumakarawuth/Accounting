@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import type { Company, EntryRow } from '@/lib/api';
+import type { Company, EntryRow, Submission } from '@/lib/api';
+import { SubmissionPanel } from '@/components/SubmissionPanel';
 import { serverApi } from '@/lib/server-api';
 import { isoToThai, monthLabel, todayIso } from '@/lib/date';
 import { Money } from '@/components/Money';
@@ -12,6 +13,7 @@ export default async function CompanyHome({ params }: { params: Promise<{ compan
     serverApi<Company>(`/companies/${companyId}`),
     serverApi<EntryRow[]>(`/companies/${companyId}/journal?month=${month}`),
   ]);
+  const sub = company.mode === 'submit' ? await serverApi<Submission>(`/companies/${companyId}/submission`) : null;
 
   return (
     <div className="flex flex-col gap-5 p-4 sm:p-6">
@@ -24,6 +26,7 @@ export default async function CompanyHome({ params }: { params: Promise<{ compan
           {th.keys.newJournal}
         </Link>
       </div>
+      {sub && <SubmissionPanel companyId={companyId} sub={sub} viewer="student" />}
       <section className="flex flex-col gap-2">
         <h2 className="text-[17px] font-semibold">{th.journal.recent}</h2>
         {entries.length === 0 ? (
