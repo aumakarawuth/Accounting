@@ -43,7 +43,8 @@ describe('เปิดบริษัทจำลองทั้งห้อง'
     co2 = (await as(s2, 'GET', '/me/companies')).json()[0].id;
     expect(co1).not.toBe(co2);
     const n = await db.query('select company_id, count(*)::int n from acc.chart_of_accounts where company_id = any($1) group by 1', [[co1, co2]]);
-    expect(n.rows.map((x) => x.n)).toEqual([42, 42]);
+    const template = (await db.query('select count(*)::int n from acc.coa_template')).rows[0].n;
+    expect(n.rows.map((x) => x.n)).toEqual([template, template]);
     const rooms = (await as(teacher, 'GET', '/teacher/classrooms')).json();
     expect(rooms[0].students.map((x: { companies: number }) => x.companies)).toEqual([1, 1]);
   });
@@ -76,7 +77,7 @@ describe('งบทดลองและแยกประเภท', () => {
     ]); // 5220 กลับรายการจนเป็นศูนย์ จึงไม่แสดง
     expect([oct.totalDebit, oct.totalCredit]).toEqual(['112500.00', '112500.00']);
     const all = (await as(s1, 'GET', `/companies/${co1}/trial-balance?month=2026-10&all=1`)).json();
-    expect(all.rows).toHaveLength(42);
+    expect(all.rows).toHaveLength((await db.query('select count(*)::int n from acc.coa_template')).rows[0].n);
     const empty = (await as(s1, 'GET', `/companies/${co1}/trial-balance?month=2026-08`)).json();
     expect(empty).toEqual({ month: '2026-08', rows: [], totalDebit: '0.00', totalCredit: '0.00' });
   });
