@@ -114,7 +114,7 @@ insert into acc.coa_template (code, name, type) values
   ('5140', 'ส่งคืนสินค้า', 'expense')
 on conflict (code) do update set name = excluded.name, type = excluded.type;
 
--- บริษัทที่เปิดไว้แล้ว: เพิ่มบัญชีที่ยังไม่มี (บริษัทที่ส่งงานค้างอยู่เพิ่มไม่ได้เพราะล็อก จะได้เมื่อครูส่งกลับแล้วเปิดหน้าเอกสาร)
+-- บริษัทที่เปิดไว้แล้ว: เพิ่มบัญชีที่ยังไม่มี (บริษัทที่ส่งงานค้างอยู่เพิ่มไม่ได้เพราะล็อก ฟังก์ชันออกเอกสารเฟส 2.2 ต้องเพิ่มบัญชีที่ขาดเองตอนใช้ครั้งแรก)
 insert into acc.chart_of_accounts (company_id, code, name, type)
 select c.id, t.code, t.name, t.type
   from acc.companies c cross join acc.coa_template t
