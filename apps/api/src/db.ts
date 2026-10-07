@@ -4,7 +4,14 @@ import type { AuthUser } from './auth.js';
 // ทุกคำขอผ่าน pooler แบบ transaction pooling: ตั้งค่าตัวตนด้วย set_config(..., true)
 // ซึ่งหมดอายุพร้อมทรานแซกชัน จึงไม่รั่วข้ามคำขอบน connection เดียวกัน
 export function createPool(connectionString: string, max = 10) {
-  return new pg.Pool({ connectionString, max });
+  return new pg.Pool({ ...pgConfig(connectionString), max });
+}
+
+// ฐานข้อมูลที่ใช้ CA ของผู้ให้บริการเอง (เช่น Supabase): ใส่ PEM ใน DATABASE_CA_CERT แล้วตรวจใบรับรองเต็มรูปแบบ
+// ห้ามใส่ sslmode ใน URL พร้อมกัน เพราะค่าใน URL ทับค่านี้
+export function pgConfig(connectionString: string): pg.ClientConfig {
+  const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n').trim();
+  return ca ? { connectionString, ssl: { ca, rejectUnauthorized: true } } : { connectionString };
 }
 
 export async function withUser<T>(

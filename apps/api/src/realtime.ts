@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { pgConfig } from './db.js';
 
 export type RealtimeEvent = { ch: string; k: string; [key: string]: unknown };
 
@@ -19,7 +20,7 @@ export function pgListenBus(connectionString: string, log: (msg: string) => void
   let delay = 1000;
 
   async function connect() {
-    const c = new pg.Client({ connectionString });
+    const c = new pg.Client(pgConfig(connectionString));
     c.on('notification', (msg) => {
       if (!msg.payload) return;
       let e: RealtimeEvent;
