@@ -1,5 +1,6 @@
 import { th } from '@/i18n/th';
 import { LogoutButton } from './LogoutButton';
+import { WatchBanner } from './WatchBanner';
 
 type Props = {
   company: string;
@@ -7,12 +8,12 @@ type Props = {
   mode: keyof typeof th.mode;
   status: string;
   work?: keyof typeof th.work.state | null; // สถานะงานในโหมดส่งงาน
-  watchedBy?: string; // ชื่อครูที่กำลังดู (เฟส 1: มาจาก realtime)
+  userId: string; // ฟังช่อง student:<id> เพื่อแสดงป้ายครูกำลังดู
   user: string;
 };
 
 // แสดงเสมอ: ชื่อบริษัท | งวด | โหมด | สถานะบันทึก (+ ป้ายครูกำลังดู)
-export function Topbar({ company, month, mode, status, work, watchedBy, user }: Props) {
+export function Topbar({ company, month, mode, status, work, userId, user }: Props) {
   const cell = 'border-l border-rule px-4 max-sm:border-0 max-sm:px-0';
   return (
     <header className="border-b border-rule-strong bg-paper">
@@ -26,12 +27,7 @@ export function Topbar({ company, month, mode, status, work, watchedBy, user }: 
           <span className="sm:hidden"> · </span>
           <span className={`${cell} sm:text-ink2`}>{status}</span>
         </span>
-        {watchedBy && (
-          <span className="flex items-center gap-2 text-sm sm:ml-auto sm:border-l sm:border-rule sm:px-4">
-            <span aria-hidden className="inline-block size-2 bg-ink" />
-            {th.topbar.teacherWatching(watchedBy)}
-          </span>
-        )}
+        <WatchBanner userId={userId} />
         <span className="hidden items-center gap-4 border-l border-rule px-4 text-sm sm:ml-auto sm:flex">
           {user}
           <LogoutButton />

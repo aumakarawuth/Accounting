@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { Topbar } from '@/components/Topbar';
 import { SideNav, BottomTabs } from '@/components/Nav';
+import { PresenceReporter } from '@/components/PresenceReporter';
 import type { ApiError, Company } from '@/lib/api';
 import { requireMe, serverApi } from '@/lib/server-api';
 import { monthLabel, todayIso } from '@/lib/date';
@@ -24,12 +25,13 @@ export default async function CompanyLayout({
   }
   return (
     <div className="flex h-dvh flex-col">
-      <Topbar company={company.name} month={monthLabel(todayIso())} mode={company.mode} work={company.mode === 'submit' ? company.status : null} status={th.topbar.saved} user={`${me.studentCode ?? ''} ${me.displayName}`.trim()} />
+      <Topbar company={company.name} month={monthLabel(todayIso())} mode={company.mode} work={company.mode === 'submit' ? company.status : null} status={th.topbar.saved} user={`${me.studentCode ?? ''} ${me.displayName}`.trim()} userId={me.id} />
       <div className="flex min-h-0 flex-1">
         <SideNav companyId={companyId} />
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
       </div>
       <BottomTabs companyId={companyId} />
+      {company.can_write && <PresenceReporter companyId={companyId} />}
     </div>
   );
 }

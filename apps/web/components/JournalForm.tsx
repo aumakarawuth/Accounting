@@ -6,6 +6,7 @@ import { api, type Account, type ApiError } from '@/lib/api';
 import { fromCents, formatMoney, toCents } from '@/lib/money';
 import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { th } from '@/i18n/th';
+import { clearDraft, setDraft } from '@/lib/presence';
 
 type Line = { key: number; code: string; debit: string; credit: string; memo: string };
 
@@ -110,6 +111,12 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
     return { dr, cr, diff: dr - cr, filled, invalid };
   }, [lines, byCode]);
 
+  // ส่งร่างให้ครูดูสด (หน่วงใน lib/presence) — ไม่ส่งเมื่อถูกล็อก
+  useEffect(() => {
+    if (locked) return;
+    setDraft({ date, description, lines: lines.map((l) => ({ account_code: l.code, debit: l.debit, credit: l.credit })) });
+  }, [date, description, lines, locked]);
+
   const isoDate = thaiToIso(date);
   const canPost = !locked && !busy && !calc.invalid && calc.filled >= 2 && calc.diff === 0n && calc.dr > 0n && isoDate !== null;
 
@@ -135,6 +142,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
         body: JSON.stringify(payload),
       });
       setResult({ ok: true, text: th.journal.posted(r.docNo) });
+      void clearDraft();
       setLines([blank(), blank()]);
       setDescription('');
       idem.current = newKey();

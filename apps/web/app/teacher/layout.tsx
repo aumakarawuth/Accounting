@@ -13,6 +13,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
         <span className="mr-2 font-semibold">{th.app.name} · {th.app.teacherSuffix}</span>
         <nav aria-label={th.app.teacherSuffix} className="flex">
           <Link href="/teacher" className="flex min-h-11 items-center border-l border-rule px-4">{th.teacher.classrooms}</Link>
+          <Link href="/teacher/live" className="flex min-h-11 items-center border-l border-rule px-4">{th.live.nav}</Link>
           <Link href="/teacher/submissions" className="flex min-h-11 items-center border-l border-rule px-4">{th.submission.list}</Link>
         </nav>
         <span className="ml-auto text-sm">{me.displayName}</span>

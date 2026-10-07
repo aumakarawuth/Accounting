@@ -339,6 +339,33 @@ export const th = {
     updated: 'อัปเดตล่าสุด',
   },
 
+  live: {
+    title: (room: string) => `ดูสด · ห้อง ${room}`,
+    nav: 'ดูสด',
+    groups: { unbalanced: 'ร่างไม่ดุล', stale: 'ค้างนาน (ออนไลน์แต่ไม่ได้ลงรายการ 20 นาทีขึ้นไป)', online: 'ออนไลน์', offline: 'ออฟไลน์' },
+    counts: (u: number, s: number, o: number) => `ร่างไม่ดุล ${u} · ค้างนาน ${s} · ออนไลน์ ${o}`,
+    diff: (amount: string) => `ต่าง ${amount}`,
+    idle: (min: number) => `นิ่ง ${min} นาที`,
+    neverPosted: 'ยังไม่ลงรายการ',
+    noCompany: 'ยังไม่มีบริษัท',
+    page: {
+      home: 'หน้าแรก', journal: 'สมุดรายวัน', ledger: 'แยกประเภท', 'trial-balance': 'งบทดลอง',
+      statements: 'งบการเงิน', menu: 'เมนูทั้งหมด', other: 'หน้าอื่น',
+    } as Record<string, string>,
+    onPage: (p: string) => `อยู่ที่หน้า ${p}`,
+    refresh: 'อัปเดตทุก 5 วินาที',
+    pick: 'เลือกนักเรียนเพื่อดูสด',
+    spectating: (code: string, name: string, company: string) => `ดูสด: ${code} ${name} · ${company}`,
+    note: 'อ่านอย่างเดียว · นักเรียนเห็นป้าย "ครูกำลังดูอยู่" · บันทึกการเข้าดูแล้ว',
+    draft: 'ร่างที่กำลังพิมพ์ (ยังไม่ได้ผ่านรายการ)',
+    noDraft: 'ไม่มีร่างค้างอยู่',
+    draftUpdated: (t: string) => `อัปเดตร่างล่าสุด ${t}`,
+    posted: 'รายการที่ผ่านแล้วล่าสุด',
+    back: 'รายชื่อนักเรียน',
+    stopped: 'หยุดดูแล้ว',
+    chooseRoom: 'เลือกห้องที่จะดูสด',
+  },
+
   month: {
     prev: (m: string) => `งวดก่อน ${m}`,
     next: (m: string) => `งวดถัดไป ${m}`,

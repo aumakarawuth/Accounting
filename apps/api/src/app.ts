@@ -8,6 +8,8 @@ import { memoryLimiter, type RateLimiter } from './ratelimit.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { companyRoutes } from './routes/companies.js';
+import { liveRoutes } from './routes/live.js';
+import type { RealtimeBus } from './realtime.js';
 import { teacherRoutes } from './routes/teacher.js';
 
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -17,6 +19,7 @@ export function buildApp(opts: {
   auth: AuthAdapter;
   cfg: AuthConfig;
   limiter?: RateLimiter;
+  bus?: RealtimeBus;
   logger?: boolean;
   trustProxy?: boolean | string;
 }) {
@@ -53,6 +56,7 @@ export function buildApp(opts: {
     companyRoutes(scope, opts.pool, opts.auth);
     teacherRoutes(scope, { pool: opts.pool, auth: opts.auth });
     adminRoutes(scope, { pool: opts.pool, auth: opts.auth });
+    liveRoutes(scope, { pool: opts.pool, auth: opts.auth, bus: opts.bus });
   });
   return app;
 }

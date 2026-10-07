@@ -48,3 +48,16 @@ export type Statements = {
 export type SubmissionEvent = { id: number; at: string; action: string; from: string; to: string; round: number; note: string | null; score: string | null; actorName: string | null; byOwner: boolean };
 export type Submission = { mode: 'practice' | 'submit'; status: WorkStatus | null; round: number; score: string | null; maxScore: string; events: SubmissionEvent[] };
 export type TeacherSubmission = { companyId: string; company: string; classroom: string; studentCode: string; studentName: string; status: WorkStatus; round: number; score: string | null; maxScore: string; updatedAt: string };
+export type LiveRow = {
+  studentId: string; studentCode: string; name: string; companyId: string | null; companyName: string | null;
+  page: string | null; draftDebit: string | null; draftCredit: string | null; draftLines: number | null;
+  presenceAt: string | null; lastSeenAt: string | null; lastPostedAt: string | null; now: string;
+};
+export type LiveCompany = {
+  company: { id: string; name: string };
+  presence: null | {
+    page: string; updatedAt: string; draftDebit: string | null; draftCredit: string | null; draftLines: number | null;
+    draft: null | { date?: string; description?: string; lines: { account_code: string; debit: string; credit: string }[] };
+  };
+  entries: { id: string; docNo: string; date: string; description: string; total: string; reversal: boolean; postedAt: string }[];
+};
