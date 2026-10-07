@@ -28,7 +28,7 @@ jobs:
     env:
       TEST_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
@@ -52,7 +52,7 @@ jobs:
     env:
       DEV_DB: postgres://postgres:postgres@localhost:5432/accounting_dev
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
@@ -93,7 +93,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       # ไม่ใช้ cache: job นี้ไม่ได้ pnpm install จึงไม่มี store ให้บันทึก (lockfile เปลี่ยน → cache miss → post step ล้ม)
       - uses: actions/setup-node@v4
