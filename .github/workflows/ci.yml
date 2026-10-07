@@ -95,8 +95,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+      # ไม่ใช้ cache: job นี้ไม่ได้ pnpm install จึงไม่มี store ให้บันทึก (lockfile เปลี่ยน → cache miss → post step ล้ม)
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22 }
       - run: pnpm audit --prod --audit-level high
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
