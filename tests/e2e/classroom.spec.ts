@@ -19,14 +19,17 @@ test('รหัสห้อง: ครูสร้างรหัสและฉ
   await teacher.waitForURL('**/teacher');
   const room = teacher.locator('section').filter({ has: teacher.getByRole('heading', { name: new RegExp(ROOM.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }) });
   const create = room.getByRole('button', { name: 'สร้างรหัสห้อง' });
+  const codeText = room.getByText(/^[A-HJ-NP-Z2-9]{6}$/);
   if (await create.isVisible()) {
     await create.click();
   } else {
+    // รอบก่อน (จออื่น) สร้างรหัสไว้แล้ว: เปลี่ยนใหม่ แล้วรอจนจอแสดงรหัสใหม่ (ไม่ใช่รหัสเดิมที่ยังค้างอยู่)
+    const old = (await codeText.textContent())!;
     await room.getByRole('button', { name: 'เปลี่ยนรหัสใหม่' }).click();
     await room.getByRole('button', { name: 'ยืนยันเปลี่ยนรหัส (รหัสเดิมใช้ไม่ได้)' }).click();
+    await expect(codeText).not.toHaveText(old);
   }
-  const codeText = room.getByText(/^[A-HJ-NP-Z2-9]{6}$/);
-  await expect(codeText).toBeVisible();
+  await expect(room.getByRole('button', { name: 'เปลี่ยนรหัสใหม่' })).toBeEnabled();
   const code = (await codeText.textContent())!;
   await checkScreen(teacher, info, 'teacher-join-code');
 

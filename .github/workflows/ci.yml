@@ -87,7 +87,7 @@ jobs:
             tests/e2e-results/report
           retention-days: 14
       - if: failure()
-        run: tail -100 api.log web.log
+        run: tail -n 100 api.log web.log
 
   # ช่องโหว่ใน dependency และความลับที่หลุดใน repo
   security:
