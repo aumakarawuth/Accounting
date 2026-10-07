@@ -49,8 +49,13 @@
 
 ### 2. Vercel
 
-1. สร้างโปรเจกต์ผูกกับ repo นี้ Root Directory = `apps/web`, Framework = Next.js
+1. สร้างโปรเจกต์ผูกกับ repo นี้ Root Directory = `apps/web`, Application Preset = **Next.js**
+   (ถ้าหน้าสร้างโปรเจกต์เลือก "Services" ให้เปลี่ยน ไม่ต้องสร้าง `vercel.json`)
    - Build Command: `pnpm run build:vercel` (build API ก่อน แล้ว `next build`)
+   - Function Region: `sin1` (สิงคโปร์ ที่เดียวกับฐานข้อมูล) ค่าเริ่มต้น `iad1` ทำให้ทุกคำสั่ง SQL ข้ามทวีป
+   - Deployment Protection: Vercel Authentication เฉพาะ **preview** (ค่าเริ่มต้นกันทุกโดเมน `*.vercel.app`
+     ผู้ทดสอบที่ไม่มีบัญชี Vercel จะเข้าไม่ได้) โดเมน production เปิดสาธารณะ ป้องกันด้วยระบบล็อกอินของแอปเอง
+   - Production Branch: ระหว่างที่งานยังไม่ merge เข้า `main` ให้ตั้งเป็นสาขาที่ทดสอบอยู่ ไม่อย่างนั้น push ใหม่เป็น preview เท่านั้น
 2. Environment Variables (Production):
 
    | ชื่อ | ค่า |
@@ -67,4 +72,5 @@
    - TLS: ตั้ง `DATABASE_CA_CERT` แล้ว API ต่อแบบเข้ารหัสและตรวจใบรับรอง + ชื่อโฮสต์เต็มรูปแบบ (`apps/api/src/db.ts`)
      **ห้ามใส่ `sslmode` ใน URL** เพราะค่าใน URL ทับการตั้งค่านี้ (`sslmode=require` ของ `pg` ปัจจุบันตรวจกับ CA สาธารณะ
      ซึ่งใบของ Supabase ไม่ผ่าน) ใส่ PEM หลายบรรทัดตรง ๆ หรือแทนขึ้นบรรทัดด้วย `\n` ก็ได้
-3. Deploy แล้วเปิด `https://<โดเมน>/api/health` ต้องได้ `{"ok":true}` แล้วทำตาม `docs/device-test.md`
+3. Deploy แล้วเปิด `https://<โดเมน>/api/health` ต้องได้ `{"ok":true}` (คำขอนี้ query ฐานข้อมูลจริง จึงยืนยัน TLS + รหัสผ่านด้วย)
+   แล้วทำตาม `docs/device-test.md`
