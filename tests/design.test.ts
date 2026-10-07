@@ -86,3 +86,30 @@ describe('จัดรูปแบบเงินโดยไม่ใช้ flo
     for (const bad of ['1.234', '1e5', 'abc', '', '1,000.00']) expect(() => formatMoney(bad)).toThrow();
   });
 });
+
+describe('คำนวณเงินบน UI เป็นสตางค์ (BigInt)', async () => {
+  const { toCents, fromCents } = await import('../apps/web/lib/money');
+  it('แปลงค่าที่พิมพ์', () => {
+    expect(toCents('')).toBe(0n);
+    expect(toCents('12,500')).toBe(1250000n);
+    expect(toCents('0.1')).toBe(10n);
+    expect(toCents('1.')).toBe(100n);
+    for (const bad of ['1.234', '-5', 'abc', '1e3']) expect(toCents(bad), bad).toBeNull();
+  });
+  it('0.1 + 0.2 = 0.30 พอดี (ไม่มีปัญหา float)', () => {
+    expect(fromCents(toCents('0.1')! + toCents('0.2')!)).toBe('0.30');
+    expect(fromCents(-50000n)).toBe('-500.00');
+  });
+});
+
+describe('วันที่ พ.ศ.', async () => {
+  const { thaiToIso, isoToThai, monthLabel } = await import('../apps/web/lib/date');
+  it('แปลงไปกลับ และปฏิเสธวันที่ไม่มีจริง', () => {
+    expect(thaiToIso('15/10/2569')).toBe('2026-10-15');
+    expect(isoToThai('2026-10-15')).toBe('15/10/2569');
+    expect(thaiToIso('29/02/2569')).toBeNull(); // 2026 ไม่ใช่ปีอธิกสุรทิน
+    expect(thaiToIso('29/02/2567')).toBe('2024-02-29');
+    expect(thaiToIso('2026-10-15')).toBeNull();
+    expect(monthLabel('2026-10')).toBe('ต.ค. 2569');
+  });
+});

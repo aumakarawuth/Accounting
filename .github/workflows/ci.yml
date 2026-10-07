@@ -25,5 +25,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @accounting/api typecheck
+      - run: pnpm --filter @accounting/web build   # สร้าง next-env.d.ts ก่อน typecheck
+      - run: pnpm --filter @accounting/web typecheck
       # เทสต์ความถูกต้องของบัญชี + การแยกข้อมูล บน Postgres จริง ห้าม merge ถ้าไม่ผ่าน
       - run: pnpm test

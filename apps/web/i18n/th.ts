@@ -121,6 +121,7 @@ export const th = {
     tapToEdit: 'แตะบรรทัดเพื่อแก้ ค้นหาบัญชีด้วยรหัสหรือชื่อ',
     post: 'ผ่านรายการ',
     addLine: 'เพิ่มบรรทัด',
+    removeLine: 'ลบบรรทัด',
     clear: 'ล้างฟอร์ม',
     posted: (docNo: string) => `ผ่านรายการเลขที่ ${docNo}`,
     reverse: 'กลับรายการ',
