@@ -15,7 +15,7 @@ export type Me = { id: string; role: 'admin' | 'teacher' | 'student' | 'ta'; dis
 export type Company = { id: string; name: string; version: number; can_write: boolean };
 export type Account = { code: string; name: string; type: string; normal_side: 'debit' | 'credit' };
 export type EntryRow = { id: string; doc_no: string; date: string; description: string; total: string; reverses_doc_no: string | null };
-export type Classroom = { id: string; name: string; students: { id: string; studentCode: string; name: string }[] };
+export type Classroom = { id: string; name: string; students: { id: string; studentCode: string; name: string; companies: number }[] };
 export type Alert = { id: number; kind: 'locked'; at: string; studentCode: string; name: string };
 export type Staff = { id: string; email: string; name: string; role: 'teacher' | 'admin' | 'ta'; active: boolean; classrooms: number };
 export type AdminClassroom = { id: string; name: string; teacherId: string; teacherName: string; students: number };
@@ -24,3 +24,16 @@ export type AuditRow = {
   userName: string | null; userCode: string | null; changed: string[] | null; detail: Record<string, unknown> | null;
   target: string | null;
 };
+export type TrialBalance = {
+  month: string;
+  rows: { code: string; name: string; type: string; normalSide: 'debit' | 'credit'; debit: string; credit: string }[];
+  totalDebit: string; totalCredit: string;
+};
+export type LedgerAccount = { code: string; name: string; normalSide: 'debit' | 'credit'; opening: string; debit: string; credit: string; closing: string };
+export type Ledger = {
+  month: string;
+  account: { code: string; name: string; type: string; normalSide: 'debit' | 'credit' };
+  opening: string; closing: string; totalDebit: string; totalCredit: string;
+  lines: { date: string; docNo: string; description: string; memo: string; debit: string; credit: string; balance: string; reversal: boolean }[];
+};
+export type MyCompany = { id: string; name: string; classroom: string | null };

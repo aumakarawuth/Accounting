@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { postJson, type ApiError, type Classroom } from '@/lib/api';
 import { th } from '@/i18n/th';
 import { PasswordSlips, type Slip } from './PasswordSlips';
+import { OpenCompanies } from './OpenCompanies';
 import { StudentImport } from './StudentImport';
 
 type RowState = { confirm?: boolean; busy?: boolean; note?: string; error?: string };
@@ -55,6 +56,7 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
             {importing === room.id && (
               <StudentImport classroomId={room.id} roomName={room.name} existingCodes={room.students.map((s) => s.studentCode)} onIssued={addSlips} />
             )}
+            {room.students.length > 0 && <OpenCompanies classroomId={room.id} />}
             {room.students.length === 0 ? (
               <p className="text-ink2">{th.teacher.noStudents}</p>
             ) : (
@@ -65,6 +67,7 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
                     <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-4 py-2.5">
                       <span className="font-num">{s.studentCode}</span>
                       <span className="min-w-0 flex-1">{s.name}</span>
+                      <span className={`text-sm ${s.companies === 0 ? 'text-ink2' : ''}`}>{th.teacher.companyCount(s.companies)}</span>
                       <button type="button" disabled={st.busy} className={`${btn} ${st.confirm ? 'bg-ink text-paper' : ''} disabled:bg-disabled disabled:text-ink2`} onClick={() => reset(room, s)}>
                         {st.confirm ? th.teacher.confirmReset : th.teacher.resetPassword}
                       </button>

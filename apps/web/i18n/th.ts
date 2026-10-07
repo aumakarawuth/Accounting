@@ -207,6 +207,12 @@ export const th = {
     tempPassword: (pw: string) => `รหัสชั่วคราว ${pw} แสดงครั้งเดียว นักเรียนต้องเปลี่ยนเมื่อเข้าครั้งแรก`,
     classrooms: 'ห้องเรียน',
     students: (n: number) => `${n} คน`,
+    openCompanies: 'เปิดบริษัทจำลองให้ทั้งห้อง',
+    companyName: 'ชื่อบริษัท',
+    companyNameDefault: 'บริษัท ก. จำกัด',
+    openSubmit: 'เปิดบริษัท',
+    opened: (created: number, existing: number) => `เปิดบริษัทใหม่ ${created} คน · มีบริษัทชื่อนี้อยู่แล้ว ${existing} คน`,
+    companyCount: (n: number) => (n === 0 ? 'ยังไม่มีบริษัท' : `บริษัท ${n}`),
     noStudents: 'ยังไม่มีนักเรียนในห้องนี้',
     alerts: 'แจ้งเตือน 24 ชม. ล่าสุด',
     noAlerts: 'ไม่มีบัญชีถูกล็อกใน 24 ชม. ล่าสุด',
@@ -236,6 +242,14 @@ export const th = {
 
   trialBalance: {
     title: 'งบทดลอง',
+    heading: (company: string, date: string) => `งบทดลอง ${company} ณ วันที่ ${date}`,
+    cumulativeNote: 'ยอดสะสมตั้งแต่เริ่มบริษัทจนถึงสิ้นงวดที่เลือก',
+    code: 'รหัสบัญชี',
+    account: 'ชื่อบัญชี',
+    showAll: 'แสดงทุกบัญชี',
+    showActive: 'เฉพาะบัญชีที่มียอด',
+    empty: 'ยังไม่มียอดคงเหลือถึงงวดนี้',
+    unbalanced: (d: string, c: string, diff: string) => `เดบิต ${d} ไม่เท่าเครดิต ${c} ผลต่าง ${diff}`,
     summary: 'งบทดลองย่อ',
     category: 'หมวด',
     types: {
@@ -248,6 +262,35 @@ export const th = {
     periodTotal: 'รวมทั้งงวด',
     listView: 'ดูเป็นรายการ',
     tableView: 'ดูเป็นตาราง',
+  },
+
+  ledger: {
+    title: 'แยกประเภท',
+    heading: (code: string, name: string) => `บัญชีแยกประเภท · ${code} ${name}`,
+    accounts: (month: string) => `บัญชีที่มียอดหรือเคลื่อนไหว งวด ${month}`,
+    allAccounts: 'ทุกบัญชี',
+    opening: 'ยอดยกมา',
+    closing: 'ยอดยกไป',
+    balance: 'ยอดคงเหลือ',
+    date: 'วันที่',
+    docNo: 'เลขที่',
+    description: 'คำอธิบาย',
+    totals: 'รวมงวดนี้',
+    noLines: 'ไม่มีรายการในงวดนี้',
+    oppositeNote: 'ยอดในวงเล็บคือยอดที่อยู่ผิดด้านจากด้านปกติของบัญชี',
+    normalSide: (side: 'debit' | 'credit') => `ด้านปกติ: ${side === 'debit' ? 'เดบิต' : 'เครดิต'}`,
+  },
+
+  month: {
+    prev: (m: string) => `งวดก่อน ${m}`,
+    next: (m: string) => `งวดถัดไป ${m}`,
+    current: (m: string) => `งวด ${m}`,
+  },
+
+  company: {
+    choose: 'เลือกบริษัท',
+    switch: 'เปลี่ยนบริษัท',
+    classroom: (name: string) => `ห้อง ${name}`,
   },
 
   login: {

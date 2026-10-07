@@ -62,7 +62,7 @@ describe('API (Fastify → post_journal)', () => {
   });
 
   it('IDOR: นักเรียน A อ่านบริษัท B ได้ 404 และลงบัญชีบริษัท B ได้ 403', async () => {
-    for (const path of ['', '/journal', '/accounts', '/trial-balance']) {
+    for (const path of ['', '/journal', '/accounts', '/trial-balance?month=2026-10', '/ledger?month=2026-10&account=1110', '/ledger-accounts?month=2026-10']) {
       const r = await app.inject({ method: 'GET', url: `/companies/${coB}${path}`, headers: { 'x-dev-user-id': a } });
       expect(r.statusCode, path).toBe(404);
     }
@@ -77,8 +77,8 @@ describe('API (Fastify → post_journal)', () => {
   });
 
   it('งบทดลองคืนเงินเป็นสตริง และดุล; กลับรายการได้ RV', async () => {
-    const tb = await app.inject({ method: 'GET', url: `/companies/${coA}/trial-balance`, headers: { 'x-dev-user-id': a } });
-    const rows = tb.json() as { code: string; debit: string; credit: string }[];
+    const tb = await app.inject({ method: 'GET', url: `/companies/${coA}/trial-balance?month=2026-10`, headers: { 'x-dev-user-id': a } });
+    const rows = tb.json().rows as { code: string; debit: string; credit: string }[];
     expect(rows.find((x) => x.code === '1110')?.debit).toBe('12500.00');
     const entry = (await app.inject({ method: 'GET', url: `/companies/${coA}/journal`, headers: { 'x-dev-user-id': a } })).json()[0];
     const rv = await app.inject({

@@ -29,4 +29,7 @@ export const Reverse = z.object({ date: IsoDate, description: z.string().max(500
 
 export const IdempotencyKey = z.string().min(8).max(100);
 
-export const MonthQuery = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional() });
+const Month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'เดือนต้องเป็น YYYY-MM');
+export const MonthQuery = z.object({ month: Month.optional() });
+export const TrialBalanceQuery = z.object({ month: Month, all: z.enum(['0', '1']).default('0') });
+export const LedgerQuery = z.object({ month: Month, account: z.string().min(1).max(20) });

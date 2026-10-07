@@ -32,3 +32,5 @@ export const ImportStudents = z.object({
   rows: z.array(z.object({ studentCode: StudentCode, name: Name }).strict()).min(1).max(1000)
     .refine((rows) => new Set(rows.map((r) => r.studentCode)).size === rows.length, 'มีรหัสนักเรียนซ้ำในไฟล์'),
 }).strict();
+
+export const OpenCompanies = z.object({ name: z.string().trim().min(1).max(120) }).strict();

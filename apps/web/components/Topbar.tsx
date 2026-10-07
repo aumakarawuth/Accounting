@@ -17,7 +17,7 @@ export function Topbar({ company, month, mode, status, watchedBy, user }: Props)
     <header className="border-b border-rule-strong bg-paper">
       <div className="flex min-h-[52px] items-center text-[15px] max-sm:flex-col max-sm:items-start max-sm:px-4 max-sm:py-2 sm:min-h-14 lg:min-h-[52px]">
         <span className="hidden w-[220px] shrink-0 px-4 font-semibold lg:block lg:w-[232px]">{th.app.name}</span>
-        <span className="px-4 font-semibold max-sm:px-0 lg:border-l lg:border-rule lg:font-normal">{company}</span>
+        <a href="/" title={th.company.switch} className="px-4 font-semibold max-sm:px-0 lg:border-l lg:border-rule lg:font-normal">{company}</a>
         <span className="text-ink2 max-sm:text-[13px] sm:contents">
           <span className={cell}>{th.topbar.period(month)}</span>
           <span className="sm:hidden"> · </span>

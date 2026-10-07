@@ -26,3 +26,19 @@ export function monthLabel(iso: string): string {
 export function todayIso(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
+
+/** "2026-10" → "31 ต.ค. 2569" (วันสุดท้ายของงวด) */
+export function monthEndLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${last} ${MONTHS[m - 1]} ${y + BE}`;
+}
+
+/** เลื่อนเดือน: ("2026-01", -1) → "2025-12" */
+export function addMonths(month: string, n: number): string {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+export const isMonth = (s: string | undefined): s is string => !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);

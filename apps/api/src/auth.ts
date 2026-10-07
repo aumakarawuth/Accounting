@@ -54,7 +54,10 @@ export function devAuth(defaultUserId?: string): AuthAdapter {
       const header = req.headers['x-dev-user-id'];
       const id = (typeof header === 'string' ? header : undefined) ?? defaultUserId;
       if (!id || !UUID.test(id)) return null;
-      return { id, role: 'student', mustChange: false, displayName: '', studentCode: null, clientInfo: clientInfo(req) };
+      // บทบาทใช้แค่ตัดสินว่าเรียก route ไหนได้; สิทธิ์ข้อมูลจริงยังตัดสินที่ RLS/ฟังก์ชันใน DB
+      const r = req.headers['x-dev-role'];
+      const role = r === 'teacher' || r === 'admin' || r === 'ta' ? r : 'student';
+      return { id, role, mustChange: false, displayName: '', studentCode: null, clientInfo: clientInfo(req) };
     },
   };
 }

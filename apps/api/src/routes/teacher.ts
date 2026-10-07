@@ -4,7 +4,7 @@ import type { AuthAdapter } from '../auth.js';
 import { withUser } from '../db.js';
 import { requireUser } from '../guard.js';
 import { hashPassword, temporaryPassword } from '../passwords.js';
-import { ClassroomParams, ImportStudents, StudentParams } from '../schemas-auth.js';
+import { ClassroomParams, ImportStudents, OpenCompanies, StudentParams } from '../schemas-auth.js';
 
 // ครู: ห้องเรียน, รีเซ็ตรหัส, เตะอุปกรณ์, การแจ้งเตือนบัญชีถูกล็อก (สิทธิ์ตรวจใน DB อีกชั้น)
 export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter }) {
@@ -15,7 +15,8 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
     withUser(pool, await teacher(req), async (c) => {
       const r = await c.query(
         `select r.id, r.name,
-                coalesce(json_agg(json_build_object('id', u.id, 'studentCode', u.student_code, 'name', u.display_name)
+                coalesce(json_agg(json_build_object('id', u.id, 'studentCode', u.student_code, 'name', u.display_name,
+                         'companies', (select count(*) from acc.companies c where c.owner_id = u.id and c.classroom_id = r.id))
                          order by u.student_code) filter (where u.id is not null), '[]') as students
            from acc.classrooms r
            left join acc.enrollments e on e.classroom_id = r.id
@@ -75,6 +76,14 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
         ...(r.status === 'created' ? { tempPassword: temps.get(r.code) } : {}),
       })),
     };
+  });
+
+  app.post('/classrooms/:classroomId/companies', async (req) => {
+    const { classroomId } = ClassroomParams.parse(req.params);
+    const { name } = OpenCompanies.parse(req.body);
+    const user = await requireUser(auth, req, ['teacher', 'admin']);
+    return withUser(pool, user, async (c) =>
+      (await c.query('select created, existing from acc.open_classroom_companies($1, $2)', [classroomId, name])).rows[0]);
   });
 
   app.post('/teacher/students/:studentId/revoke-sessions', async (req) => {
