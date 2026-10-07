@@ -10,6 +10,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const postJson = <T>(path: string, data: unknown, headers: Record<string, string> = {}) =>
   api<T>(path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(data) });
+export const patchJson = <T>(path: string, data: unknown) =>
+  api<T>(path, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
 
 export type Me = { id: string; role: 'admin' | 'teacher' | 'student' | 'ta'; displayName: string; studentCode: string | null; mustChange: boolean };
 export type WorkStatus = 'draft' | 'submitted' | 'reviewing' | 'returned' | 'passed' | 'closed';
@@ -70,6 +72,19 @@ export type JournalEntry = {
 export type EntryComment = { id: string; lineNo: number | null; body: string; at: string; authorName: string | null; mine: boolean };
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
 export type ChartRow = { code: string; name: string; type: AccountType; normalSide: 'debit' | 'credit'; active: boolean; version: number; used: boolean };
+export type CompanyProfile = {
+  name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string;
+  version: number; canEdit: boolean; locked: boolean;
+};
+export type WhtKind = 'transport' | 'advertising' | 'service' | 'professional' | 'rent' | 'other';
+export type Party = {
+  code: string; name: string; isCustomer: boolean; isVendor: boolean; taxId: string | null; branchNo: string; address: string;
+  vatRegistered: boolean; creditDays: number; whtKind: WhtKind | null; whtRate: string | null; active: boolean; version: number;
+};
+export type Item = {
+  code: string; name: string; unit: string; isService: boolean; salePrice: string | null; purchasePrice: string | null;
+  salesAccount: string | null; purchaseAccount: string | null; active: boolean; version: number;
+};
 export type Periods = {
   canClose: boolean; canReopen: boolean; locked: boolean;
   periods: { month: string; closed: boolean; closedAt: string | null; entries: number }[];

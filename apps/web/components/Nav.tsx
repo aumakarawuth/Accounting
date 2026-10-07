@@ -29,10 +29,14 @@ export function studentNav(companyId: string): Group[] {
       { label: n.purchase, href: c('/purchases') },
       { label: n.payment, href: c('/purchases/payments') },
     ] },
+    { title: n.group.master, items: [
+      { label: n.parties, href: c('/parties') },
+      { label: n.items, href: c('/items') },
+      { label: n.companyProfile, href: c('/settings') },
+    ] },
     { title: n.group.other, items: [
       { label: n.reports, href: c('/reports') },
       { label: n.myWork, href: c('/work') },
-      { label: n.settings, href: c('/settings') },
     ] },
   ];
 }
