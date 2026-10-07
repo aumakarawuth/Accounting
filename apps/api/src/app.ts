@@ -23,6 +23,7 @@ export function buildApp(opts: {
   bus?: RealtimeBus;
   logger?: boolean;
   trustProxy?: boolean | string;
+  streamMaxMs?: number;
 }) {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 256 * 1024, trustProxy: opts.trustProxy ?? 'loopback' });
   const limiter = opts.limiter ?? memoryLimiter();
@@ -69,7 +70,7 @@ export function buildApp(opts: {
     masterDataRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
-    liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus });
+    liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs });
   });
   return app;
 }

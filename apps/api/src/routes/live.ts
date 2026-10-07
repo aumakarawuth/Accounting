@@ -21,10 +21,11 @@ const Presence = z.object({
 }).strict();
 const Channel = z.string().regex(/^(company|student):[0-9a-f-]{36}$/);
 const SpectateParams = z.object({ spectateId: z.uuid() });
-const MAX_STREAM_MS = 10 * 60_000; // ต่อใหม่ทุก 10 นาที เพื่อตรวจเซสชันซ้ำ
 
-export function liveRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter; bus?: RealtimeBus }) {
-  const { pool, auth, bus } = deps;
+// streamMaxMs: ปิดสตรีมเองแล้วให้เบราว์เซอร์ต่อใหม่ (ตรวจเซสชันซ้ำ) ค่าเริ่มต้น 10 นาที
+// บน Vercel ต้องสั้นกว่าเวลาสูงสุดของ function ไม่อย่างนั้นถูกตัดกลางคันเป็น error (embedded.ts)
+export function liveRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter; bus?: RealtimeBus; streamMaxMs?: number }) {
+  const { pool, auth, bus, streamMaxMs = 10 * 60_000 } = deps;
 
   // นักเรียนรายงานหน้าที่เปิดและร่าง (ทุกไม่กี่วินาทีระหว่างใช้งาน)
   app.post('/companies/:companyId/presence', async (req) => {
@@ -113,7 +114,7 @@ export function liveRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
     res.write('retry: 3000\n: ok\n\n');
     const unsub = bus.subscribe(channel, (e) => res.write(`data: ${JSON.stringify(e)}\n\n`));
     const heartbeat = setInterval(() => res.write(': hb\n\n'), 25_000);
-    const limit = setTimeout(() => res.end(), MAX_STREAM_MS);
+    const limit = setTimeout(() => res.end(), streamMaxMs);
     req.raw.on('close', () => { clearInterval(heartbeat); clearTimeout(limit); unsub(); });
   });
 }

@@ -164,6 +164,20 @@ describe('realtime (SSE จริงผ่าน HTTP)', () => {
     s.close();
   });
 
+  it('ปิดสตรีมเองตามเวลาที่ตั้ง (บน Vercel ต้องปิดก่อน function ถูกตัด) และบอกให้เบราว์เซอร์ต่อใหม่', async () => {
+    const short = buildApp({ pool: apiPool, auth: devAuth(), bus, streamMaxMs: 300, cfg: { ...authConfigFromEnv({}), allowedOrigins: false } });
+    const url = await short.listen({ port: 0, host: '127.0.0.1' });
+    try {
+      const started = Date.now();
+      const res = await fetch(`${url}/realtime?channel=student:${s1}`, { headers: hdr(s1) });
+      const body = await res.text(); // จบได้เพราะเซิร์ฟเวอร์ปิดเอง
+      expect(Date.now() - started).toBeLessThan(5000);
+      expect(body).toContain('retry: 3000');
+    } finally {
+      await short.close();
+    }
+  });
+
   it('ฟังช่องที่ไม่มีสิทธิ์ไม่ได้', async () => {
     expect((await sse(s2, `company:${co1}`)).status).toBe(404);
     expect((await sse(s2, `student:${s1}`)).status).toBe(403);

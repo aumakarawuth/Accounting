@@ -18,7 +18,9 @@ function get(): Promise<FastifyInstance> {
     const cfg = authConfigFromEnv();
     const pool = createPool(url, Number(process.env.PG_POOL_MAX ?? 3));
     const bus = pgListenBus(process.env.REALTIME_DATABASE_URL ?? url, (m) => console.error(m));
-    const a = buildApp({ pool, auth: sessionAuth(pool, cfg.cookieName), cfg, bus, logger: false, trustProxy: true });
+    // function บน Vercel (Hobby) ถูกตัดที่ 300 วินาที: ปิดสตรีมดูสดเองที่ 280 วินาทีแล้วให้เบราว์เซอร์ต่อใหม่
+    const streamMaxMs = Number(process.env.REALTIME_MAX_SECONDS ?? 280) * 1000;
+    const a = buildApp({ pool, auth: sessionAuth(pool, cfg.cookieName), cfg, bus, logger: false, trustProxy: true, streamMaxMs });
     await a.ready();
     return a;
   })();
