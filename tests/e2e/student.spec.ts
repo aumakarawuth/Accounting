@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { checkScreen, studentHome, watchErrors } from './helpers';
+import { checkScreen, isPhone, studentHome, watchErrors } from './helpers';
 
 test('สมุดรายวัน: ไม่ดุลกดผ่านรายการไม่ได้ ดุลแล้วได้เลขที่ JV', async ({ page }, info) => {
   const errors = watchErrors(page);
@@ -50,7 +50,7 @@ test('งบทดลอง แยกประเภท งบการเงิ
 });
 
 test('มือถือ: แถบล่างและเมนูทั้งหมด', async ({ page }, info) => {
-  test.skip(info.project.name !== 'phone', 'แถบล่างมีเฉพาะมือถือ');
+  test.skip(!isPhone(info), 'แถบล่างมีเฉพาะมือถือ');
   const home = await studentHome(page);
   await page.getByRole('link', { name: 'เมนูทั้งหมด' }).click();
   await page.waitForURL(`**${home}/menu`);

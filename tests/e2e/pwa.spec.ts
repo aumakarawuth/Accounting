@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { checkScreen, env, login, studentHome, watchErrors } from './helpers';
+import { checkScreen, env, isPhone, login, studentHome, watchErrors } from './helpers';
 
 // ร่างใน IndexedDB, ออฟไลน์, PWA (PLAN.md ข้อ 8: ร่างเก็บในเครื่อง แต่การลงบัญชีต้องออนไลน์เสมอ)
 
@@ -87,7 +87,7 @@ test('ออฟไลน์: แถบบนบอกสถานะ ผ่า�
 test('ออกจากระบบแล้วร่างในเครื่องถูกล้าง (เครื่องห้องคอมใช้ร่วมกัน)', async ({ page }, info) => {
   const home = await studentHome(page);
   await typeDraft(page, home, `ร่างก่อนออก ${info.project.name}`);
-  if (info.project.name === 'phone') await page.goto(`${home}/menu`);
+  if (isPhone(info)) await page.goto(`${home}/menu`);
   await page.getByRole('button', { name: 'ออกจากระบบ' }).filter({ visible: true }).first().click();
   await page.waitForURL('**/login');
   await login(page, 'student', env.studentCode, env.studentPassword);

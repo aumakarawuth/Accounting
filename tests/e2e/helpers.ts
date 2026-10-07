@@ -73,3 +73,6 @@ export async function studentHome(page: Page): Promise<string> {
   await page.waitForURL(/\/c\/[0-9a-f-]{36}$/);
   return new URL(page.url()).pathname;
 }
+
+/** จอมือถือ (แถบล่าง + เมนูทั้งหมด แทนแถบข้าง) ใช้ได้ทั้ง Chromium และ Safari */
+export const isPhone = (info: TestInfo) => (info.project.use.viewport?.width ?? 1280) < 640;

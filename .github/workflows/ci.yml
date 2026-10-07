@@ -57,7 +57,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @accounting/tests exec playwright install --with-deps chromium
+      # WebKit = เอนจินของ Safari (iPhone/iPad) ทดสอบเพิ่มอีก 2 จอ
+      - run: pnpm --filter @accounting/tests exec playwright install --with-deps chromium webkit
       - name: ฐานข้อมูลตัวอย่าง (ครู + นักเรียน + บริษัท)
         run: |
           psql "$PG_ADMIN" -c 'create database accounting_dev'
@@ -70,14 +71,16 @@ jobs:
       - name: เปิด API และเว็บ
         run: |
           cd apps/api
-          DATABASE_URL=postgres://app_dev:app_dev@localhost:5432/accounting_dev COOKIE_SECURE=false \
+          # นักเรียนทดสอบคนเดียวรันเทสต์ ~90 ข้อติดกันเร็วกว่าคนจริงมาก (ช่วงพีกเกิน 600 คำขอ/นาที)
+          # จึงขยายเพดานต่อผู้ใช้เฉพาะ e2e; ตัวจำกัดเองมีเทสต์ใน tests/auth.test.ts
+          DATABASE_URL=postgres://app_dev:app_dev@localhost:5432/accounting_dev COOKIE_SECURE=false REQUESTS_PER_USER_PER_MINUTE=5000 \
             WEB_ORIGIN=http://localhost:3000 NODE_ENV=production nohup node dist/server.js > ../../api.log 2>&1 &
           cd ../web
           API_URL=http://127.0.0.1:4000 nohup pnpm start > ../../web.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://localhost:3000/login > /dev/null && curl -sf http://127.0.0.1:4000/health > /dev/null && exit 0; sleep 1; done
           echo "เซิร์ฟเวอร์ไม่ขึ้น"; cat ../../api.log ../../web.log; exit 1
       - run: pnpm --filter @accounting/tests e2e
-        env: { E2E_BASE: 'http://localhost:3000' }
+        env: { E2E_BASE: 'http://localhost:3000', E2E_WEBKIT: '1' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
