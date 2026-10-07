@@ -13,9 +13,9 @@ export const env = {
 export function watchErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on('pageerror', (e) => {
-    // WebKit รายงาน prefetch ของ Next (?_rsc=) ที่ถูกยกเลิกเพราะเทสต์ page.goto ออกจากหน้ากลางคัน ว่า "access control checks"
+    // WebKit รายงาน prefetch ของ Next (?_rsc= หรือ &_rsc= เมื่อลิงก์มี query อยู่แล้ว) ที่ถูกยกเลิกเพราะเทสต์ page.goto ออกจากหน้ากลางคัน ว่า "access control checks"
     // ไม่ใช่ปัญหาของแอป (ผู้ใช้จริงเปลี่ยนหน้าผ่านลิงก์ ไม่ unload หน้า) จึงข้ามเฉพาะข้อความนี้กับคำขอ _rsc เท่านั้น
-    if (/\?_rsc=.*due to access control checks/.test(e.message)) return;
+    if (/[?&]_rsc=.*due to access control checks/.test(e.message)) return;
     errors.push(`pageerror: ${e.message}`);
   });
   page.on('console', (m) => {
