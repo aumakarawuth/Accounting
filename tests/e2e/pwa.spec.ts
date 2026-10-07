@@ -46,7 +46,7 @@ test('ร่างเก็บในเครื่อง: โหลดหน้
   expect(errors).toEqual([]);
 });
 
-test('ออฟไลน์: แถบบนบอกสถานะ ผ่านรายการไม่ได้ เปิดหน้าใหม่ได้หน้าออฟไลน์ กลับมาออนไลน์แล้วทำต่อได้', async ({ page, context }, info) => {
+test('ออฟไลน์: แถบบนบอกสถานะ ผ่านรายการไม่ได้ เปิดหน้าใหม่ได้หน้าออฟไลน์ กลับมาออนไลน์แล้วทำต่อได้', async ({ page, context, browserName }, info) => {
   const home = await studentHome(page);
   // service worker คุมเฉพาะ /c/: โหลดหน้าบริษัทตรง ๆ (ไม่ใช่ผ่าน router จาก /login) รอติดตั้ง แล้วโหลดใหม่ให้มันคุมหน้า
   await page.goto(home);
@@ -73,13 +73,20 @@ test('ออฟไลน์: แถบบนบอกสถานะ ผ่า�
   await expect(page.getByRole('alert').filter({ hasText: 'ไม่มีอินเทอร์เน็ต ร่างยังเก็บในเครื่อง' })).toBeVisible();
   await checkScreen(page, info, 'journal-offline');
 
-  await page.goto(`${home}/trial-balance`).catch(() => {});
-  const seen = await page.evaluate(() => ({
-    url: location.href, controlled: !!navigator.serviceWorker?.controller, title: document.title,
-    text: document.body?.innerText.slice(0, 160),
-  })).catch((e) => String(e));
-  await expect(page.getByRole('heading', { name: 'ไม่มีอินเทอร์เน็ต' }), `หน้าออฟไลน์ไม่ขึ้น: ${JSON.stringify(seen)}`).toBeVisible();
-  await checkScreen(page, info, 'offline-page');
+  // หน้าออฟไลน์จาก service worker: WebKit ของ Playwright ตัดการนำทางที่ชั้นเครือข่ายก่อนถึง service worker
+  // (CI: page.goto ถูกปฏิเสธ หน้ายังอยู่ที่เดิมทั้งที่ service worker คุมหน้าอยู่) จึงตรวจขั้นนี้บน Chromium
+  // ส่วน Safari จริงต้องลองบนเครื่อง: docs/device-test.md ข้อ 9
+  if (browserName !== 'webkit') {
+    await page.goto(`${home}/trial-balance`).catch(() => {});
+    const seen = await page.evaluate(() => ({
+      url: location.href, controlled: !!navigator.serviceWorker?.controller, title: document.title,
+      text: document.body?.innerText.slice(0, 160),
+    })).catch((e) => String(e));
+    await expect(page.getByRole('heading', { name: 'ไม่มีอินเทอร์เน็ต' }), `หน้าออฟไลน์ไม่ขึ้น: ${JSON.stringify(seen)}`).toBeVisible();
+    await checkScreen(page, info, 'offline-page');
+  } else {
+    info.annotations.push({ type: 'manual', description: 'หน้าออฟไลน์บน Safari ตรวจบนเครื่องจริง (docs/device-test.md ข้อ 9)' });
+  }
 
   await context.setOffline(false);
   await page.goto(`${home}/journal/new`);
