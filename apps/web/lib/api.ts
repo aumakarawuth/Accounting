@@ -61,3 +61,14 @@ export type LiveCompany = {
   };
   entries: { id: string; docNo: string; date: string; description: string; total: string; reversal: boolean; postedAt: string }[];
 };
+export type JournalEntry = {
+  id: string; docNo: string; date: string; description: string; total: string; postedAt: string; periodClosed: boolean;
+  reverses: { id: string; docNo: string } | null; reversedBy: { id: string; docNo: string } | null;
+  lines: { lineNo: number; code: string; name: string; debit: string; credit: string; memo: string }[];
+};
+export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+export type ChartRow = { code: string; name: string; type: AccountType; normalSide: 'debit' | 'credit'; active: boolean; version: number; used: boolean };
+export type Periods = {
+  canClose: boolean; canReopen: boolean; locked: boolean;
+  periods: { month: string; closed: boolean; closedAt: string | null; entries: number }[];
+};

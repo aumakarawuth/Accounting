@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { pool, asUser, newSchool, newUser, newCompany, post, money, sqlstate } from './helpers';
+import { pool, asUser, newSchool, newUser, newClassroom, newCompany, post, money, sqlstate } from './helpers';
 
 afterAll(() => pool.end());
 
@@ -141,8 +141,11 @@ describe('ความถูกต้องของสมุดรายวั�
     expect(r.rows.map((x) => x.doc_no)).toEqual(Array.from({ length: 200 }, (_, i) => `JV-${String(i + 1).padStart(4, '0')}`));
   });
 
-  it('งวดที่ปิดแล้วลงไม่ได้ (ทั้งผ่านฟังก์ชันและเขียนตรง) เปิดงวดแล้วลงได้', async () => {
-    const { owner, company } = await setup();
+  it('งวดที่ปิดแล้วลงไม่ได้ (ทั้งผ่านฟังก์ชันและเขียนตรง) ครูเปิดงวดคืนแล้วลงได้', async () => {
+    const school = await newSchool();
+    const owner = await newUser(school, 'student');
+    const teacher = await newUser(school, 'teacher');
+    const company = await newCompany(owner, await newClassroom(school, teacher, [owner]));
     const lines = [{ account_code: '1110', debit: '1.00' }, { account_code: '4110', credit: '1.00' }];
     await asUser(owner, (c) => post(c, company, '2026-09-15', lines));
     await asUser(owner, (c) => c.query(`select acc.close_period($1,'2026-09-01')`, [company]));
@@ -152,7 +155,8 @@ describe('ความถูกต้องของสมุดรายวั�
         `insert into acc.journal_entries(company_id,period_id,doc_prefix,doc_no,entry_date,total_amount,posted_by)
          select $1,id,'ZZ','ZZ-1','2026-09-20',1,$2 from acc.periods where company_id=$1 and start_date='2026-09-01'`, [company, owner]),
     ).rejects.toSatisfy((e: any) => sqlstate(e) === 'ACC02');
-    await asUser(owner, (c) => c.query(`select acc.reopen_period($1,'2026-09-01')`, [company]));
+    await expectCode(asUser(owner, (c) => c.query(`select acc.reopen_period($1,'2026-09-01')`, [company])), '42501');
+    await asUser(teacher, (c) => c.query(`select acc.reopen_period($1,'2026-09-01')`, [company]));
     await asUser(owner, (c) => post(c, company, '2026-09-20', lines));
   });
 

@@ -44,7 +44,9 @@ export default async function CompanyHome({ params }: { params: Promise<{ compan
             <tbody>
               {entries.map((e) => (
                 <tr key={e.id}>
-                  <td className={`h-11 border border-rule px-2.5 font-num ${e.reverses_doc_no ? 'neg' : ''}`}>{e.doc_no}</td>
+                  <td className="h-11 border border-rule px-2.5 font-num">
+                    <Link href={`/c/${companyId}/journal/${e.id}`} aria-label={th.journal.open(e.doc_no)} className={`underline decoration-rule-input ${e.reverses_doc_no ? 'neg' : ''}`}>{e.doc_no}</Link>
+                  </td>
                   <td className="h-11 border border-rule px-2.5 font-num max-sm:hidden">{isoToThai(e.date)}</td>
                   <td className="h-11 border border-rule px-2.5">{e.reverses_doc_no ? th.journal.reversalOf(e.reverses_doc_no) : e.description}</td>
                   <td className="h-11 border border-rule px-2.5 text-right">

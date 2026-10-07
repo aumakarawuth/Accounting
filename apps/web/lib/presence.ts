@@ -1,5 +1,5 @@
 // รายงานหน้าที่เปิดและร่างสมุดรายวันให้ครูดูสด (ร่างจริงยังอยู่ในเครื่องนักเรียน การลงบัญชีต้องออนไลน์เสมอ)
-export type Page = 'home' | 'journal' | 'ledger' | 'trial-balance' | 'statements' | 'menu' | 'other';
+export type Page = 'home' | 'journal' | 'ledger' | 'trial-balance' | 'statements' | 'accounts' | 'closing' | 'menu' | 'other';
 export type Draft = { date: string; description: string; lines: { account_code: string; debit: string; credit: string }[] };
 
 let company: string | null = null;

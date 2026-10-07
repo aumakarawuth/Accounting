@@ -4,7 +4,10 @@ import { withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireUser } from '../guard.js';
 import { HttpError } from '../errors.js';
-import { CompanyParams, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery } from '../schemas.js';
+import {
+  AccountParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, PeriodParams,
+  PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery,
+} from '../schemas.js';
 
 // ชั้นบาง: ตรวจรูปแบบด้วย Zod แล้วเรียกฟังก์ชันใน Postgres; สิทธิ์ตัดสินที่ RLS/ฟังก์ชัน
 export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapter) {
@@ -14,6 +17,13 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
   async function requireReadable(c: pg.PoolClient, companyId: string) {
     const r = await c.query('select app.can_read_company($1) ok', [companyId]);
     if (!r.rows[0]?.ok) throw new HttpError(404, 'not_found', 'ไม่พบบริษัทนี้');
+  }
+
+  // อ่านได้แต่เขียนไม่ได้ (ครู/ผู้ช่วยสอน) = 403 บอกตรง ๆ
+  async function requireWritable(c: pg.PoolClient, companyId: string) {
+    await requireReadable(c, companyId);
+    const r = await c.query('select app.can_write_company($1) ok', [companyId]);
+    if (!r.rows[0]?.ok) throw new HttpError(403, '42501', 'บัญชีนี้ไม่มีสิทธิ์ทำรายการในบริษัทนี้');
   }
 
   async function docNo(c: pg.PoolClient, companyId: string, id: string) {
@@ -306,5 +316,114 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       return docNo(c, companyId, posted.rows[0].id);
     });
     return reply.code(201).send({ id: out.id, docNo: out.doc_no });
+  });
+  // รายการเดียว: หัว + บรรทัด + ความเชื่อมโยงกับการกลับรายการ (ใช้หน้าดูรายการ/ปุ่มกลับรายการ)
+  app.get('/companies/:companyId/journal/:entryId', async (req) => {
+    const { companyId, entryId } = EntryParams.parse(req.params);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const e = (await c.query(
+        `select e.id, e.doc_no as "docNo", e.entry_date::text as date, e.description, e.total_amount::text as total,
+                e.posted_at as "postedAt", p.closed as "periodClosed",
+                case when r.id is null then null else json_build_object('id', r.id, 'docNo', r.doc_no) end as reverses,
+                (select json_build_object('id', x.id, 'docNo', x.doc_no) from acc.journal_entries x
+                  where x.company_id = e.company_id and x.reverses_entry_id = e.id) as "reversedBy",
+                (select coalesce(json_agg(json_build_object(
+                          'lineNo', l.line_no, 'code', a.code, 'name', a.name,
+                          'debit', l.debit::text, 'credit', l.credit::text, 'memo', l.memo) order by l.line_no), '[]')
+                   from acc.journal_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+                  where l.company_id = e.company_id and l.entry_id = e.id) as lines
+           from acc.journal_entries e
+           join acc.periods p on p.company_id = e.company_id and p.id = e.period_id
+           left join acc.journal_entries r on r.company_id = e.company_id and r.id = e.reverses_entry_id
+          where e.company_id = $1 and e.id = $2`,
+        [companyId, entryId])).rows[0];
+      if (!e) throw new HttpError(404, 'not_found', 'ไม่พบรายการนี้');
+      return e;
+    });
+  });
+
+  // ผังบัญชีเต็ม (รวมบัญชีที่ปิดใช้) พร้อมบอกว่ามีรายการแล้วหรือยัง: ใช้หน้าจัดการผังบัญชี
+  app.get('/companies/:companyId/chart', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const r = await c.query(
+        `select a.code, a.name, a.type, a.normal_side as "normalSide", a.active, a.version,
+                exists (select 1 from acc.journal_lines l where l.company_id = a.company_id and l.account_id = a.id) as used
+           from acc.chart_of_accounts a where a.company_id = $1 order by a.code`,
+        [companyId],
+      );
+      return r.rows;
+    });
+  });
+
+  app.post('/companies/:companyId/accounts', async (req, reply) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const body = NewAccount.parse(req.body);
+    const row = await withUser(pool, await user(req), async (c) => {
+      await requireWritable(c, companyId);
+      try {
+        return (await c.query(
+          `insert into acc.chart_of_accounts (company_id, code, name, type) values ($1, $2, $3, $4)
+           returning code, name, type, normal_side as "normalSide", active, version`,
+          [companyId, body.code, body.name, body.type])).rows[0];
+      } catch (e) {
+        if ((e as { code?: string }).code === '23505') throw new HttpError(409, 'duplicate', `มีรหัสบัญชี ${body.code} อยู่แล้ว`);
+        throw e;
+      }
+    });
+    return reply.code(201).send({ ...row, used: false });
+  });
+
+  // แก้ชื่อ/ปิดใช้/เปิดใช้: ต้องส่ง version ที่อ่านมา (แก้ทับกันจากสองหน้าจอได้ 409)
+  app.patch('/companies/:companyId/accounts/:code', async (req) => {
+    const { companyId, code } = AccountParams.parse(req.params);
+    const body = EditAccount.parse(req.body);
+    return withUser(pool, await user(req), async (c) => {
+      await requireWritable(c, companyId);
+      const r = await c.query(
+        `update acc.chart_of_accounts a set name = coalesce($4, a.name), active = coalesce($5, a.active), version = a.version + 1
+          where a.company_id = $1 and a.code = $2 and a.version = $3
+          returning a.code, a.name, a.type, a.normal_side as "normalSide", a.active, a.version,
+                    exists (select 1 from acc.journal_lines l where l.company_id = a.company_id and l.account_id = a.id) as used`,
+        [companyId, code, body.version, body.name ?? null, body.active ?? null],
+      );
+      if (r.rows[0]) return r.rows[0];
+      const exists = (await c.query('select 1 from acc.chart_of_accounts where company_id = $1 and code = $2', [companyId, code])).rowCount;
+      if (!exists) throw new HttpError(404, 'not_found', `ไม่พบรหัสบัญชี ${code}`);
+      throw new HttpError(409, '40001', 'มีคนแก้บัญชีนี้ไปก่อนแล้ว โหลดใหม่เพื่อดูค่าล่าสุดก่อนแก้');
+    });
+  });
+
+  // งวดบัญชีรายเดือน (มีงวดเมื่อมีรายการในเดือนนั้น) + บอกว่าผู้เรียกปิด/เปิดงวดไหนได้
+  app.get('/companies/:companyId/periods', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const r = await c.query(
+        `select to_char(p.start_date, 'YYYY-MM') as month, p.closed, p.closed_at as "closedAt",
+                (select count(*)::int from acc.journal_entries e where e.company_id = p.company_id and e.period_id = p.id) as entries
+           from acc.periods p where p.company_id = $1 order by p.start_date`,
+        [companyId],
+      );
+      const who = (await c.query(
+        `select app.can_write_company($1) as "canClose",
+                (select owner_id <> app.current_user_id() from acc.companies where id = $1) as "canReopen",
+                app.company_locked($1) as locked`, [companyId])).rows[0];
+      return { ...who, periods: r.rows };
+    });
+  });
+
+  app.post('/companies/:companyId/periods/:month/close', async (req) => {
+    const { companyId, month } = PeriodParams.parse(req.params);
+    await withUser(pool, await user(req), (c) => c.query('select acc.close_period($1, $2::date)', [companyId, `${month}-01`]));
+    return { month, closed: true };
+  });
+
+  app.post('/companies/:companyId/periods/:month/reopen', async (req) => {
+    const { companyId, month } = PeriodParams.parse(req.params);
+    await withUser(pool, await user(req), (c) => c.query('select acc.reopen_period($1, $2::date)', [companyId, `${month}-01`]));
+    return { month, closed: false };
   });
 }

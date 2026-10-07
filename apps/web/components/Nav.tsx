@@ -14,7 +14,7 @@ export function studentNav(companyId: string): Group[] {
     { items: [{ label: n.home, href: c('') }] },
     { title: n.group.gl, items: [
       { label: n.chartOfAccounts, href: c('/accounts') },
-      { label: n.journal, href: c('/journal/new') },
+      { label: n.journal, href: c('/journal') },
       { label: n.ledger, href: c('/ledger') },
       { label: n.trialBalance, href: c('/trial-balance') },
       { label: n.statements, href: c('/statements') },
@@ -38,7 +38,7 @@ export function studentNav(companyId: string): Group[] {
 }
 
 function isActive(path: string, href: string) {
-  return href.split('/').length <= 3 ? path === href : path.startsWith(href.replace(/\/new$/, ''));
+  return href.split('/').length <= 3 ? path === href : path.startsWith(href);
 }
 
 /** แถบข้าง (iPad/คอม) */
@@ -71,7 +71,7 @@ export function BottomTabs({ companyId }: { companyId: string }) {
   const c = (p: string) => `/c/${companyId}${p}`;
   const tabs: Item[] = [
     { label: th.nav.home, href: c('') },
-    { label: th.nav.journal, href: c('/journal/new') },
+    { label: th.nav.journal, href: c('/journal') },
     { label: th.nav.reports, href: c('/reports') },
     { label: th.nav.myWork, href: c('/work') },
     { label: th.nav.all, href: c('/menu') },

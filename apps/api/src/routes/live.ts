@@ -10,7 +10,7 @@ import { ClassroomParams } from '../schemas-auth.js';
 import { CompanyParams } from '../schemas.js';
 
 const Presence = z.object({
-  page: z.enum(['home', 'journal', 'ledger', 'trial-balance', 'statements', 'menu', 'other']),
+  page: z.enum(['home', 'journal', 'ledger', 'trial-balance', 'statements', 'accounts', 'closing', 'menu', 'other']),
   draft: z.object({
     date: z.string().max(20).optional(),
     description: z.string().max(500).optional(),

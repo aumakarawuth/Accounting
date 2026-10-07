@@ -2,9 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Money } from '@/components/Money';
 import { SubmissionPanel } from '@/components/SubmissionPanel';
+import { PeriodTable } from '@/components/PeriodTable';
 import { StatementsView } from '@/components/reports/StatementsView';
 import { serverApi } from '@/lib/server-api';
-import type { ApiError, Company, EntryRow, Statements, Submission, TeacherSubmission } from '@/lib/api';
+import type { ApiError, Company, EntryRow, Periods, Statements, Submission, TeacherSubmission } from '@/lib/api';
 import { isoToThai, todayIso } from '@/lib/date';
 import { th } from '@/i18n/th';
 
@@ -19,11 +20,12 @@ export default async function ReviewPage({ params }: { params: Promise<{ company
     throw e;
   }
   const month = todayIso().slice(0, 7);
-  const [sub, entries, st, list] = await Promise.all([
+  const [sub, entries, st, list, periods] = await Promise.all([
     serverApi<Submission>(`/companies/${companyId}/submission`),
     serverApi<EntryRow[]>(`/companies/${companyId}/journal`),
     serverApi<Statements>(`/companies/${companyId}/statements?month=${month}&scope=ytd`),
     serverApi<TeacherSubmission[]>('/teacher/submissions'),
+    serverApi<Periods>(`/companies/${companyId}/periods`),
   ]);
   const me = list.find((s) => s.companyId === companyId);
   const cell = 'border border-rule px-2.5 py-2';
@@ -38,6 +40,11 @@ export default async function ReviewPage({ params }: { params: Promise<{ company
       </div>
       <SubmissionPanel companyId={companyId} sub={sub} viewer="teacher" />
       <StatementsView st={st} company={company.name} />
+      <section className="flex flex-col gap-2" aria-label={th.closing.teacherTitle}>
+        <h2 className="text-[17px] font-semibold">{th.closing.teacherTitle}</h2>
+        <p className="text-sm text-ink2">{th.closing.teacherNote}</p>
+        <PeriodTable companyId={companyId} data={periods} />
+      </section>
       <section className="flex flex-col gap-2">
         <h2 className="text-[17px] font-semibold">{th.journal.title}</h2>
         {entries.length === 0 ? <p className="text-ink2">{th.journal.empty}</p> : (

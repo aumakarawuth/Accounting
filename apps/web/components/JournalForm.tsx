@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { api, type Account, type ApiError } from '@/lib/api';
 import { fromCents, formatMoney, toCents } from '@/lib/money';
@@ -95,7 +96,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
   const [description, setDescription] = useState('');
   const [lines, setLines] = useState<Line[]>(() => [blank(), blank()]);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
   const idem = useRef(newKey()); // คีย์เดิมจนกว่าจะผ่านรายการสำเร็จ (กดซ้ำ/เน็ตหลุดไม่เกิดรายการซ้ำ)
 
   const byCode = useMemo(() => new Map(accounts.map((a) => [a.code, a])), [accounts]);
@@ -146,7 +147,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
         headers: { 'content-type': 'application/json', 'idempotency-key': idem.current },
         body: JSON.stringify(payload),
       });
-      setResult({ ok: true, text: th.journal.posted(r.docNo) });
+      setResult({ ok: true, text: th.journal.posted(r.docNo), href: `/c/${companyId}/journal/${r.id}` });
       void clearDraft();
       setLines([blank(), blank()]);
       setDescription('');
@@ -307,6 +308,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
           {result?.text ??
             (calc.diff > 0n ? th.journal.debitExceeds(money(calc.diff)) : calc.diff < 0n ? th.journal.creditExceeds(money(calc.diff)) : '')}
           {calc.diff !== 0n && !result && ` ${th.journal.postableWhenZero}`}
+          {result?.href && <> · <Link href={result.href} className="underline">{th.journal.viewPosted}</Link></>}
         </div>
         <Button type="submit" shortcut="F9" disabled={!canPost} className="max-sm:w-full sm:ml-auto">
           {th.journal.post}

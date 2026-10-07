@@ -40,3 +40,19 @@ export const SubmissionAction = z.object({
   score: z.string().regex(/^\d{1,3}(\.\d{1,2})?$/, 'คะแนนต้องเป็นตัวเลข').optional(),
 }).strict();
 export const LedgerQuery = z.object({ month: Month, account: z.string().min(1).max(20) });
+
+// ผังบัญชี: รหัสตัวเลข 3–10 หลัก (ตรงกับ check ใน DB) ประเภทตามหมวดบัญชี
+const AccountCode = z.string().regex(/^[0-9]{3,10}$/, 'รหัสบัญชีต้องเป็นตัวเลข 3–10 หลัก');
+const AccountName = z.string().trim().min(1, 'ต้องมีชื่อบัญชี').max(120);
+export const AccountParams = z.object({ companyId: Uuid, code: AccountCode });
+export const NewAccount = z.object({
+  code: AccountCode,
+  name: AccountName,
+  type: z.enum(['asset', 'liability', 'equity', 'revenue', 'expense']),
+}).strict();
+export const EditAccount = z.object({
+  name: AccountName.optional(),
+  active: z.boolean().optional(),
+  version: z.number().int().positive(),
+}).strict();
+export const PeriodParams = z.object({ companyId: Uuid, month: Month });

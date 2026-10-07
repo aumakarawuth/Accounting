@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { heartbeat, setPage, type Page } from '@/lib/presence';
 
-const PAGES: Page[] = ['journal', 'ledger', 'trial-balance', 'statements', 'menu'];
+const PAGES: Page[] = ['journal', 'ledger', 'trial-balance', 'statements', 'accounts', 'closing', 'menu'];
 
 export function PresenceReporter({ companyId }: { companyId: string }) {
   const path = usePathname();
