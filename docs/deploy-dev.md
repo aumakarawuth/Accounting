@@ -60,7 +60,7 @@
    | `REALTIME_DATABASE_URL` | เหมือนกันแต่พอร์ต `5432` (session) สำหรับ LISTEN |
    | `PG_POOL_MAX` | `3` |
    | `COOKIE_SECURE` | `true` |
-   | `WEB_ORIGIN` | `https://<โดเมน production ของโปรเจกต์>` (ใช้ตรวจ CSRF) |
+   | `WEB_ORIGIN` | ไม่ต้องตั้งบน Vercel (ใช้โดเมนของโปรเจกต์ที่ Vercel ใส่ให้เอง) ตั้งเมื่อใช้โดเมนของตัวเอง เช่น `https://acc.school.ac.th` (ใช้ตรวจ CSRF) |
    | `AUTH_ADAPTER` | `session` |
    | `DATABASE_CA_CERT` | PEM ของ `Supabase Root 2021 CA` (ปุ่ม Download certificate ในหน้า Database Settings) |
 

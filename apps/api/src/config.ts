@@ -27,6 +27,12 @@ export function authConfigFromEnv(env = process.env): AuthConfig {
     loginPerIpPerMinute: Number(env.LOGIN_PER_IP_PER_MINUTE ?? 1200),
     requestsPerIpPerMinute: Number(env.REQUESTS_PER_IP_PER_MINUTE ?? 60000),
     requestsPerUserPerMinute: Number(env.REQUESTS_PER_USER_PER_MINUTE ?? 600),
-    allowedOrigins: (env.WEB_ORIGIN ?? 'http://localhost:3000').split(',').map((s) => s.trim()),
+    allowedOrigins: (env.WEB_ORIGIN ?? vercelOrigins(env) ?? 'http://localhost:3000').split(',').map((s) => s.trim()),
   };
+}
+
+// บน Vercel ไม่ตั้ง WEB_ORIGIN ก็ได้: ใช้โดเมนของโปรเจกต์/ดีพลอยนี้ที่ Vercel ใส่ให้เอง (ล้วนเป็นโดเมนของเรา)
+function vercelOrigins(env: NodeJS.ProcessEnv): string | undefined {
+  const hosts = [env.VERCEL_PROJECT_PRODUCTION_URL, env.VERCEL_BRANCH_URL, env.VERCEL_URL].filter(Boolean);
+  return hosts.length ? hosts.map((h) => `https://${h}`).join(',') : undefined;
 }

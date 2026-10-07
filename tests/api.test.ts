@@ -97,3 +97,12 @@ describe('API (Fastify → post_journal)', () => {
     expect(rv.json().docNo).toBe('RV-0001');
   });
 });
+
+describe('authConfigFromEnv: Origin ที่ยอมรับ', () => {
+  it('ใช้ WEB_ORIGIN ก่อน ถ้าไม่ตั้งบน Vercel ใช้โดเมนที่ Vercel ใส่ให้ ถ้าไม่มีอะไรเลยใช้ localhost', () => {
+    const vercel = { VERCEL_PROJECT_PRODUCTION_URL: 'acc.vercel.app', VERCEL_URL: 'acc-abc123.vercel.app' };
+    expect(authConfigFromEnv({ WEB_ORIGIN: 'https://school.example', ...vercel }).allowedOrigins).toEqual(['https://school.example']);
+    expect(authConfigFromEnv(vercel).allowedOrigins).toEqual(['https://acc.vercel.app', 'https://acc-abc123.vercel.app']);
+    expect(authConfigFromEnv({}).allowedOrigins).toEqual(['http://localhost:3000']);
+  });
+});
