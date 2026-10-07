@@ -5,6 +5,7 @@ import type { AuthAdapter } from './auth.js';
 import type { AuthConfig } from './config.js';
 import { HttpError, toHttp } from './errors.js';
 import { memoryLimiter, type RateLimiter } from './ratelimit.js';
+import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { companyRoutes } from './routes/companies.js';
 import { teacherRoutes } from './routes/teacher.js';
@@ -51,6 +52,7 @@ export function buildApp(opts: {
     authRoutes(scope, { pool: opts.pool, auth: opts.auth, cfg: opts.cfg, limiter });
     companyRoutes(scope, opts.pool, opts.auth);
     teacherRoutes(scope, { pool: opts.pool, auth: opts.auth });
+    adminRoutes(scope, { pool: opts.pool, auth: opts.auth });
   });
   return app;
 }

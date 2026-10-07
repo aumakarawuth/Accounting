@@ -8,8 +8,10 @@ pnpm install
 createdb accounting_dev
 DATABASE_URL=postgres://postgres@localhost/accounting_dev pnpm db:migrate --seed
 psql postgres://postgres@localhost/accounting_dev -f db/dev/fixture.sql
-# ตั้งรหัสผ่านตัวอย่าง (ไม่ใส่รหัส = สุ่มรหัสชั่วคราว บังคับเปลี่ยนตอนเข้าครั้งแรก)
+# ผู้ดูแลคนแรก (ครั้งเดียวตอนติดตั้ง) จากนั้นสร้างครู/ห้อง/นำเข้านักเรียนที่หน้า /admin ได้เลย
 export ADMIN_DATABASE_URL=postgres://postgres@localhost/accounting_dev
+pnpm --filter @accounting/api create-admin admin@example.test 'ผู้ดูแลระบบ'
+# ตั้งรหัสให้ข้อมูลตัวอย่าง (ไม่ใส่รหัส = สุ่มรหัสชั่วคราว บังคับเปลี่ยนตอนเข้าครั้งแรก)
 pnpm --filter @accounting/api set-password teacher@example.test    # ครู (อีเมล)
 pnpm --filter @accounting/api set-password 65012                   # นักเรียน (รหัสนักเรียน)
 
@@ -26,6 +28,7 @@ API_URL=http://127.0.0.1:4000 pnpm --filter @accounting/web dev
 - ตัวแปรทั้งหมดดู `.env.example`; production ต้อง `COOKIE_SECURE=true` และ `WEB_ORIGIN` เป็นโดเมนจริง
 - เบราว์เซอร์เรียก `/api/*` ที่ origin เดียวกัน Next.js rewrite ไปที่ `API_URL`
 - เทสต์ทั้งหมด: `pnpm test` (สร้างฐาน `accounting_test` ใหม่ทุกครั้ง)
+- ตรวจเส้นทางผู้ดูแล → ครูนำเข้า CSV → ใบรหัสผ่าน → นักเรียนเข้าใช้: `node tests/e2e-admin.mjs <base> <อีเมลผู้ดูแล> <รหัสชั่วคราว> <โฟลเดอร์ csv> <โฟลเดอร์ภาพ>`
 - ตรวจ UI ด้วยมือ 3 ขนาดจอ: `node tests/e2e-smoke.mjs http://127.0.0.1:3000 <รหัสนักเรียน> <รหัสผ่าน> <โฟลเดอร์ภาพ>` (ล็อกอิน ลงรายการจริงผ่านหน้าจอ แล้วถ่ายภาพ)
 
 ## โครงสร้าง

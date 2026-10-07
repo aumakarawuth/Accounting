@@ -14,8 +14,8 @@ export default async function TeacherHome() {
   ]);
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <h1 className="border-b-2 border-ink pb-2.5 font-doc text-[22px] font-bold sm:text-2xl">{th.teacher.classrooms}</h1>
-      <section className="flex flex-col gap-2">
+      <h1 className="border-b-2 border-ink pb-2.5 font-doc text-[22px] font-bold sm:text-2xl print:hidden">{th.teacher.classrooms}</h1>
+      <section className="flex flex-col gap-2 print:hidden">
         <h2 className="text-[17px] font-semibold">{th.teacher.alerts}</h2>
         {alerts.length === 0 ? (
           <p className="text-ink2">{th.teacher.noAlerts}</p>

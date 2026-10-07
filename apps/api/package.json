@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "set-password": "tsx src/cli/set-password.ts"
+    "set-password": "tsx src/cli/set-password.ts",
+    "create-admin": "tsx src/cli/create-admin.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

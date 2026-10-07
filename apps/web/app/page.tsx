@@ -12,6 +12,7 @@ export default async function Root() {
   if (!me) redirect('/login');
   if (me.mustChange) redirect('/change-password');
   if (me.role === 'teacher') redirect('/teacher');
+  if (me.role === 'admin') redirect('/admin');
   const companies = await serverApi<{ id: string }[]>('/me/companies');
   if (companies[0]) redirect(`/c/${companies[0].id}`);
   return (

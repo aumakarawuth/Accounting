@@ -7,7 +7,11 @@ import { formatMoney, isNegative } from '../apps/web/lib/money';
 // เก็บทุกข้อความใน th.ts (ฟังก์ชันเรียกด้วยค่าตัวอย่าง)
 function collect(node: unknown, out: string[] = []): string[] {
   if (typeof node === 'string') out.push(node);
-  else if (typeof node === 'function') out.push(String(node(...Array(4).fill('1'))));
+  else if (typeof node === 'function') {
+    let text: string;
+    try { text = String(node(...Array(4).fill('1'))); } catch { text = String(node(['1', '2'])); } // บางฟังก์ชันรับรายการ
+    out.push(text);
+  }
   else if (node && typeof node === 'object') for (const v of Object.values(node)) collect(v, out);
   return out;
 }

@@ -17,3 +17,10 @@ export type Account = { code: string; name: string; type: string; normal_side: '
 export type EntryRow = { id: string; doc_no: string; date: string; description: string; total: string; reverses_doc_no: string | null };
 export type Classroom = { id: string; name: string; students: { id: string; studentCode: string; name: string }[] };
 export type Alert = { id: number; kind: 'locked'; at: string; studentCode: string; name: string };
+export type Staff = { id: string; email: string; name: string; role: 'teacher' | 'admin' | 'ta'; active: boolean; classrooms: number };
+export type AdminClassroom = { id: string; name: string; teacherId: string; teacherName: string; students: number };
+export type AuditRow = {
+  id: number; at: string; table: string; op: string; rowPk: string | null; client: string | null;
+  userName: string | null; userCode: string | null; changed: string[] | null; detail: Record<string, unknown> | null;
+  target: string | null;
+};

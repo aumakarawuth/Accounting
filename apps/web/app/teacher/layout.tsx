@@ -8,12 +8,12 @@ export default async function TeacherLayout({ children }: { children: React.Reac
   const me = await requireMe('teacher');
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex min-h-[52px] items-center gap-4 border-b border-rule-strong bg-paper px-4 text-[15px] sm:px-6">
+      <header className="print:hidden flex min-h-[52px] items-center gap-4 border-b border-rule-strong bg-paper px-4 text-[15px] sm:px-6">
         <span className="font-semibold">{th.app.name} · {th.app.teacherSuffix}</span>
         <span className="ml-auto text-sm">{me.displayName}</span>
         <LogoutButton />
       </header>
-      <main className="flex-1 p-4 sm:p-6">{children}</main>
+      <main className="flex-1 p-4 sm:p-6 print:p-0">{children}</main>
     </div>
   );
 }
