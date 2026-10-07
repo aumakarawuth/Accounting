@@ -85,6 +85,35 @@ export type Item = {
   code: string; name: string; unit: string; isService: boolean; salePrice: string | null; purchasePrice: string | null;
   salesAccount: string | null; purchaseAccount: string | null; active: boolean; version: number;
 };
+export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note';
+export type SalesFormData = {
+  company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };
+  customers: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string }[];
+  items: { code: string; name: string; unit: string; isService: boolean; salePrice: string | null; salesAccount: string | null }[];
+  revenueAccounts: { code: string; name: string }[];
+  cashAccounts: { code: string; name: string }[];
+};
+export type SalesRow = {
+  id: string; kind: SalesKindSql; docNo: string; date: string; partyCode: string; partyName: string; isService: boolean; isTaxInvoice: boolean;
+  priceMode: 'exclusive' | 'inclusive' | 'none'; vatRate: string; gross: string; discount: string; base: string; vat: string; total: string;
+  whtAmount: string; creditDays: number | null; dueDate: string | null; refDocumentId: string | null; reason: string | null; description: string;
+  voidedAt: string | null; voidReason: string | null; open: string | null;
+};
+export type SalesDocument = SalesRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string; sellerName: string; sellerTaxId: string | null; sellerBranchNo: string;
+  sellerAddress: string; cashAccount: string | null; entryId: string; entryDocNo: string; voidDocNo: string | null; refDocNo: string | null;
+  lines: { lineNo: number; description: string; qty: string; unit: string; unitPrice: string; amount: string; accountCode: string; accountName: string }[];
+  settles: { id: string; docNo: string; amount: string; vatTransfer: string }[];
+  settledBy: { id: string; kind: SalesKindSql; docNo: string; date: string; amount: string; voided: boolean }[];
+  notes: { id: string; kind: SalesKindSql; docNo: string; total: string; voided: boolean }[];
+};
+export type AgingBucket = 'current' | 'd30' | 'd60' | 'd90' | 'over90';
+export type Receivables = {
+  asOf: string;
+  items: { id: string; docNo: string; kind: SalesKindSql; date: string; dueDate: string; partyCode: string; partyName: string; total: string; open: string; daysOverdue: number; bucket: AgingBucket }[];
+  totals: Record<'all' | AgingBucket, string>;
+  byParty: ({ partyCode: string; partyName: string } & Record<'all' | AgingBucket, string>)[];
+};
 export type Periods = {
   canClose: boolean; canReopen: boolean; locked: boolean;
   periods: { month: string; closed: boolean; closedAt: string | null; entries: number }[];

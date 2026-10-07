@@ -9,3 +9,9 @@ export function validTaxId(s: string) {
 /** รหัสลูกค้า/สินค้า (ตรงกับ check ใน DB) */
 export const MASTER_CODE = /^[A-Z0-9][A-Z0-9-]{0,19}$/;
 export const MONEY = /^\d{1,16}(\.\d{1,2})?$/;
+
+/** 0105558012345 → 0-1055-58012-34-5 (รูปแบบบนบัตร/เอกสาร) */
+export function formatTaxId(s: string | null): string {
+  if (!s || !/^\d{13}$/.test(s)) return s ?? '';
+  return `${s[0]}-${s.slice(1, 5)}-${s.slice(5, 10)}-${s.slice(10, 12)}-${s[12]}`;
+}

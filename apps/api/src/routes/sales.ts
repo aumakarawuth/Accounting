@@ -29,10 +29,10 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const [company, customers, items, accounts] = await Promise.all([
-        c.query(`select name, tax_id as "taxId", vat_registered as "vatRegistered", vat_rate::text as "vatRate",
+        c.query(`select name, tax_id as "taxId", branch_no as "branchNo", address, vat_registered as "vatRegistered", vat_rate::text as "vatRate",
                         app.can_write_company(id) as "canWrite", app.company_locked(id) as locked from acc.companies where id = $1`, [companyId]),
-        c.query(`select code, name, credit_days as "creditDays", vat_registered as "vatRegistered", tax_id as "taxId"
-                   from acc.parties where company_id = $1 and is_customer and active order by code`, [companyId]),
+        c.query(`select code, name, credit_days as "creditDays", vat_registered as "vatRegistered", tax_id as "taxId",
+                        branch_no as "branchNo", address from acc.parties where company_id = $1 and is_customer and active order by code`, [companyId]),
         c.query(`select i.code, i.name, i.unit, i.is_service as "isService", i.sale_price::text as "salePrice", a.code as "salesAccount"
                    from acc.items i left join acc.chart_of_accounts a on a.company_id = i.company_id and a.id = i.sales_account_id
                   where i.company_id = $1 and i.active order by i.code`, [companyId]),

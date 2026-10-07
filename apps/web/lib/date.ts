@@ -23,8 +23,10 @@ export function monthLabel(iso: string): string {
   return `${MONTHS[Number(m) - 1]} ${Number(y) + BE}`;
 }
 
+/** วันนี้ตามเวลาไทยเสมอ: เซิร์ฟเวอร์ (Vercel = UTC) กับเบราว์เซอร์ต้องได้วันเดียวกัน ไม่อย่างนั้นช่วง 00:00–07:00 วันที่เพี้ยนและ hydrate ไม่ตรง */
+const bangkok = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
 export function todayIso(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return bangkok.format(now);
 }
 
 /** "2026-10" → "31 ต.ค. 2569" (วันสุดท้ายของงวด) */
@@ -42,3 +44,10 @@ export function addMonths(month: string, n: number): string {
 }
 
 export const isMonth = (s: string | undefined): s is string => !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+
+/** "2026-10-05" + 30 → "2026-11-04" (คิดแบบ UTC ไม่เพี้ยนตามเขตเวลา) */
+export function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
