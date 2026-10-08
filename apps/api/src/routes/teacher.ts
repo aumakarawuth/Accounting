@@ -1,0 +1,140 @@
+import { randomInt } from 'node:crypto';
+import type { FastifyInstance } from 'fastify';
+import type pg from 'pg';
+import type { AuthAdapter } from '../auth.js';
+import { withUser } from '../db.js';
+import { requireUser } from '../guard.js';
+import { hashPassword, temporaryPassword } from '../passwords.js';
+import { HttpError } from '../errors.js';
+import type { RateLimiter } from '../ratelimit.js';
+import { ClassroomParams, ImportStudents, JoinClassroom, JoinCodeChars, OpenCompanies, SetJoinCode, StudentParams } from '../schemas-auth.js';
+
+// ครู: ห้องเรียน, รีเซ็ตรหัส, เตะอุปกรณ์, การแจ้งเตือนบัญชีถูกล็อก (สิทธิ์ตรวจใน DB อีกชั้น)
+export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter; limiter: RateLimiter }) {
+  const { pool, auth, limiter } = deps;
+  const teacher = (req: Parameters<typeof requireUser>[1]) => requireUser(auth, req, ['teacher']);
+
+  app.get('/teacher/classrooms', async (req) =>
+    withUser(pool, await teacher(req), async (c) => {
+      const r = await c.query(
+        `select r.id, r.name, r.join_code as "joinCode",
+                coalesce(json_agg(json_build_object('id', u.id, 'studentCode', u.student_code, 'name', u.display_name,
+                         'companies', (select count(*) from acc.companies c where c.owner_id = u.id and c.classroom_id = r.id))
+                         order by u.student_code) filter (where u.id is not null), '[]') as students
+           from acc.classrooms r
+           left join acc.enrollments e on e.classroom_id = r.id
+           left join acc.users u on u.id = e.user_id
+          where r.teacher_id = app.current_user_id()
+          group by r.id, r.name, r.join_code order by r.name`,
+      );
+      return r.rows;
+    }));
+
+  // รหัสห้องใหม่ (รหัสเดิมใช้ไม่ได้ทันที) หรือปิดรหัส; สุ่มด้วย crypto ชนกันก็สุ่มใหม่
+  app.post('/classrooms/:classroomId/join-code', async (req) => {
+    const { classroomId } = ClassroomParams.parse(req.params);
+    const { enabled } = SetJoinCode.parse(req.body);
+    const user = await requireUser(auth, req, ['teacher', 'admin']);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = enabled ? Array.from({ length: 6 }, () => JoinCodeChars[randomInt(JoinCodeChars.length)]).join('') : null;
+      try {
+        await withUser(pool, user, (c) => c.query('select acc.set_join_code($1, $2)', [classroomId, code]));
+        return { joinCode: code };
+      } catch (e) {
+        if ((e as { code?: string }).code !== '23505') throw e;
+      }
+    }
+    throw new HttpError(503, 'retry', 'สุ่มรหัสห้องไม่สำเร็จ ลองอีกครั้ง');
+  });
+
+  // นักเรียนเข้าห้องด้วยรหัส (จากการสแกน QR หรือพิมพ์เอง) จำกัด 20 ครั้ง/15 นาที กันเดารหัส
+  app.post('/classrooms/join', async (req) => {
+    const user = await requireUser(auth, req, ['student']);
+    const wait = await limiter.hit(`join:${user.id}`, 20, 15 * 60);
+    if (wait > 0) throw new HttpError(429, 'rate_limited', `ลองรหัสห้องหลายครั้งเกินไป รอ ${Math.ceil(wait / 60)} นาทีแล้วลองใหม่`, { retryAfter: wait });
+    const { code } = JoinClassroom.parse(req.body);
+    const r = await withUser(pool, user, (c) => c.query('select * from acc.join_classroom($1)', [code]));
+    const row = r.rows[0];
+    return { classroomId: row.classroom_id, name: row.name, already: row.already };
+  });
+
+  app.get('/teacher/alerts', async (req) =>
+    withUser(pool, await teacher(req), async (c) => {
+      const r = await c.query(
+        `select a.id, a.kind, a.at, u.student_code as "studentCode", u.display_name as name
+           from acc.teacher_alerts a join acc.users u on u.id = a.student_id
+          where a.at > now() - interval '1 day'
+          order by a.at desc limit 50`,
+      );
+      return r.rows;
+    }));
+
+  app.post('/teacher/students/:studentId/reset-password', async (req) => {
+    const { studentId } = StudentParams.parse(req.params);
+    const temp = temporaryPassword();
+    const h = await hashPassword(temp);
+    await withUser(pool, await teacher(req), (c) => c.query('select acc.reset_student_password($1, $2)', [studentId, h]));
+    // แสดงครั้งเดียว ไม่เก็บรหัสชั่วคราวไว้ที่ไหน
+    return { tempPassword: temp };
+  });
+
+  // นำเข้ารายชื่อ: ออกรหัสชั่วคราวเฉพาะนักเรียนใหม่ (แฮชนอกทรานแซกชัน ไม่ถือ connection ระหว่าง Argon2)
+  app.post('/classrooms/:classroomId/import', async (req) => {
+    const { classroomId } = ClassroomParams.parse(req.params);
+    const { rows } = ImportStudents.parse(req.body);
+    const user = await requireUser(auth, req, ['teacher', 'admin']);
+    const codes = rows.map((r) => r.studentCode);
+    const existing = new Set(await withUser(pool, user, async (c) =>
+      (await c.query('select acc.existing_student_codes($1, $2) code', [classroomId, codes])).rows.map((r) => r.code as string)));
+
+    const temps = new Map<string, string>();
+    const payload = await Promise.all(rows.map(async (r) => {
+      if (existing.has(r.studentCode)) return { code: r.studentCode, name: r.name, hash: null };
+      const temp = temporaryPassword();
+      temps.set(r.studentCode, temp);
+      return { code: r.studentCode, name: r.name, hash: await hashPassword(temp) };
+    }));
+
+    const out = await withUser(pool, user, async (c) =>
+      (await c.query('select code, status from acc.import_students($1, $2::jsonb)', [classroomId, JSON.stringify(payload)])).rows);
+    const names = new Map(rows.map((r) => [r.studentCode, r.name]));
+    return {
+      results: out.map((r: { code: string; status: string }) => ({
+        studentCode: r.code,
+        name: names.get(r.code),
+        status: r.status,
+        // แสดงครั้งเดียวเพื่อพิมพ์ใบรหัสผ่าน ไม่เก็บไว้ที่ไหน
+        ...(r.status === 'created' ? { tempPassword: temps.get(r.code) } : {}),
+      })),
+    };
+  });
+
+  app.post('/classrooms/:classroomId/companies', async (req) => {
+    const { classroomId } = ClassroomParams.parse(req.params);
+    const { name, mode } = OpenCompanies.parse(req.body);
+    const user = await requireUser(auth, req, ['teacher', 'admin']);
+    return withUser(pool, user, async (c) =>
+      (await c.query('select created, existing from acc.open_classroom_companies($1, $2, $3)', [classroomId, name, mode])).rows[0]);
+  });
+
+  // งานที่ส่ง: ทุกห้องที่สอน เรียงงานที่รอตรวจก่อน
+  app.get('/teacher/submissions', async (req) =>
+    withUser(pool, await teacher(req), async (c) => (await c.query(
+      `select c.id as "companyId", c.name as company, r.name as classroom,
+              u.student_code as "studentCode", u.display_name as "studentName",
+              s.status, s.round, s.score::text, s.max_score::text as "maxScore", s.updated_at as "updatedAt"
+         from acc.submissions s
+         join acc.companies c on c.id = s.company_id
+         join acc.classrooms r on r.id = c.classroom_id and r.teacher_id = app.current_user_id()
+         join acc.users u on u.id = c.owner_id
+        order by case s.status when 'submitted' then 0 when 'reviewing' then 1 when 'returned' then 2
+                               when 'draft' then 3 when 'passed' then 4 else 5 end,
+                 s.updated_at, u.student_code`)).rows));
+
+  app.post('/teacher/students/:studentId/revoke-sessions', async (req) => {
+    const { studentId } = StudentParams.parse(req.params);
+    const n = await withUser(pool, await teacher(req), async (c) =>
+      (await c.query('select acc.revoke_student_sessions($1) n', [studentId])).rows[0].n as number);
+    return { revoked: n };
+  });
+}

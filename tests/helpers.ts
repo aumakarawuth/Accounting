@@ -58,3 +58,14 @@ export function post(c: pg.PoolClient, company: string, date: string, lines: Lin
 
 export const money = (cents: number) => (cents / 100).toFixed(2);
 export const sqlstate = (e: any) => e?.code as string | undefined;
+
+/** หลักตรวจสอบเลขผู้เสียภาษี 13 หลัก คิดแยกจาก SQL เพื่อเทียบกัน */
+function taxCheckDigit(first12: string) {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(first12[i]) * (13 - i);
+  return (11 - (sum % 11)) % 10;
+}
+export function taxId(seed: number) {
+  const first12 = String(1_000_000_000_00 + (seed % 900_000_000_00)).padStart(12, '0');
+  return first12 + taxCheckDigit(first12);
+}

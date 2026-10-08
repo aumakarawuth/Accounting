@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+@import '../design/tokens.css';
+
+/* map tokens เข้า Tailwind และตัดค่าเริ่มต้นที่ขัดกับ design.md ออก (เงา มุมโค้ง สีสำเร็จรูป) */
+@theme inline {
+  --color-*: initial;
+  --shadow-*: initial;
+  --radius-*: initial;
+  --color-ground: var(--ground);
+  --color-paper: var(--paper);
+  --color-band: var(--band);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-rule-input: var(--rule-input);
+  --color-rule-faint: var(--rule-faint);
+  --color-red: var(--red);
+  --color-disabled: var(--disabled);
+  --color-transparent: transparent;
+  --radius-doc: var(--radius);
+  --font-body: var(--font-body);
+  --font-doc: var(--font-doc);
+  --font-num: var(--font-num);
+}
+
+/* จุดตัดจอตาม tokens.ts: sm = iPad (640), lg = คอม (1024) */
+@theme {
+  --breakpoint-sm: 40rem;
+  --breakpoint-lg: 64rem;
+}
+
+/* reset ต้องอยู่ใน layer base ไม่งั้นชนะ utility ของ Tailwind (ช่องกรอกจะเล็กกว่า 16px แล้ว iOS ซูม) */
+@layer base {
+  input, button, select, textarea { font: inherit; color: inherit; }
+}

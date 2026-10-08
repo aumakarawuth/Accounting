@@ -1,0 +1,47 @@
+/* สร้างตาม tokens.ts — แก้ที่นั่นแล้วแก้ที่นี่ให้ตรง (เทสต์ tests/design.test.ts ตรวจ) */
+:root {
+  --ground: #EEF1EA;
+  --paper: #FAFBF7;
+  --band: #E4EAE2;
+  --ink: #1B2A4A;
+  --ink2: #4B5874;
+  --rule: #B9CBBE;
+  --rule-strong: #9DB5A3;
+  --rule-input: #789480;
+  --rule-faint: #D5E0D6;
+  --red: #B3261E;
+  --disabled: #C9D3C8;
+
+  --font-body: 'IBM Plex Sans Thai Looped', sans-serif;
+  --font-doc: 'Noto Serif Thai', serif;
+  --font-num: 'IBM Plex Mono', monospace;
+
+  --size-base: 16px;
+  --size-small: 14px;
+  --size-caption: 13px;
+  --touch: 44px;
+  --touch-phone: 52px;
+  --radius: 2px;
+  --rule-w: 1px;
+}
+
+html { font-size: 100%; } /* เคารพขนาดตัวอักษรของระบบ */
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--size-base);
+  line-height: 1.5;
+}
+
+/* ตัวเลขเงิน: tabular ชิดขวา */
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.neg { color: var(--red); }
+
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* การเคลื่อนไหวแทบไม่มี และปิดทั้งหมดเมื่อผู้ใช้ขอ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

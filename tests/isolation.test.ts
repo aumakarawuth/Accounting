@@ -107,3 +107,17 @@ describe('การแยกข้อมูลระหว่างนักเ�
     await expect(pool.query(`update acc.audit_log set op='X'`)).rejects.toSatisfy((e: any) => sqlstate(e) === 'ACC06');
   });
 });
+
+describe('ห้องเรียนและการลงทะเบียน (RLS ไม่วนไม่จบ)', () => {
+  it('ครูเห็นห้องและนักเรียนของตัวเอง นักเรียนเห็นห้องที่ตัวเองเรียน คนอื่นไม่เห็น', async () => {
+    const q = (u: string) => asUser(u, async (c) => ({
+      rooms: (await c.query('select id from acc.classrooms')).rowCount,
+      enr: (await c.query('select user_id from acc.enrollments')).rowCount,
+    }));
+    expect(await q(teacherA)).toEqual({ rooms: 1, enr: 1 });
+    expect(await q(a)).toEqual({ rooms: 1, enr: 1 });
+    expect(await q(teacherB)).toEqual({ rooms: 1, enr: 1 });
+    const crossTeacher = await asUser(teacherB, (c) => c.query('select 1 from acc.enrollments where user_id = $1', [a]));
+    expect(crossTeacher.rowCount).toBe(0);
+  });
+});

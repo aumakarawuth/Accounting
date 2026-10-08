@@ -1,0 +1,36 @@
+{
+  "name": "@accounting/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "set-password": "tsx src/cli/set-password.ts",
+    "create-admin": "tsx src/cli/create-admin.ts",
+    "load-seed": "tsx src/cli/load-seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@node-rs/argon2": "^2.2.2",
+    "fastify": "^5.12.5",
+    "pg": "^8.13.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.0"
+  },
+  "exports": {
+    "./embedded": {
+      "types": "./dist/embedded.d.ts",
+      "default": "./dist/embedded.js"
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}

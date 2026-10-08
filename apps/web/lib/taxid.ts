@@ -1,0 +1,17 @@
+/** หลักตรวจสอบเลขประจำตัวผู้เสียภาษี 13 หลัก (สูตรเดียวกับ app.valid_tax_id และ API) ใช้บอกผู้เรียนก่อนส่ง */
+export function validTaxId(s: string) {
+  if (!/^\d{13}$/.test(s)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(s[i]) * (13 - i);
+  return (11 - (sum % 11)) % 10 === Number(s[12]);
+}
+
+/** รหัสลูกค้า/สินค้า (ตรงกับ check ใน DB) */
+export const MASTER_CODE = /^[A-Z0-9][A-Z0-9-]{0,19}$/;
+export const MONEY = /^\d{1,16}(\.\d{1,2})?$/;
+
+/** 0105558012345 → 0-1055-58012-34-5 (รูปแบบบนบัตร/เอกสาร) */
+export function formatTaxId(s: string | null): string {
+  if (!s || !/^\d{13}$/.test(s)) return s ?? '';
+  return `${s[0]}-${s.slice(1, 5)}-${s.slice(5, 10)}-${s.slice(10, 12)}-${s[12]}`;
+}
