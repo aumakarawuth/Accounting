@@ -4,7 +4,7 @@ import type { AuthAdapter } from '../auth.js';
 import { withUser } from '../db.js';
 import { requireUser } from '../guard.js';
 import { hashPassword, temporaryPassword } from '../passwords.js';
-import { AssignTeacher, AuditQuery, ClassroomParams, CreateClassroom, CreateStaff, SetActive, UserParams } from '../schemas-auth.js';
+import { AssignTeacher, AuditQuery, ClassroomParams, CreateClassroom, CreateStaff, SetActive, UserParams, WorksheetFormats } from '../schemas-auth.js';
 
 // ผู้ดูแลระบบ: ครู/ห้อง และ audit log ของโรงเรียนตัวเอง (DB ตรวจบทบาทและโรงเรียนซ้ำ)
 export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter }) {
@@ -41,6 +41,18 @@ export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: A
     const { active } = SetActive.parse(req.body);
     await withUser(pool, await admin(req), (c) => c.query('select acc.admin_set_active($1, $2)', [userId, active]));
     return { ok: true };
+  });
+
+  // ค่าตั้งของโรงเรียน: แบบกระดาษทำการที่เปิดใช้ (6 / 8 / 10 ช่อง)
+  app.get('/admin/settings', async (req) =>
+    withUser(pool, await admin(req), async (c) => (await c.query(
+      `select worksheet_formats::int[] as "worksheetFormats" from acc.schools where id = app.current_school_id()`)).rows[0]));
+
+  app.post('/admin/settings/worksheet', async (req) => {
+    const { formats } = WorksheetFormats.parse(req.body);
+    return withUser(pool, await admin(req), async (c) => ({
+      worksheetFormats: (await c.query('select acc.admin_set_worksheet_formats($1::smallint[])::int[] f', [formats])).rows[0].f as number[],
+    }));
   });
 
   app.get('/admin/classrooms', async (req) =>

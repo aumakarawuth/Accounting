@@ -183,3 +183,12 @@ export type WhtReport = {
   forms: { form: 'pnd3' | 'pnd53'; count: number; base: string; amount: string; remittance: WhtRemittance | null }[];
   cashAccounts: { code: string; name: string }[];
 };
+
+// ---- กระดาษทำการ ----
+export type WsPair = { debit: string; credit: string };
+export type WorksheetRow = { code: string; name: string; type: string; tb: WsPair; adj: WsPair; atb: WsPair; is: WsPair | null; bs: WsPair | null };
+export type Worksheet = {
+  month: string; formats: number[]; format: number | null; rows?: WorksheetRow[];
+  totals?: { tb: WsPair; adj: WsPair; atb: WsPair; is: WsPair; bs: WsPair };
+  netIncome?: string; result?: { is: WsPair; bs: WsPair }; grand?: { is: WsPair; bs: WsPair };
+};

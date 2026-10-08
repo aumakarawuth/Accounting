@@ -285,8 +285,8 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     const key = idemKey(req);
     const out = await withUser(pool, await user(req), async (c) => {
       // เรียกฟังก์ชันลงบัญชีเป็นคำสั่งเดี่ยว (ห้ามวางใน WHERE: อาจถูกเรียกซ้ำต่อแถว)
-      const posted = await c.query('select acc.post_journal($1, $2, $3, $4::jsonb, $5) as id', [
-        companyId, body.date, body.description, JSON.stringify(body.lines), key,
+      const posted = await c.query('select acc.post_journal($1, $2, $3, $4::jsonb, $5, $6) as id', [
+        companyId, body.date, body.description, JSON.stringify(body.lines), key, body.adjusting ? 'AJ' : 'JV',
       ]);
       return docNo(c, companyId, posted.rows[0].id);
     });
