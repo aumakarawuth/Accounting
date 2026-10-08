@@ -86,7 +86,7 @@ describe('API เอกสารขาย', () => {
     const cn = await as(owner, 'POST', `/companies/${co}/sales/credit-note`, { date: '2026-10-08', refDocumentId: iv.id, reason: 'ลดราคา', lines: [{ description: 'ลดค่าออกแบบ', qty: '1', unitPrice: '500' }] });
     expect(cn.json().docNo).toBe('CN-0001');
     const list = (await as(owner, 'GET', `/companies/${co}/sales?kind=sales_invoice&month=2026-10`)).json();
-    expect(list.find((x: { docNo: string }) => x.docNo === iv.docNo)).toMatchObject({ total: '5350.00', open: '4815.00', isService: true, isTaxInvoice: false });
+    expect(list.find((x: { docNo: string }) => x.docNo === iv.docNo)).toMatchObject({ total: '5350.00', open: '4815.00', isService: true, isTaxInvoice: false, undueVat: '315.00' });
     expect((await as(owner, 'POST', `/companies/${co}/sales/documents/${iv.id}/void`, { date: '2026-10-09', reason: '' })).statusCode).toBe(400);
     const blocked = await as(owner, 'POST', `/companies/${co}/sales/documents/${iv.id}/void`, { date: '2026-10-09', reason: 'ออกผิด' });
     expect([blocked.statusCode, blocked.json().code]).toEqual([409, 'ACC16']);

@@ -59,7 +59,7 @@ export type LiveCompany = {
   company: { id: string; name: string };
   presence: null | {
     page: string; updatedAt: string; draftDebit: string | null; draftCredit: string | null; draftLines: number | null;
-    draft: null | { date?: string; description?: string; lines: { account_code: string; debit: string; credit: string }[] };
+    draft: null | { title?: string; date?: string; description?: string; lines: { account_code: string; debit: string; credit: string }[] };
   };
   entries: { id: string; docNo: string; date: string; description: string; total: string; reversal: boolean; postedAt: string }[];
 };
@@ -98,6 +98,8 @@ export type SalesRow = {
   priceMode: 'exclusive' | 'inclusive' | 'none'; vatRate: string; gross: string; discount: string; base: string; vat: string; total: string;
   whtAmount: string; creditDays: number | null; dueDate: string | null; refDocumentId: string | null; reason: string | null; description: string;
   voidedAt: string | null; voidReason: string | null; open: string | null;
+  /** ภาษีขายบริการที่ยังไม่ถึงกำหนด (มีเฉพาะในรายการ) */
+  undueVat?: string;
 };
 export type SalesDocument = SalesRow & {
   partyTaxId: string | null; partyBranchNo: string; partyAddress: string; sellerName: string; sellerTaxId: string | null; sellerBranchNo: string;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { postJson, type ApiError, type PurchaseDocument, type PurchaseFormData, type WhtKind } from '@/lib/api';
@@ -8,7 +8,8 @@ import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { lineAmount, rateHundredths, vatCalc, type PriceMode } from '@/lib/vat';
 import { purchaseEntry, whtFor } from '@/lib/entry-preview';
-import { EntryPreview, ItemField, PartyPicker } from '@/components/docs/parts';
+import { DraftBanner, EntryPreview, ItemField, PartyPicker, liveLines } from '@/components/docs/parts';
+import { useDocDraft } from '@/components/docs/useDocDraft';
 import { th } from '@/i18n/th';
 
 // ฟอร์มบันทึกเอกสารซื้อ (ซื้อเชื่อ ซื้อสด ใบลดหนี้จากผู้ขาย) โครงเดียวกับฟอร์มขาย
@@ -51,7 +52,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
   const [lines, setLines] = useState<Line[]>(() => [blank()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const idem = useRef(crypto.randomUUID());
+  const [idemKey, setIdemKey] = useState(() => crypto.randomUUID()); // คีย์เดิมจนบันทึกสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
 
   const target = isNote ? refDoc! : null;
   const vendor = isNote ? null : form.vendors.find((v) => v.code === partyCode) ?? null;
@@ -126,6 +127,29 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
   const blocked = stepProblem.find(Boolean) ?? null;
   const canPost = writable && !busy && !blocked;
 
+  // ร่างในเครื่อง + ครูดูสด (รายการบัญชีเดียวกับตัวอย่างข้างฟอร์ม)
+  const draft = useDocDraft(writable ? `purchases:${kind}${refDoc ? `:${refDoc.id}` : ''}` : null, companyId, {
+    date, partyCode, vendorDocNo, service, priceMode, creditDays, cashAccount, whtKind, whtRate, discount, description, reason,
+    lines: lines.map(({ key: _key, ...l }) => l), idemKey,
+  }, {
+    isEmpty: (d) => !d.partyCode && !d.vendorDocNo.trim() && !d.reason.trim() && !d.discount && !d.description.trim()
+      && d.lines.every((l) => !l.description.trim() && !l.unitPrice.trim() && !l.itemCode),
+    restore: (d) => {
+      setDate(d.date); setPartyCode(d.partyCode); setVendorDocNo(d.vendorDocNo); setService(d.service); setPriceMode(d.priceMode);
+      setCreditDays(d.creditDays); setCashAccount(d.cashAccount); setWhtKind(d.whtKind); setWhtRate(d.whtRate);
+      setDiscount(d.discount); setDescription(d.description); setReason(d.reason);
+      setLines(d.lines.length ? d.lines.map((l) => ({ ...l, key: ++seq })) : [blank()]);
+      setIdemKey(d.idemKey);
+    },
+    live: calc.amounts.size > 0 ? { title: th.purchases.formTitle[kind], date: isoDate ?? date, description: target?.partyName ?? vendor?.name ?? '', lines: liveLines(entry) } : null,
+  });
+  const discardDraft = () => {
+    setPartyCode(''); setVendorDocNo(''); setService(null); setCreditDays(null); setWhtKind(null); setWhtRate(null);
+    setDiscount(''); setDescription(''); setReason(''); setLines([blank()]);
+    setIdemKey(crypto.randomUUID());
+    draft.discard();
+  };
+
   const submit = useCallback(async () => {
     if (!canPost || !isoDate) return;
     if (!navigator.onLine) { setError(th.error.offline); return; }
@@ -146,7 +170,8 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
           ...(l.unit.trim() ? { unit: l.unit.trim() } : {}),
         })),
       };
-      const r = await postJson<{ id: string }>(`/companies/${companyId}/purchases/${kind}`, body, { 'idempotency-key': idem.current });
+      const r = await postJson<{ id: string }>(`/companies/${companyId}/purchases/${kind}`, body, { 'idempotency-key': idemKey });
+      draft.finish();
       router.push(`/c/${companyId}/purchases/documents/${r.id}`);
     } catch (e) {
       const err = e as ApiError;
@@ -155,7 +180,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
     }
     // accountOf อ่านจาก lines/isService ที่อยู่ใน deps แล้ว
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canPost, isoDate, vendorDocNo, isNote, target, reason, partyCode, isService, mode, priceMode, calc, description, kind, creditDays, days, cashAccount, wKind, wRate, lines, companyId, router]);
+  }, [canPost, isoDate, vendorDocNo, isNote, target, reason, partyCode, isService, mode, priceMode, calc, description, kind, creditDays, days, cashAccount, wKind, wRate, lines, companyId, router, draft, idemKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -184,6 +209,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
     <form className="flex min-h-full flex-col" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       {co.locked && <p role="status" className="mx-3 mt-3 border border-rule-strong bg-band px-4 py-2.5 sm:mx-5">{th.submission.lockedNote}</p>}
       {!co.canWrite && <p className="mx-3 mt-3 text-sm text-ink2 sm:mx-5">{th.purchases.readOnly}</p>}
+      <DraftBanner restoredAt={draft.restoredAt} onDiscard={discardDraft} />
 
       <div className="grid gap-5 p-3 sm:grid-cols-[minmax(0,470px)_minmax(0,1fr)] sm:p-5">
         <div className={`flex flex-col gap-5 ${entryOpen ? 'max-sm:hidden' : ''}`}>

@@ -1,6 +1,7 @@
 // รายงานหน้าที่เปิดและร่างสมุดรายวันให้ครูดูสด (ร่างจริงยังอยู่ในเครื่องนักเรียน การลงบัญชีต้องออนไลน์เสมอ)
 export type Page = 'home' | 'journal' | 'ledger' | 'trial-balance' | 'statements' | 'accounts' | 'closing' | 'menu' | 'other';
-export type Draft = { date: string; description: string; lines: { account_code: string; debit: string; credit: string }[] };
+/** title: ร่างเอกสารขาย/ซื้อ (เช่น "ใบกำกับภาษี / ใบแจ้งหนี้ (ร่าง)") ส่งรายการบัญชีที่เอกสารจะสร้าง · ไม่มี = ร่างสมุดรายวัน */
+export type Draft = { title?: string; date: string; description: string; lines: { account_code: string; debit: string; credit: string }[] };
 
 let company: string | null = null;
 let page: Page = 'other';
@@ -10,7 +11,8 @@ let lastSent = '';
 
 async function send(force = false) {
   if (!company || (typeof document !== 'undefined' && document.visibilityState === 'hidden' && !force)) return;
-  const body = JSON.stringify({ page, ...(page === 'journal' ? { draft } : {}) });
+  // ร่างสมุดรายวันส่งเฉพาะตอนอยู่หน้าสมุดรายวัน ร่างเอกสาร (มี title) ส่งจากหน้าฟอร์มเอกสาร
+  const body = JSON.stringify({ page, ...(page === 'journal' || draft?.title ? { draft } : {}) });
   if (!force && body === lastSent) return;
   lastSent = body;
   await fetch(`/api/companies/${company}/presence`, {

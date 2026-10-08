@@ -91,7 +91,9 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const r = await c.query(
-        `select ${DOC}, case when d.kind in ('sales_invoice', 'debit_note') and d.voided_at is null then (d.total - s.amount)::text end as open
+        `select ${DOC}, case when d.kind in ('sales_invoice', 'debit_note') and d.voided_at is null then (d.total - s.amount)::text end as open,
+                case when d.kind in ('sales_invoice', 'debit_note') and d.voided_at is null and d.is_service
+                     then (d.vat - s.vat)::text else '0.00' end as "undueVat"
            from acc.documents d cross join lateral acc.document_settled(d.company_id, d.id) s
           where d.company_id = $1 and ($2::text is null or d.kind = $2) and ($3::text is null or d.party_code = $3)
             and ($4::text is null or to_char(d.doc_date, 'YYYY-MM') = $4)

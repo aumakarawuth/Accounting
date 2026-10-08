@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { postJson, type ApiError, type SalesDocument, type SalesFormData } from '@/lib/api';
@@ -9,7 +9,9 @@ import { addDays, isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { lineAmount, vatCalc, type PriceMode } from '@/lib/vat';
 import { th } from '@/i18n/th';
 import { DocumentPaper, type Paper } from './DocumentPaper';
-import { ItemField, PartyPicker } from '@/components/docs/parts';
+import { DraftBanner, ItemField, PartyPicker, liveLines } from '@/components/docs/parts';
+import { useDocDraft } from '@/components/docs/useDocDraft';
+import { salesEntry } from '@/lib/entry-preview';
 
 // ฟอร์มออกเอกสารขาย (ใบกำกับภาษี/ใบแจ้งหนี้ ขายสด ใบลดหนี้ ใบเพิ่มหนี้) ตาม mockup ที่อนุมัติ
 // มือถือ: 4 ขั้น มีปุ่มดูตัวอย่างกระดาษ · iPad/คอม: ฟอร์มซ้าย กระดาษตัวอย่างขวา
@@ -45,7 +47,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
   const [lines, setLines] = useState<Line[]>(() => [blank()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const idem = useRef(crypto.randomUUID()); // คีย์เดิมจนผ่านรายการสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
+  const [idemKey, setIdemKey] = useState(() => crypto.randomUUID()); // คีย์เดิมจนบันทึกสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
 
   const party = isNote ? null : form.customers.find((c) => c.code === partyCode) ?? null;
 
@@ -104,6 +106,35 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
   const blocked = stepProblem.find(Boolean) ?? null;
   const canPost = writable && !busy && !blocked;
 
+  // ร่างในเครื่อง + ครูดูสด (รายการบัญชีที่ใบนี้จะสร้าง)
+  const sqlKind = ({ invoice: 'sales_invoice', 'cash-sale': 'cash_sale', 'credit-note': 'credit_note', 'debit-note': 'debit_note' } as const)[kind];
+  const entry = salesEntry({
+    kind: sqlKind, service: isService, cashAccount, wht: 0n, base: calc.base, vat: calc.vat, total: calc.total,
+    lines: lines.filter((l) => calc.amounts.has(l.key)).map((l) => ({
+      code: (kind !== 'credit-note' && itemsByCode.get(l.itemCode)?.salesAccount) || (kind === 'credit-note' ? '4220' : isService ? '4120' : '4110'),
+      amount: calc.amounts.get(l.key)!,
+    })),
+  });
+  const draft = useDocDraft(writable ? `sales:${kind}${refDoc ? `:${refDoc.id}` : ''}` : null, companyId, {
+    date, partyCode, service, priceMode, creditDays, cashAccount, discount, description, reason,
+    lines: lines.map(({ key: _key, ...l }) => l), idemKey,
+  }, {
+    isEmpty: (d) => !d.partyCode && !d.reason.trim() && !d.discount && !d.description.trim()
+      && d.lines.every((l) => !l.description.trim() && !l.unitPrice.trim() && !l.itemCode),
+    restore: (d) => {
+      setDate(d.date); setPartyCode(d.partyCode); setService(d.service); setPriceMode(d.priceMode); setCreditDays(d.creditDays);
+      setCashAccount(d.cashAccount); setDiscount(d.discount); setDescription(d.description); setReason(d.reason);
+      setLines(d.lines.length ? d.lines.map((l) => ({ ...l, key: ++seq })) : [blank()]);
+      setIdemKey(d.idemKey);
+    },
+    live: calc.amounts.size > 0 ? { title: th.sales.formTitle[kind], date: isoDate ?? date, description: refDoc?.partyName ?? party?.name ?? '', lines: liveLines(entry) } : null,
+  });
+  const discardDraft = () => {
+    setPartyCode(''); setService(null); setCreditDays(null); setDiscount(''); setDescription(''); setReason(''); setLines([blank()]);
+    setIdemKey(crypto.randomUUID());
+    draft.discard();
+  };
+
   const submit = useCallback(async () => {
     if (!canPost || !isoDate) return;
     if (!navigator.onLine) { setError(th.error.offline); return; }
@@ -124,14 +155,15 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
           ...(l.unit.trim() ? { unit: l.unit.trim() } : {}),
         })),
       };
-      const r = await postJson<{ id: string; docNo: string }>(`/companies/${companyId}/sales/${kind}`, body, { 'idempotency-key': idem.current });
+      const r = await postJson<{ id: string; docNo: string }>(`/companies/${companyId}/sales/${kind}`, body, { 'idempotency-key': idemKey });
+      draft.finish();
       router.push(`/c/${companyId}/sales/documents/${r.id}`);
     } catch (e) {
       const err = e as ApiError;
       setError(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message);
       setBusy(false);
     }
-  }, [canPost, isoDate, isNote, refDoc, reason, partyCode, isService, co.vatRegistered, priceMode, calc, description, kind, creditDays, days, cashAccount, lines, companyId, router]);
+  }, [canPost, isoDate, isNote, refDoc, reason, partyCode, isService, co.vatRegistered, priceMode, calc, description, kind, creditDays, days, cashAccount, lines, companyId, router, draft, idemKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -169,6 +201,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
     <form className="flex min-h-full flex-col" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       {co.locked && <p role="status" className="mx-3 mt-3 border border-rule-strong bg-band px-4 py-2.5 sm:mx-5">{th.submission.lockedNote}</p>}
       {!co.canWrite && <p className="mx-3 mt-3 text-sm text-ink2 sm:mx-5">{th.sales.readOnly}</p>}
+      <DraftBanner restoredAt={draft.restoredAt} onDiscard={discardDraft} />
 
       <div className="grid gap-5 p-3 sm:grid-cols-[minmax(0,470px)_minmax(0,1fr)] sm:p-5">
         <div className={`flex flex-col gap-5 ${paperOpen ? 'max-sm:hidden' : ''}`}>

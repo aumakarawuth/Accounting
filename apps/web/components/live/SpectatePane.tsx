@@ -75,6 +75,7 @@ export function SpectatePane({ companyId, studentLabel }: { companyId: string; s
         </div>
         {lines.length === 0 ? <p className="text-ink2">{th.live.noDraft}</p> : (
           <>
+            {p?.draft?.title && <p className="font-semibold">{p.draft.title}</p>}
             {p?.draft?.description && <p className="text-sm">{p.draft.description}{p.draft.date ? ` · ${p.draft.date}` : ''}</p>}
             <table className="w-full border-collapse text-[15px]">
               <thead className="bg-band text-left text-sm">

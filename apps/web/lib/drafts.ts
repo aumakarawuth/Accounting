@@ -82,3 +82,21 @@ export async function clearAllDrafts(): Promise<void> {
 /** ร่างที่มีเนื้อหาจริง (ไม่ใช่ฟอร์มว่าง) */
 export const hasContent = (d: Pick<JournalDraft, 'description' | 'lines'>) =>
   d.description.trim() !== '' || d.lines.some((l) => l.code || l.debit || l.credit || l.memo);
+
+// ---- ร่างเอกสารขาย/ซื้อ (เฟส 2.3) ร้านเดียวกับสมุดรายวัน แยกคีย์ตามฟอร์ม เช่น doc:sales:invoice:<บริษัท> ----
+// เก็บ state ของฟอร์มทั้งก้อน (รวมคีย์ idempotency) ออกจากระบบแล้วถูกล้างด้วย clearAllDrafts เหมือนกัน
+export type DocDraft<T> = { state: T; savedAt: number };
+const docKey = (scope: string, companyId: string) => `doc:${scope}:${companyId}`;
+
+export async function loadDocDraft<T>(scope: string, companyId: string): Promise<DocDraft<T> | null> {
+  return ((await run('readonly', (s) => s.get(docKey(scope, companyId)))) as DocDraft<T> | undefined) ?? null;
+}
+export async function saveDocDraft<T>(scope: string, companyId: string, state: T): Promise<void> {
+  const value: DocDraft<T> = { state, savedAt: Date.now() };
+  await run('readwrite', (s) => s.put(value, docKey(scope, companyId)));
+  emit(value.savedAt);
+}
+export async function deleteDocDraft(scope: string, companyId: string): Promise<void> {
+  await run('readwrite', (s) => s.delete(docKey(scope, companyId)));
+  emit(null);
+}

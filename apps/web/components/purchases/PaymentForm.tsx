@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { api, postJson, type ApiError, type PurchaseFormData, type PurchaseRow, type WhtKind } from '@/lib/api';
@@ -8,7 +8,8 @@ import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { rateHundredths } from '@/lib/vat';
 import { whtFor, type EntryLine } from '@/lib/entry-preview';
-import { EntryPreview, PartyPicker } from '@/components/docs/parts';
+import { DraftBanner, EntryPreview, PartyPicker, liveLines } from '@/components/docs/parts';
+import { useDocDraft } from '@/components/docs/useDocDraft';
 import { th } from '@/i18n/th';
 
 // จ่ายชำระ: เลือกผู้ขาย → ใบซื้อเชื่อที่ค้าง ใส่ยอดจ่ายแต่ละใบ → หัก ณ ที่จ่าย (ระบบคิดจากมูลค่าก่อน VAT ของส่วนที่จ่าย) → บัญชีจ่ายเงิน
@@ -34,7 +35,7 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
   const [whtRate, setWhtRate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const idem = useRef(crypto.randomUUID());
+  const [idemKey, setIdemKey] = useState(() => crypto.randomUUID()); // คีย์เดิมจนบันทึกสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
   const vendor = form.vendors.find((v) => v.code === partyCode) ?? null;
 
   // ใบค้างของผู้ขาย (เก่าสุดก่อน) พร้อมภาษีซื้อบริการที่ยังไม่ถึงกำหนด · ใบที่ส่งมาจากหน้าเอกสารเลือกไว้ให้เต็มยอด
@@ -46,7 +47,11 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
       const items = rows.filter((r) => r.open !== null && Number(r.open) > 0).reverse().map((r) => ({ ...r, undue: toCents(r.undueVat ?? '0') ?? 0n }));
       setOpen(items);
       const pre = items.find((r) => r.id === initialDoc);
-      setAmounts(pre ? { [pre.id]: pre.open! } : {});
+      // ยอดที่กู้จากร่างเก็บไว้เฉพาะใบที่ยังค้าง ไม่มีก็เลือกใบที่ส่งมาจากหน้าเอกสาร
+      setAmounts((a) => {
+        const kept = Object.fromEntries(Object.entries(a).filter(([id]) => items.some((r) => r.id === id)));
+        return Object.keys(kept).length ? kept : pre ? { [pre.id]: pre.open! } : {};
+      });
     }, (e: ApiError) => alive && setError(e.message));
     return () => { alive = false; };
   }, [companyId, partyCode, initialDoc]);
@@ -87,6 +92,22 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
       : wKind && calc.wht.amount === 0n ? th.purchases.whtTooSmall : null);
   const canPost = writable && !busy && !blocked;
 
+  // ร่างในเครื่อง + ครูดูสด
+  const draft = useDocDraft(writable ? 'payment' : null, companyId, { partyCode, amounts, date, cashAccount, whtKind, whtRate, idemKey }, {
+    isEmpty: (d) => !d.partyCode,
+    restore: (d) => {
+      if (initialParty && d.partyCode !== initialParty) return false; // เปิดจากหน้าเอกสารของผู้ขายรายอื่น: ไม่ทับด้วยร่างเก่า
+      setPartyCode(d.partyCode); setAmounts(d.amounts); setDate(d.date); setCashAccount(d.cashAccount);
+      setWhtKind(d.whtKind); setWhtRate(d.whtRate); setIdemKey(d.idemKey);
+    },
+    live: calc.total > 0n ? { title: th.purchases.paymentTitle, date: isoDate ?? date, description: vendor?.name ?? '', lines: liveLines(entry) } : null,
+  });
+  const discardDraft = () => {
+    setPartyCode(''); setOpen(null); setAmounts({}); setWhtKind(null); setWhtRate(null);
+    setIdemKey(crypto.randomUUID());
+    draft.discard();
+  };
+
   const submit = useCallback(async () => {
     if (!canPost || !isoDate || !open) return;
     if (!navigator.onLine) { setError(th.error.offline); return; }
@@ -96,14 +117,15 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
       const r = await postJson<{ id: string }>(`/companies/${companyId}/payments`, {
         date: isoDate, partyCode, cashAccount, ...(wKind ? { whtKind: wKind, whtRate: wRate } : {}),
         allocations: open.filter((x) => x.id in amounts).map((x) => ({ documentId: x.id, amount: fromCents(toCents(amounts[x.id]!)!) })),
-      }, { 'idempotency-key': idem.current });
+      }, { 'idempotency-key': idemKey });
+      draft.finish();
       router.push(`/c/${companyId}/purchases/documents/${r.id}`);
     } catch (e) {
       const err = e as ApiError;
       setError(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message);
       setBusy(false);
     }
-  }, [canPost, isoDate, open, companyId, partyCode, cashAccount, wKind, wRate, amounts, router]);
+  }, [canPost, isoDate, open, companyId, partyCode, cashAccount, wKind, wRate, amounts, router, draft, idemKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'F9') { e.preventDefault(); void submit(); } };
@@ -118,6 +140,7 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
     <form className="flex min-h-full flex-col" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       {co.locked && <p role="status" className="mx-3 mt-3 border border-rule-strong bg-band px-4 py-2.5 sm:mx-5">{th.submission.lockedNote}</p>}
       {!co.canWrite && <p className="mx-3 mt-3 text-sm text-ink2 sm:mx-5">{th.purchases.readOnly}</p>}
+      <DraftBanner restoredAt={draft.restoredAt} onDiscard={discardDraft} />
       <div className="grid gap-5 p-3 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
         <div className="flex flex-col gap-5">
           <h1 className="border-b-2 border-ink pb-2.5 font-doc text-[19px] font-bold sm:text-2xl">{th.purchases.paymentTitle}</h1>

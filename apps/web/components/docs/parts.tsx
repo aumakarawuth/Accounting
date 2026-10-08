@@ -140,3 +140,19 @@ export function EntryPreview({ lines, names, className = '' }: { lines: EntryLin
     </table>
   );
 }
+
+/** แถบแจ้งว่ากู้ร่างที่ค้างในเครื่องมา พร้อมปุ่มทิ้งร่าง (ข้อความเดียวกับสมุดรายวัน) */
+export function DraftBanner({ restoredAt, onDiscard }: { restoredAt: number | null; onDiscard: () => void }) {
+  if (restoredAt === null) return null;
+  return (
+    <p role="status" className="mx-3 mt-3 flex flex-wrap items-center gap-x-4 border border-rule-strong bg-band px-4 py-1 sm:mx-5">
+      <span className="py-1.5">{th.journal.draftRestored(new Date(restoredAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }))}</span>
+      <button type="button" className="min-h-11 text-sm underline" onClick={onDiscard}>{th.journal.discardDraft}</button>
+    </p>
+  );
+}
+
+/** รายการบัญชี (สตางค์) → ร่างที่ส่งให้ครูดูสด */
+export function liveLines(lines: EntryLine[]) {
+  return lines.map((l) => ({ account_code: l.code, debit: l.debit > 0n ? fromCents(l.debit) : '', credit: l.credit > 0n ? fromCents(l.credit) : '' }));
+}

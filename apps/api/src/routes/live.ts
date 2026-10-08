@@ -12,6 +12,7 @@ import { CompanyParams } from '../schemas.js';
 const Presence = z.object({
   page: z.enum(['home', 'journal', 'ledger', 'trial-balance', 'statements', 'accounts', 'closing', 'menu', 'other']),
   draft: z.object({
+    title: z.string().max(80).optional(), // ร่างเอกสารขาย/ซื้อ
     date: z.string().max(20).optional(),
     description: z.string().max(500).optional(),
     lines: z.array(z.object({
