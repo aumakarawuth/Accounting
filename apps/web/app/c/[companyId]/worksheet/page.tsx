@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { MonthNav } from '@/components/MonthNav';
 import { serverApi } from '@/lib/server-api';
-import type { Company, Worksheet, WsPair } from '@/lib/api';
+import type { ApiError, Company, Worksheet, WsPair } from '@/lib/api';
 import { isMonth, monthEndLabel, todayIso } from '@/lib/date';
 import { formatMoney, isNegative } from '@/lib/money';
 import { th } from '@/i18n/th';
@@ -20,7 +20,13 @@ export default async function WorksheetPage({
   const fq = ['6', '8', '10'].includes(sp.format ?? '') ? `&format=${sp.format}` : '';
   const [company, w] = await Promise.all([
     serverApi<Company>(`/companies/${companyId}`),
-    serverApi<Worksheet>(`/companies/${companyId}/worksheet?month=${month}${fq}`),
+    // แบบที่ขอถูกปิดอยู่ = แจ้งแล้วแสดงแบบที่เปิดอยู่แทน
+    serverApi<Worksheet>(`/companies/${companyId}/worksheet?month=${month}${fq}`).then(
+      (x) => ({ ...x, refused: null as string | null }),
+      async (e: ApiError) => {
+        if (e.code !== 'disabled') throw e;
+        return { ...(await serverApi<Worksheet>(`/companies/${companyId}/worksheet?month=${month}`)), refused: e.message };
+      }),
   ]);
   const t = th.worksheet;
   const href = (m: string, f = w.format) => `/c/${companyId}/worksheet?month=${m}${f ? `&format=${f}` : ''}`;
@@ -36,6 +42,7 @@ export default async function WorksheetPage({
         <div className="sm:ml-auto print:hidden"><MonthNav month={month} href={(m) => href(m)} /></div>
       </div>
 
+      {w.refused && <p role="status" className="border border-rule-strong bg-band px-4 py-2.5">{w.refused}</p>}
       {w.format === null ? (
         <p className="border border-rule-strong bg-paper p-4">{t.disabled}</p>
       ) : (

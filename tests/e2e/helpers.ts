@@ -6,6 +6,8 @@ export const env = {
   studentPassword: process.env.E2E_STUDENT_PASSWORD ?? 'ลงบัญชีทุกวัน',
   teacherEmail: process.env.E2E_TEACHER_EMAIL ?? 'teacher@example.test',
   teacherPassword: process.env.E2E_TEACHER_PASSWORD ?? 'ครูบัญชีห้องห้า',
+  adminEmail: process.env.E2E_ADMIN_EMAIL ?? 'admin-e2e@example.test',
+  adminPassword: process.env.E2E_ADMIN_PASSWORD ?? 'ผู้ดูแลโรงเรียนทดสอบ',
   company: process.env.E2E_COMPANY ?? 'บริษัท ก. จำกัด',
 };
 
