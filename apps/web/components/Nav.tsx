@@ -17,6 +17,7 @@ export function studentNav(companyId: string): Group[] {
       { label: n.journal, href: c('/journal') },
       { label: n.ledger, href: c('/ledger') },
       { label: n.trialBalance, href: c('/trial-balance') },
+      { label: n.worksheet, href: c('/worksheet') },
       { label: n.statements, href: c('/statements') },
       { label: n.closing, href: c('/closing') },
     ] },
@@ -29,6 +30,10 @@ export function studentNav(companyId: string): Group[] {
       { label: n.purchase, href: c('/purchases') },
       { label: n.payment, href: c('/purchases/payments') },
       { label: n.payables, href: c('/purchases/payables') },
+    ] },
+    { title: n.group.tax, items: [
+      { label: n.vat, href: c('/tax/vat') },
+      { label: n.wht, href: c('/tax/wht') },
     ] },
     { title: n.group.master, items: [
       { label: n.parties, href: c('/parties') },
@@ -43,7 +48,7 @@ export function studentNav(companyId: string): Group[] {
 }
 
 function isActive(path: string, href: string) {
-  return href.split('/').length <= 3 ? path === href : path.startsWith(href);
+  return href.split('/').length <= 3 ? path === href : path === href || path.startsWith(`${href}/`);
 }
 
 /** แถบข้าง (iPad/คอม) */

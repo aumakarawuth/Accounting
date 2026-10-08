@@ -67,6 +67,7 @@ jobs:
           psql "$DEV_DB" -v ON_ERROR_STOP=1 -f db/dev/fixture.sql
           ADMIN_DATABASE_URL="$DEV_DB" pnpm --filter @accounting/api -s set-password teacher@example.test 'ครูบัญชีห้องห้า'
           ADMIN_DATABASE_URL="$DEV_DB" pnpm --filter @accounting/api -s set-password 65012 'ลงบัญชีทุกวัน'
+          ADMIN_DATABASE_URL="$DEV_DB" pnpm --filter @accounting/api -s set-password admin-e2e@example.test 'ผู้ดูแลโรงเรียนทดสอบ'
       - run: pnpm --filter @accounting/api build
       - run: pnpm --filter @accounting/web build
       - name: เปิด API และเว็บ

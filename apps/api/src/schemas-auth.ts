@@ -44,3 +44,4 @@ export const JoinClassroom = z.object({
   code: z.string().trim().toUpperCase().regex(/^[A-HJ-NP-Z2-9]{6}$/, 'รหัสห้องมี 6 ตัว (ตัวอักษรอังกฤษและตัวเลข)'),
 }).strict();
 export const SetJoinCode = z.object({ enabled: z.boolean() }).strict();
+export const WorksheetFormats = z.object({ formats: z.array(z.union([z.literal(6), z.literal(8), z.literal(10)])).max(3) }).strict();
