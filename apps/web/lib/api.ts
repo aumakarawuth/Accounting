@@ -156,3 +156,30 @@ export type Periods = {
   canClose: boolean; canReopen: boolean; locked: boolean;
   periods: { month: string; closed: boolean; closedAt: string | null; entries: number }[];
 };
+
+// ---- เฟส 2.4 ภาษี ----
+export type VatRow = {
+  date: string; documentId: string; docNo: string; refNo: string | null; kind: string; partyName: string; partyTaxId: string | null;
+  partyBranchNo: string; base: string; vat: string; status: 'normal' | 'voided' | 'void_reversal';
+};
+export type VatClosing = {
+  id: string; month: string; outputVat: string; inputVat: string; carryUsed: string; payable: string; refundable: string;
+  entryDocNo: string | null; entryId: string | null; paidDocNo: string | null; paidDate: string | null; paidEntryId: string | null;
+  voidedAt: string | null; voidReason: string | null; voidDocNo: string | null; createdAt: string;
+};
+export type TaxCompany = { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; canWrite: boolean; locked: boolean };
+export type VatReport = {
+  month: string; company: TaxCompany; sales: VatRow[]; purchases: VatRow[]; closing: VatClosing | null;
+  preview: { outputVat: string; inputVat: string; carryAvailable: string; carryUsed: string; payable: string; refundable: string; earlierOpen: boolean; laterClosed: boolean };
+  history: VatClosing[]; cashAccounts: { code: string; name: string }[];
+};
+export type WhtCertRow = {
+  certNo: string; date: string; form: 'pnd3' | 'pnd53'; documentId: string; docNo: string; payeeName: string; payeeTaxId: string;
+  payeeBranchNo: string; payeeAddress: string; whtKind: string; whtRate: string; base: string; amount: string; voided: boolean;
+};
+export type WhtRemittance = { id: string; form: string; amount: string; certCount: number; entryDocNo: string; entryId: string; date: string };
+export type WhtReport = {
+  month: string; company: TaxCompany; certificates: WhtCertRow[];
+  forms: { form: 'pnd3' | 'pnd53'; count: number; base: string; amount: string; remittance: WhtRemittance | null }[];
+  cashAccounts: { code: string; name: string }[];
+};
