@@ -180,3 +180,37 @@ export const SalesListQuery = z.object({
   month: Month.optional(),
 }).strict();
 export const AsOfQuery = z.object({ asOf: IsoDate.optional() }).strict();
+
+// ---- เฟส 2.3 เอกสารซื้อ ----
+export const PurchaseKind = z.enum(['invoice', 'cash-purchase', 'credit-note']);
+export const PURCHASE_KIND_SQL = { invoice: 'purchase_invoice', 'cash-purchase': 'cash_purchase', 'credit-note': 'purchase_credit_note' } as const;
+export const PurchaseKindParams = z.object({ companyId: Uuid, kind: PurchaseKind });
+const Wht = { whtKind: WhtKind.optional(), whtRate: Rate.optional() };
+export const NewPurchaseDocument = z.object({
+  date: IsoDate,
+  partyCode: MasterCode.optional(),
+  vendorDocNo: z.string().trim().min(1, 'ต้องใส่เลขที่เอกสารของผู้ขาย').max(40),
+  isService: z.boolean().optional(),
+  priceMode: z.enum(['exclusive', 'inclusive']).optional(),
+  discount: Money.optional(),
+  description: z.string().trim().max(300).optional(),
+  creditDays: z.number().int().min(0).max(365).optional(),
+  cashAccount: AccountCode.optional(),
+  ...Wht,
+  refDocumentId: Uuid.optional(),
+  reason: z.string().trim().max(300).optional(),
+  lines: z.array(SalesLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+}).strict();
+export const NewPayment = z.object({
+  date: IsoDate,
+  partyCode: MasterCode,
+  cashAccount: AccountCode.optional(),
+  ...Wht,
+  description: z.string().trim().max(300).optional(),
+  allocations: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).min(1, 'เลือกใบที่จ่ายชำระอย่างน้อย 1 ใบ').max(50),
+}).strict();
+export const PurchaseListQuery = z.object({
+  kind: z.enum(['purchase_invoice', 'cash_purchase', 'purchase_credit_note', 'payment']).optional(),
+  party: MasterCode.optional(),
+  month: Month.optional(),
+}).strict();
