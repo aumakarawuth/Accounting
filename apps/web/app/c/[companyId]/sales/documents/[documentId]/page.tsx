@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Money } from '@/components/Money';
-import { DocumentActions } from '@/components/sales/DocumentActions';
+import { DocumentActions, type ActionLink } from '@/components/docs/DocumentActions';
 import { DocumentPaper, type Paper } from '@/components/sales/DocumentPaper';
 import { serverApi } from '@/lib/server-api';
 import type { ApiError, Company, SalesDocument } from '@/lib/api';
@@ -30,6 +30,13 @@ export default async function SalesDocumentPage({ params }: { params: Promise<{ 
     whtAmount: d.whtAmount,
     stamp: d.voidedAt ? { kind: 'voided', docNo: d.voidDocNo ?? '', date: d.voidedAt.slice(0, 10) } : { kind: 'posted', docNo: d.entryDocNo, date: d.date },
   };
+  // คำสั่งตามชนิดเอกสาร: ใบที่ยังค้างออกใบลด/เพิ่มหนี้และรับชำระได้
+  const open = Number(d.open ?? 0) > 0 && (d.kind === 'sales_invoice' || d.kind === 'debit_note');
+  const links: ActionLink[] = open ? [
+    ...(d.kind === 'sales_invoice' ? [{ href: c(`/sales/new?kind=debit-note&ref=${d.id}`), label: th.sales.issueDebitNote }] : []),
+    { href: c(`/sales/new?kind=credit-note&ref=${d.id}`), label: th.sales.issueCreditNote },
+    { href: c(`/sales/receipts/new?party=${encodeURIComponent(d.partyCode)}&doc=${d.id}`), label: th.sales.receivePayment, primary: true },
+  ] : [];
   const related = [
     ...d.settles.map((s) => ({ id: s.id, docNo: s.docNo, label: th.sales.settles, amount: s.amount, voided: false })),
     ...d.settledBy.map((s) => ({ id: s.id, docNo: s.docNo, label: `${th.sales.kinds[s.kind]} ${isoToThai(s.date)}`, amount: s.amount, voided: s.voided })),
@@ -45,7 +52,8 @@ export default async function SalesDocumentPage({ params }: { params: Promise<{ 
       {d.voidedAt
         ? <p role="status" className="neg border border-rule-strong bg-band px-4 py-2.5 print:hidden">{th.sales.voidedNote(isoToThai(d.voidedAt.slice(0, 10)), d.voidReason ?? '', d.voidDocNo ?? '')}</p>
         : <p className="text-sm text-ink2 print:hidden">{th.sales.postedLocked}</p>}
-      <DocumentActions companyId={companyId} doc={d} writable={company.can_write && !company.locked} />
+      <DocumentActions companyId={companyId} doc={d} writable={company.can_write && !company.locked}
+        voidPath={`/companies/${companyId}/sales/documents/${d.id}/void`} links={links} />
       <div className="max-w-4xl"><DocumentPaper p={paper} /></div>
       {d.open !== null && (d.kind === 'sales_invoice' || d.kind === 'debit_note') && !d.voidedAt && (
         <p className="print:hidden">{Number(d.open) > 0 ? <>{th.sales.open} <Money value={d.open} /></> : th.sales.paid}</p>

@@ -28,6 +28,7 @@ export function studentNav(companyId: string): Group[] {
     { title: n.group.purchase, items: [
       { label: n.purchase, href: c('/purchases') },
       { label: n.payment, href: c('/purchases/payments') },
+      { label: n.payables, href: c('/purchases/payables') },
     ] },
     { title: n.group.master, items: [
       { label: n.parties, href: c('/parties') },
@@ -48,16 +49,20 @@ function isActive(path: string, href: string) {
 /** แถบข้าง (iPad/คอม) */
 export function SideNav({ companyId }: { companyId: string }) {
   const path = usePathname() ?? ''; // มีโฟลเดอร์ pages/ (API ฝังบน Vercel) ชนิดจึงเป็น null ได้
+  const groups = studentNav(companyId);
+  // เมนูที่ตรงยาวที่สุดเท่านั้นที่ไฮไลต์ (/purchases/payments ไม่ไฮไลต์ "บันทึกซื้อ" ซ้ำ)
+  const current = groups.flatMap((g) => g.items).filter((it) => isActive(path, it.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
   return (
     <nav aria-label="เมนูหลัก" className="hidden w-[220px] shrink-0 overflow-y-auto border-r border-rule-strong bg-band py-1 sm:block lg:w-[232px]">
-      {studentNav(companyId).map((g, i) => (
+      {groups.map((g, i) => (
         <div key={i}>
           {g.title && <h3 className="mx-4 mt-3.5 mb-0.5 text-[13px] font-semibold text-ink2">{g.title}</h3>}
           {g.items.map((it) => (
             <Link
               key={it.href}
               href={it.href}
-              aria-current={isActive(path, it.href) ? 'page' : undefined}
+              aria-current={it.href === current ? 'page' : undefined}
               className="flex min-h-11 items-center px-4 text-[15px] aria-[current=page]:bg-ink aria-[current=page]:text-paper lg:min-h-9"
             >
               {it.label}

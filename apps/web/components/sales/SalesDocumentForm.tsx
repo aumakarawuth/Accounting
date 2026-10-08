@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { postJson, type ApiError, type SalesDocument, type SalesFormData } from '@/lib/api';
@@ -9,68 +9,18 @@ import { addDays, isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { lineAmount, vatCalc, type PriceMode } from '@/lib/vat';
 import { th } from '@/i18n/th';
 import { DocumentPaper, type Paper } from './DocumentPaper';
+import { ItemField, PartyPicker } from '@/components/docs/parts';
 
 // ฟอร์มออกเอกสารขาย (ใบกำกับภาษี/ใบแจ้งหนี้ ขายสด ใบลดหนี้ ใบเพิ่มหนี้) ตาม mockup ที่อนุมัติ
 // มือถือ: 4 ขั้น มีปุ่มดูตัวอย่างกระดาษ · iPad/คอม: ฟอร์มซ้าย กระดาษตัวอย่างขวา
 // ยอดคิดสูตรเดียวกับ DB (lib/vat.ts) เพื่อให้ตัวอย่างตรงกับใบจริงทุกสตางค์ — DB ตรวจซ้ำอีกครั้งตอนผ่านรายการ
 export type SalesFormKind = 'invoice' | 'cash-sale' | 'credit-note' | 'debit-note';
 type Line = { key: number; itemCode: string; description: string; qty: string; unit: string; unitPrice: string };
-type Item = SalesFormData['items'][number];
 
 let seq = 0;
 const blank = (): Line => ({ key: ++seq, itemCode: '', description: '', qty: '1', unit: '', unitPrice: '' });
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
 const money = (c: bigint) => formatMoney(fromCents(c));
-
-/** ช่องรายละเอียดที่ค้นสินค้าได้: พิมพ์รหัส/ชื่อ เลือกแล้วเติมหน่วยและราคาขาย พิมพ์เองโดยไม่เลือกก็ได้ */
-function ItemField({ items, line, label, onPick, onText }: {
-  items: Item[]; line: Line; label: string; onPick: (it: Item) => void; onText: (text: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const listId = useId();
-  const matches = useMemo(() => {
-    const s = line.description.trim().toUpperCase();
-    if (!s || line.itemCode) return [];
-    return items.filter((i) => i.code.startsWith(s) || i.name.toUpperCase().includes(s)).slice(0, 8);
-  }, [items, line.description, line.itemCode]);
-  const show = open && matches.length > 0;
-  const pick = (it: Item) => { onPick(it); setOpen(false); };
-  return (
-    <div className="relative">
-      <input
-        role="combobox" aria-label={label} aria-expanded={show} aria-controls={listId} aria-autocomplete="list"
-        aria-activedescendant={show ? `${listId}-${active}` : undefined}
-        placeholder={th.sales.itemSearch}
-        className="h-11 w-full border-b border-rule-input bg-transparent px-0.5 text-base"
-        value={line.description}
-        onChange={(e) => { onText(e.target.value); setOpen(true); setActive(0); }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
-        onKeyDown={(e) => {
-          if (!show) return;
-          if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, matches.length - 1)); }
-          if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
-          if (e.key === 'Enter') { e.preventDefault(); const m = matches[active]; if (m) pick(m); }
-          if (e.key === 'Escape') setOpen(false);
-        }}
-      />
-      {show && (
-        <ul id={listId} role="listbox" className="absolute top-full left-0 z-10 w-[min(360px,85vw)] border border-ink bg-paper">
-          {matches.map((it, i) => (
-            <li key={it.code} id={`${listId}-${i}`} role="option" aria-selected={i === active}
-              onMouseDown={(e) => { e.preventDefault(); pick(it); }}
-              className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-rule px-2.5 aria-selected:bg-ink aria-selected:text-paper">
-              <span className="font-num">{it.code}</span>
-              <span className="min-w-0 flex-1 truncate">{it.name}</span>
-              {it.salePrice && <span className="num text-sm">{formatMoney(it.salePrice)}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
   companyId: string; kind: SalesFormKind; form: SalesFormData; refDoc?: SalesDocument | null;
@@ -85,7 +35,6 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
   const [paperOpen, setPaperOpen] = useState(false); // มือถือ: ดูตัวอย่างกระดาษแทนฟอร์ม
   const [date, setDate] = useState(isoToThai(todayIso()));
   const [partyCode, setPartyCode] = useState('');
-  const [partyQ, setPartyQ] = useState('');
   const [service, setService] = useState<boolean | null>(null); // null = ตามรายการแรกที่เลือกจากสินค้า
   const [priceMode, setPriceMode] = useState<'exclusive' | 'inclusive'>('exclusive');
   const [creditDays, setCreditDays] = useState<string | null>(null); // null = ตามลูกค้า
@@ -99,11 +48,6 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
   const idem = useRef(crypto.randomUUID()); // คีย์เดิมจนผ่านรายการสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
 
   const party = isNote ? null : form.customers.find((c) => c.code === partyCode) ?? null;
-  const partyMatches = useMemo(() => {
-    const s = partyQ.trim().toUpperCase();
-    const all = form.customers;
-    return (s ? all.filter((c) => c.code.startsWith(s) || c.name.toUpperCase().includes(s)) : all).slice(0, 8);
-  }, [form.customers, partyQ]);
 
   const update = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const addLine = useCallback(() => setLines((ls) => [...ls, blank()]), []);
@@ -250,32 +194,9 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
                   <input className={inputCls} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} aria-invalid={!reason.trim()} />
                 </label>
               </>
-            ) : party ? (
-              <div className="flex items-start justify-between gap-3 border border-rule-input px-3 py-2">
-                <div className="min-w-0">
-                  <div><span className="font-num">{party.code}</span> {party.name}</div>
-                  {party.taxId && <div className="text-sm text-ink2">{th.sales.taxId} <span className="font-num">{party.taxId}</span></div>}
-                </div>
-                <button type="button" className="min-h-11 shrink-0 text-sm underline" onClick={() => { setPartyCode(''); setCreditDays(null); }}>{th.sales.change}</button>
-              </div>
             ) : (
-              <div className="flex flex-col">
-                <label className="flex flex-col text-sm">
-                  {th.sales.customer}
-                  <input className={inputCls} value={partyQ} placeholder={th.sales.customerSearch} onChange={(e) => setPartyQ(e.target.value)} />
-                </label>
-                {form.customers.length === 0 && <p className="pt-2 text-sm text-ink2">{th.sales.customerNone}</p>}
-                <ul className="flex flex-col">
-                  {partyMatches.map((c) => (
-                    <li key={c.code}>
-                      <button type="button" className="flex min-h-12 w-full items-center gap-3 border-b border-rule px-1 text-left"
-                        onClick={() => { setPartyCode(c.code); setCreditDays(null); }}>
-                        <span className="font-num">{c.code}</span><span className="min-w-0 flex-1 truncate">{c.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <PartyPicker parties={form.customers} selected={party} label={th.sales.customer} hint={th.sales.customerSearch} none={th.sales.customerNone}
+                onPick={(c) => { setPartyCode(c.code); setCreditDays(null); }} onClear={() => { setPartyCode(''); setCreditDays(null); }} />
             )}
             <label className="flex flex-col text-sm">
               {th.sales.date}
@@ -304,7 +225,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
                 const problem = calc.problems.get(l.key);
                 return (
                   <li key={l.key} className="flex flex-col gap-2 border border-rule px-3 pt-1 pb-3">
-                    <ItemField items={form.items} line={l} label={`${th.sales.description} ${i + 1}`}
+                    <ItemField items={form.items} value={l.description} picked={Boolean(l.itemCode)} label={`${th.sales.description} ${i + 1}`} price={(it) => it.salePrice}
                       onText={(text) => update(l.key, { description: text, itemCode: l.itemCode && itemsByCode.get(l.itemCode)?.name === text ? l.itemCode : '' })}
                       onPick={(it) => update(l.key, { itemCode: it.code, description: it.name, unit: it.unit, unitPrice: it.salePrice ?? l.unitPrice })} />
                     <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3">

@@ -46,6 +46,7 @@ describe('API เอกสารซื้อ', () => {
     expect(exp).toContain('1630');
     expect(exp).not.toContain('1110');
     expect(f.cashAccounts.map((a: { code: string }) => a.code)).toEqual(['1110', '1120', '1130', '1140']);
+    expect(f.systemAccounts.map((a: { code: string }) => a.code)).toEqual(['1410', '1411', '2110', '2230', '5140']);
   });
 
   it('ซื้อเชื่อบริการ → จ่ายชำระหัก 3% → ใบสำคัญจ่ายมี 50 ทวิ → ใบเดิมจ่ายครบ', async () => {
@@ -62,6 +63,8 @@ describe('API เอกสารซื้อ', () => {
       base: '10000.00', vat: '700.00', total: '10700.00', open: '10700.00', entryDocNo: 'PI-0001', certificate: null,
       lines: [{ lineNo: 1, description: 'ค่าออกแบบ', qty: '1.000', unit: 'งาน', unitPrice: '10000.00', amount: '10000.00', accountCode: '5260' }],
     });
+    const listed = (await as(owner, 'GET', `/companies/${co}/purchases?party=V1&kind=purchase_invoice`)).json();
+    expect(listed.find((x: { id: string }) => x.id === id)).toMatchObject({ open: '10700.00', undueVat: '700.00' });
     const pv = await as(owner, 'POST', `/companies/${co}/payments`, { date: '2026-10-10', partyCode: 'V1', cashAccount: '1120', whtKind: 'service', allocations: [{ documentId: id, amount: '10700' }] });
     expect(pv.json().docNo).toBe('PV-0001');
     const p = (await as(owner, 'GET', `/companies/${co}/purchases/documents/${pv.json().id}`)).json();

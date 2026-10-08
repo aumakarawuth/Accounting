@@ -4,12 +4,17 @@ import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
-import { postJson, type ApiError, type SalesDocument } from '@/lib/api';
+import { postJson, type ApiError } from '@/lib/api';
 import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { th } from '@/i18n/th';
 
-// แถบคำสั่งของเอกสารที่ผ่านรายการแล้ว: ลด/เพิ่มหนี้ รับชำระ ดูรายการบัญชี พิมพ์ ยกเลิก (กลับรายการ RV พร้อมเหตุผล)
-export function DocumentActions({ companyId, doc, writable }: { companyId: string; doc: SalesDocument; writable: boolean }) {
+// แถบคำสั่งของเอกสารขาย/ซื้อที่ผ่านรายการแล้ว: ลิงก์ตามชนิดเอกสาร (ลด/เพิ่มหนี้ รับ/จ่ายชำระ) ดูรายการบัญชี พิมพ์
+// และยกเลิก (กลับรายการ RV พร้อมเหตุผล) ที่ API ปลายทาง voidPath
+export type ActionLink = { href: string; label: string; primary?: boolean };
+export function DocumentActions({ companyId, doc, voidPath, links, writable }: {
+  companyId: string; doc: { docNo: string; entryId: string; entryDocNo: string; voidedAt: string | null };
+  voidPath: string; links: ActionLink[]; writable: boolean;
+}) {
   const router = useRouter();
   const [voiding, setVoiding] = useState(false);
   const [date, setDate] = useState(isoToThai(todayIso()));
@@ -19,7 +24,6 @@ export function DocumentActions({ companyId, doc, writable }: { companyId: strin
   const idem = useRef(crypto.randomUUID());
   const c = (p: string) => `/c/${companyId}${p}`;
   const live = !doc.voidedAt;
-  const open = Number(doc.open ?? 0) > 0 && (doc.kind === 'sales_invoice' || doc.kind === 'debit_note');
   const link = 'inline-flex min-h-11 items-center justify-center rounded-doc border border-ink px-4 font-medium max-sm:min-h-13';
   const isoDate = thaiToIso(date);
 
@@ -28,7 +32,7 @@ export function DocumentActions({ companyId, doc, writable }: { companyId: strin
     setBusy(true);
     setError(null);
     try {
-      await postJson(`/companies/${companyId}/sales/documents/${doc.id}/void`, { date: isoDate, reason: reason.trim() }, { 'idempotency-key': idem.current });
+      await postJson(voidPath, { date: isoDate, reason: reason.trim() }, { 'idempotency-key': idem.current });
       setVoiding(false);
       router.refresh();
     } catch (e) {
@@ -42,15 +46,9 @@ export function DocumentActions({ companyId, doc, writable }: { companyId: strin
   return (
     <div className="flex flex-col gap-3 print:hidden">
       <div className="flex flex-wrap gap-2.5 max-sm:grid max-sm:grid-cols-2">
-        {writable && live && open && doc.kind === 'sales_invoice' && (
-          <Link className={link} href={c(`/sales/new?kind=debit-note&ref=${doc.id}`)}>{th.sales.issueDebitNote}</Link>
-        )}
-        {writable && live && open && (
-          <Link className={link} href={c(`/sales/new?kind=credit-note&ref=${doc.id}`)}>{th.sales.issueCreditNote}</Link>
-        )}
-        {writable && live && open && (
-          <Link className={`${link} bg-ink text-paper`} href={c(`/sales/receipts/new?party=${encodeURIComponent(doc.partyCode)}&doc=${doc.id}`)}>{th.sales.receivePayment}</Link>
-        )}
+        {writable && live && links.map((l) => (
+          <Link key={l.href} className={`${link} ${l.primary ? 'bg-ink text-paper' : ''}`} href={l.href}>{l.label}</Link>
+        ))}
         <Link className={link} href={c(`/journal/${doc.entryId}`)}>{th.sales.viewEntry(doc.entryDocNo)}</Link>
         <Button type="button" variant="secondary" shortcut="Ctrl+P" onClick={() => window.print()}>{th.sales.print}</Button>
         {writable && live && !voiding && (

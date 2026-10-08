@@ -108,6 +108,42 @@ export type SalesDocument = SalesRow & {
   notes: { id: string; kind: SalesKindSql; docNo: string; total: string; voided: boolean }[];
 };
 export type AgingBucket = 'current' | 'd30' | 'd60' | 'd90' | 'over90';
+export type PurchaseKindSql = 'purchase_invoice' | 'cash_purchase' | 'purchase_credit_note' | 'payment';
+export type PurchaseFormData = {
+  company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };
+  vendors: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string; whtKind: WhtKind | null; whtRate: string | null }[];
+  items: { code: string; name: string; unit: string; isService: boolean; purchasePrice: string | null; purchaseAccount: string | null }[];
+  expenseAccounts: { code: string; name: string }[];
+  cashAccounts: { code: string; name: string }[];
+  systemAccounts: { code: string; name: string }[];
+};
+export type PurchaseRow = {
+  id: string; kind: PurchaseKindSql; docNo: string; date: string; vendorDocNo: string | null; partyCode: string; partyName: string;
+  isService: boolean; vatClaimable: boolean; priceMode: 'exclusive' | 'inclusive' | 'none'; vatRate: string;
+  gross: string; discount: string; base: string; vat: string; total: string;
+  whtKind: WhtKind | null; whtRate: string | null; whtBase: string; whtAmount: string;
+  creditDays: number | null; dueDate: string | null; refDocumentId: string | null; reason: string | null; description: string;
+  voidedAt: string | null; voidReason: string | null; open: string | null;
+  /** ภาษีซื้อบริการที่ยังไม่ถึงกำหนด (มีเฉพาะในรายการ ใช้คิดภาษีที่โอนตอนจ่าย) */
+  undueVat?: string;
+};
+export type WhtCertificate = {
+  certNo: string; date: string; form: 'pnd3' | 'pnd53'; payerName: string; payerTaxId: string | null; payerBranchNo: string; payerAddress: string;
+  payeeName: string; payeeTaxId: string; payeeBranchNo: string; payeeAddress: string; whtKind: WhtKind; whtRate: string; base: string; amount: string; voided: boolean;
+};
+export type PurchaseDocument = PurchaseRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
+  companyName: string; companyTaxId: string | null; companyBranchNo: string; companyAddress: string;
+  cashAccount: string | null; cashAccountName: string | null; entryId: string; entryDocNo: string; voidDocNo: string | null; refDocNo: string | null;
+  lines: { lineNo: number; description: string; qty: string; unit: string; unitPrice: string; amount: string; accountCode: string; accountName: string }[];
+  settles: { id: string; docNo: string; vendorDocNo: string | null; amount: string; vatTransfer: string }[];
+  settledBy: { id: string; kind: PurchaseKindSql; docNo: string; date: string; amount: string; voided: boolean }[];
+  notes: { id: string; kind: PurchaseKindSql; docNo: string; total: string; voided: boolean }[];
+  certificate: WhtCertificate | null;
+};
+export type Payables = Omit<Receivables, 'items'> & {
+  items: { id: string; docNo: string; vendorDocNo: string; date: string; dueDate: string; partyCode: string; partyName: string; total: string; open: string; daysOverdue: number; bucket: AgingBucket }[];
+};
 export type Receivables = {
   asOf: string;
   items: { id: string; docNo: string; kind: SalesKindSql; date: string; dueDate: string; partyCode: string; partyName: string; total: string; open: string; daysOverdue: number; bucket: AgingBucket }[];

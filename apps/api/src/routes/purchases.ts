@@ -30,7 +30,7 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
     const { companyId } = CompanyParams.parse(req.params);
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      const [company, vendors, items, accounts] = await Promise.all([
+      const [company, vendors, items, accounts, system] = await Promise.all([
         c.query(`select name, tax_id as "taxId", branch_no as "branchNo", address, vat_registered as "vatRegistered", vat_rate::text as "vatRate",
                         app.can_write_company(id) as "canWrite", app.company_locked(id) as locked from acc.companies where id = $1`, [companyId]),
         c.query(`select code, name, credit_days as "creditDays", vat_registered as "vatRegistered", tax_id as "taxId",
@@ -42,11 +42,16 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         c.query(`select code, name, type from acc.chart_of_accounts
                   where company_id = $1 and active and (type = 'expense' or (type = 'asset' and left(code, 2) in ('11', '13', '15', '16')))
                   order by code`, [companyId]),
+        // ชื่อบัญชีที่ระบบลงให้เอง (ภาษีซื้อ เจ้าหนี้ หัก ณ ที่จ่าย) ใช้แสดงตัวอย่างรายการบัญชี ไม่มีในผังใช้ชื่อแม่แบบ
+        c.query(`select t.code, coalesce(a.name, t.name) as name from acc.coa_template t
+                   left join acc.chart_of_accounts a on a.company_id = $1 and a.code = t.code
+                  where t.code in ('1410', '1411', '2110', '2230', '5140') order by t.code`, [companyId]),
       ]);
       return {
         company: company.rows[0], vendors: vendors.rows, items: items.rows,
         expenseAccounts: accounts.rows.filter((a) => !a.code.startsWith('11')).map(({ code, name }) => ({ code, name })),
         cashAccounts: accounts.rows.filter((a) => a.code.startsWith('11')).map(({ code, name }) => ({ code, name })),
+        systemAccounts: system.rows,
       };
     });
   });
@@ -94,7 +99,9 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const r = await c.query(
-        `select ${DOC}, case when d.kind = 'purchase_invoice' and d.voided_at is null then (d.total - s.amount)::text end as open
+        `select ${DOC}, case when d.kind = 'purchase_invoice' and d.voided_at is null then (d.total - s.amount)::text end as open,
+                case when d.kind = 'purchase_invoice' and d.voided_at is null and d.is_service and d.vat_claimable
+                     then (d.vat - s.vat)::text else '0.00' end as "undueVat"
            from acc.purchase_documents d cross join lateral acc.purchase_settled(d.company_id, d.id) s
           where d.company_id = $1 and ($2::text is null or d.kind = $2) and ($3::text is null or d.party_code = $3)
             and ($4::text is null or to_char(d.doc_date, 'YYYY-MM') = $4)
