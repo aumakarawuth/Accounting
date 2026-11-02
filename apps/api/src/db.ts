@@ -39,3 +39,15 @@ export async function withUser<T>(
     c.release();
   }
 }
+
+/**
+ * A PoolClient carries one PostgreSQL connection, so its queries must be sent
+ * in order.  Keep independent reads concise without issuing them concurrently.
+ */
+export async function querySequence<T extends readonly (() => Promise<unknown>)[]>(
+  queries: T,
+): Promise<{ -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const results: unknown[] = [];
+  for (const query of queries) results.push(await query());
+  return results as { -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> };
+}

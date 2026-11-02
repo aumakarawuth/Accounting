@@ -39,11 +39,11 @@ describe('การแยกข้อมูลระหว่างนักเ�
   });
 
   it('นักเรียน A เขียน/ลงบัญชี/ปิดงวด/กลับรายการ บริษัท B ไม่ได้', async () => {
-    await expect(asUser(a, (c) => post(c, coB, '2026-10-02', lines))).rejects.toSatisfy((e: any) => sqlstate(e) === '42501');
-    await expect(asUser(a, (c) => c.query(`select acc.close_period($1,'2026-10-01')`, [coB]))).rejects.toSatisfy((e: any) => sqlstate(e) === '42501');
+    await expect(asUser(a, (c) => post(c, coB, '2026-10-02', lines))).rejects.toSatisfy((e: unknown) => sqlstate(e) === '42501');
+    await expect(asUser(a, (c) => c.query(`select acc.close_period($1,'2026-10-01')`, [coB]))).rejects.toSatisfy((e: unknown) => sqlstate(e) === '42501');
     const eB = (await pool.query(`select id from acc.journal_entries where company_id=$1`, [coB])).rows[0].id;
     await expect(asUser(a, (c) => c.query(`select acc.reverse_journal($1,$2,'2026-10-02',$3)`, [coB, eB, 'k'.repeat(10)])))
-      .rejects.toSatisfy((e: any) => sqlstate(e) === '42501');
+      .rejects.toSatisfy((e: unknown) => sqlstate(e) === '42501');
     const u = await asUser(a, (c) => c.query(`update acc.chart_of_accounts set name='x', version=version+1 where company_id=$1`, [coB]));
     expect(u.rowCount).toBe(0);
     await expect(asUser(a, (c) => c.query(
@@ -54,14 +54,14 @@ describe('การแยกข้อมูลระหว่างนักเ�
 
   it('ไม่มี session (ไม่ระบุผู้ใช้) อ่านและเขียนอะไรไม่ได้', async () => {
     for (const t of TABLES) expect(await count(null, t, coA), t).toBe(0);
-    await expect(asUser(null, (c) => post(c, coA, '2026-10-02', lines))).rejects.toSatisfy((e: any) => sqlstate(e) === '42501');
+    await expect(asUser(null, (c) => post(c, coA, '2026-10-02', lines))).rejects.toSatisfy((e: unknown) => sqlstate(e) === '42501');
   });
 
   it('ครูอ่านบริษัทของนักเรียนในห้องตัวเองได้ แต่เขียนไม่ได้ และอ่านห้องอื่นไม่ได้', async () => {
     expect(await count(teacherA, 'journal_entries', coA)).toBe(1);
     expect(await count(teacherA, 'journal_entries', coB)).toBe(0);
     expect(await count(teacherB, 'journal_entries', coA)).toBe(0);
-    await expect(asUser(teacherA, (c) => post(c, coA, '2026-10-02', lines))).rejects.toSatisfy((e: any) => sqlstate(e) === '42501');
+    await expect(asUser(teacherA, (c) => post(c, coA, '2026-10-02', lines))).rejects.toSatisfy((e: unknown) => sqlstate(e) === '42501');
     const u = await asUser(teacherA, (c) => c.query(`update acc.chart_of_accounts set name='x', version=version+1 where company_id=$1`, [coA]));
     expect(u.rowCount).toBe(0);
   });
@@ -104,7 +104,7 @@ describe('การแยกข้อมูลระหว่างนักเ�
     expect(r.rows[0].client).toBe('1.2.3.4 / iPhone');
     expect(r.rows[0].old_row.name).toBe('เงินสด');
     expect(r.rows[0].new_row.name).toBe('เงินสดในมือ');
-    await expect(pool.query(`update acc.audit_log set op='X'`)).rejects.toSatisfy((e: any) => sqlstate(e) === 'ACC06');
+    await expect(pool.query(`update acc.audit_log set op='X'`)).rejects.toSatisfy((e: unknown) => sqlstate(e) === 'ACC06');
   });
 });
 

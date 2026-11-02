@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { withUser } from '../db.js';
+import { querySequence, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import {
@@ -40,19 +40,19 @@ export function taxRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapter
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const m = await monthStart(c, q.month);
-      const [company, sales, purchases, preview, closings, cash] = await Promise.all([
-        c.query(COMPANY, [companyId]),
-        c.query(`select ${ROW} from acc.vat_report($1, $2, 'sales')`, [companyId, m]),
-        c.query(`select ${ROW} from acc.vat_report($1, $2, 'purchases')`, [companyId, m]),
-        c.query(`with b as (select $2::date as s, ($2::date + interval '1 month - 1 day')::date as e)
+      const [company, sales, purchases, preview, closings, cash] = await querySequence([
+        () => c.query(COMPANY, [companyId]),
+        () => c.query(`select ${ROW} from acc.vat_report($1, $2, 'sales')`, [companyId, m]),
+        () => c.query(`select ${ROW} from acc.vat_report($1, $2, 'purchases')`, [companyId, m]),
+        () => c.query(`with b as (select $2::date as s, ($2::date + interval '1 month - 1 day')::date as e)
                  select (-acc.account_movement($1, '2210', b.s, b.e))::text as "outputVat", acc.account_movement($1, '1410', b.s, b.e)::text as "inputVat",
                         greatest(acc.account_movement($1, '1430', null, b.e), 0)::text as "carryAvailable",
                         (acc.account_movement($1, '2210', null, b.s - 1) <> 0 or acc.account_movement($1, '1410', null, b.s - 1) <> 0) as "earlierOpen",
                         exists (select 1 from acc.vat_closings x where x.company_id = $1 and x.month > b.s and x.voided_at is null) as "laterClosed"
                    from b`, [companyId, m]),
-        c.query(`${CLOSING} where c.company_id = $1 order by c.month desc, c.created_at desc limit 36`, [companyId]),
-        c.query(CASH, [companyId]),
-      ]);
+        () => c.query(`${CLOSING} where c.company_id = $1 order by c.month desc, c.created_at desc limit 36`, [companyId]),
+        () => c.query(CASH, [companyId]),
+      ] as const);
       const month = m.slice(0, 7);
       const p = preview.rows[0];
       const net = Math.round(Number(p.outputVat) * 100) - Math.round(Number(p.inputVat) * 100);
@@ -111,20 +111,20 @@ export function taxRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapter
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const m = await monthStart(c, q.month);
-      const [company, certs, remits, cash] = await Promise.all([
-        c.query(COMPANY, [companyId]),
-        c.query(`select w.cert_no as "certNo", to_char(w.cert_date, 'YYYY-MM-DD') as date, w.form, w.document_id as "documentId",
+      const [company, certs, remits, cash] = await querySequence([
+        () => c.query(COMPANY, [companyId]),
+        () => c.query(`select w.cert_no as "certNo", to_char(w.cert_date, 'YYYY-MM-DD') as date, w.form, w.document_id as "documentId",
                         d.doc_no as "docNo", w.payee_name as "payeeName", w.payee_tax_id as "payeeTaxId", w.payee_branch_no as "payeeBranchNo",
                         w.payee_address as "payeeAddress", w.wht_kind as "whtKind", w.wht_rate::text as "whtRate", w.base::text,
                         w.amount::text, w.voided_at is not null as voided
                    from acc.wht_certificates w join acc.purchase_documents d on d.company_id = w.company_id and d.id = w.document_id
                   where w.company_id = $1 and date_trunc('month', w.cert_date) = $2::date order by w.cert_date, w.cert_no`, [companyId, m]),
-        c.query(`select r.id, r.form, r.amount::text, r.cert_count as "certCount", e.doc_no as "entryDocNo", r.entry_id as "entryId",
+        () => c.query(`select r.id, r.form, r.amount::text, r.cert_count as "certCount", e.doc_no as "entryDocNo", r.entry_id as "entryId",
                         to_char(e.entry_date, 'YYYY-MM-DD') as date
                    from acc.wht_remittances r join acc.journal_entries e on e.company_id = r.company_id and e.id = r.entry_id
                   where r.company_id = $1 and r.month = $2::date order by r.form`, [companyId, m]),
-        c.query(CASH, [companyId]),
-      ]);
+        () => c.query(CASH, [companyId]),
+      ] as const);
       const forms = (['pnd3', 'pnd53'] as const).map((form) => {
         const live = certs.rows.filter((x) => x.form === form && !x.voided);
         const cents = (k: 'base' | 'amount') => (live.reduce((s, x) => s + Math.round(Number(x[k]) * 100), 0) / 100).toFixed(2);
