@@ -26,7 +26,7 @@ export default async function CompanyLayout({
     // พิมพ์เอกสาร: ซ่อนแถบบน/เมนู ให้เหลือแต่กระดาษ
     <div className="flex h-dvh flex-col print:block print:h-auto">
       <div className="contents print:hidden">
-      <Topbar company={company.name} month={monthLabel(todayIso())} mode={company.mode} work={company.mode === 'submit' ? company.status : null} user={`${me.studentCode ?? ''} ${me.displayName}`.trim()} userId={me.id} />
+      <Topbar company={company.name} home={`/c/${companyId}`} month={monthLabel(todayIso())} mode={company.mode} work={company.mode === 'submit' ? company.status : null} user={`${me.studentCode ?? ''} ${me.displayName}`.trim()} userId={me.id} />
       </div>
       <div className="flex min-h-0 flex-1 print:block">
         <div className="contents print:hidden"><SideNav companyId={companyId} /></div>
