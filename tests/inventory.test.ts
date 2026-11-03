@@ -63,3 +63,50 @@ describe('สินค้าคงเหลือ', () => {
     expect(count.rows[0].n).toBe(1);
   });
 });
+
+describe('สินค้าคงเหลือกับเอกสารซื้อ/ขาย', () => {
+  async function trading() {
+    const { owner, company } = await setup();
+    await pool.query(`update acc.companies set tax_id = '0105558012349', address = 'กรุงเทพฯ', version = version + 1 where id = $1`, [company]);
+    await pool.query(`insert into acc.parties (company_id, code, name, is_customer, is_vendor, tax_id, vat_registered)
+      values ($1, 'V1', 'ผู้ขาย', false, true, '0105558012349', true), ($1, 'C1', 'ลูกค้า', true, false, null, false)`, [company]);
+    return { owner, company };
+  }
+  const buy = (owner: string, co: string, qty: string, price: string) => asUser(owner, (c) => c.query(
+    `select acc.post_purchase_document($1, 'cash_purchase', $2::jsonb, $3) id`,
+    [co, JSON.stringify({ date: '2026-10-05', party_code: 'V1', vendor_doc_no: `R-${Math.random()}`, lines: [{ item_code: 'SKU-001', qty, unit_price: price }] }), `buy-${Math.random()}`]))
+    .then((r) => r.rows[0].id as string);
+  const sell = (owner: string, co: string, qty: string, price: string) => asUser(owner, (c) => c.query(
+    `select acc.post_sales_document($1, 'cash_sale', $2::jsonb, $3) id`,
+    [co, JSON.stringify({ date: '2026-10-06', party_code: 'C1', lines: [{ item_code: 'SKU-001', qty, unit_price: price }] }), `sell-${Math.random()}`]))
+    .then((r) => r.rows[0].id as string);
+  const stock = async (co: string) => (await pool.query(
+    `select quantity::text, value::text from acc.inventory_balance($1, (select id from acc.items where company_id = $1 and code = 'SKU-001'))`, [co])).rows[0];
+  const bal = async (co: string, code: string) => (await pool.query(
+    `select coalesce(sum(l.debit - l.credit), 0)::numeric(18,2)::text b from acc.journal_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id where l.company_id = $1 and a.code = $2`, [co, code])).rows[0].b;
+
+  it('ยกเลิกใบขายและใบซื้อที่มีสินค้าคงเหลือได้ สต็อกและบัญชี 1310 กลับตามจริง', async () => {
+    const { owner, company } = await trading();
+    const p = await buy(owner, company, '10', '100');
+    const s = await sell(owner, company, '4', '150');
+    expect(await stock(company)).toEqual({ quantity: '6.000', value: '600.00' });
+
+    await asUser(owner, (c) => c.query(`select acc.void_document($1, $2, '2026-10-20', 'ผิด', $3)`, [company, s, `v-${Math.random()}`]));
+    expect(await stock(company)).toEqual({ quantity: '10.000', value: '1000.00' });
+    expect(await bal(company, '1310')).toBe('1000.00');
+
+    await asUser(owner, (c) => c.query(`select acc.void_purchase_document($1, $2, '2026-10-21', 'ผิด', $3)`, [company, p, `v-${Math.random()}`]));
+    expect(await stock(company)).toEqual({ quantity: '0.000', value: '0.00' });
+    expect(await bal(company, '1310')).toBe('0.00');
+    expect(await bal(company, '5130')).toBe('0.00');
+  });
+
+  it('ยกเลิกใบซื้อไม่ได้ถ้าสินค้าถูกขายไปแล้วจนสต็อกไม่พอ', async () => {
+    const { owner, company } = await trading();
+    const p = await buy(owner, company, '5', '100');
+    await sell(owner, company, '3', '150');
+    await expect(asUser(owner, (c) => c.query(`select acc.void_purchase_document($1, $2, '2026-10-21', 'ผิด', $3)`, [company, p, `v-${Math.random()}`])))
+      .rejects.toSatisfy((e: unknown) => sqlstate(e) === 'ACC16');
+    expect(await stock(company)).toEqual({ quantity: '2.000', value: '200.00' });
+  });
+});
