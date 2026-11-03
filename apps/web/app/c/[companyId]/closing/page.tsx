@@ -20,7 +20,7 @@ export default async function ClosingPage({ params }: { params: Promise<{ compan
       <section className="flex flex-col gap-2 border border-rule-strong bg-paper p-4">
         <p className="text-[15px]">{th.closing.adjustNote}</p>
         {company.can_write && !company.locked && (
-          <Link href={`/c/${companyId}/journal/new`} className="inline-flex min-h-11 items-center self-start text-[15px] underline">
+          <Link href={`/c/${companyId}/journal/new?adjusting=1`} className="inline-flex min-h-11 items-center self-start text-[15px] underline">
             {th.closing.newAdjust}
           </Link>
         )}

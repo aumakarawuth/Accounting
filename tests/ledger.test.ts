@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { pool, asUser, newSchool, newUser, newClassroom, newCompany, post, money, sqlstate } from './helpers';
+import { pool, asUser, newSchool, newUser, newClassroom, newCompany, post, money, sqlstate, type Line } from './helpers';
 
 afterAll(() => pool.end());
 
@@ -14,7 +14,7 @@ async function setup() {
 }
 
 const expectCode = async (p: Promise<unknown>, code: string) => {
-  await expect(p).rejects.toSatisfy((e: any) => sqlstate(e) === code);
+  await expect(p).rejects.toSatisfy((e: unknown) => sqlstate(e) === code);
 };
 
 describe('ความถูกต้องของสมุดรายวัน', () => {
@@ -106,7 +106,7 @@ describe('ความถูกต้องของสมุดรายวั�
 
   it('ปฏิเสธเงินทศนิยมเกิน 2 ตำแหน่ง ด้านทั้งสอง ศูนย์ และรหัสบัญชีที่ไม่มี', async () => {
     const { owner, company } = await setup();
-    const run = (lines: any[]) => asUser(owner, (c) => post(c, company, '2026-10-01', lines));
+    const run = (lines: Line[]) => asUser(owner, (c) => post(c, company, '2026-10-01', lines));
     await expectCode(run([{ account_code: '1110', debit: '0.001' }, { account_code: '4110', credit: '0.001' }]), 'ACC05');
     await expectCode(run([{ account_code: '1110', debit: '5', credit: '5' }, { account_code: '4110', credit: '0' }]), 'ACC05');
     await expectCode(run([{ account_code: '1110', debit: '-5' }, { account_code: '4110', credit: '-5' }]), 'ACC05');
@@ -154,7 +154,7 @@ describe('ความถูกต้องของสมุดรายวั�
       pool.query(
         `insert into acc.journal_entries(company_id,period_id,doc_prefix,doc_no,entry_date,total_amount,posted_by)
          select $1,id,'ZZ','ZZ-1','2026-09-20',1,$2 from acc.periods where company_id=$1 and start_date='2026-09-01'`, [company, owner]),
-    ).rejects.toSatisfy((e: any) => sqlstate(e) === 'ACC02');
+    ).rejects.toSatisfy((e: unknown) => sqlstate(e) === 'ACC02');
     await expectCode(asUser(owner, (c) => c.query(`select acc.reopen_period($1,'2026-09-01')`, [company])), '42501');
     await asUser(teacher, (c) => c.query(`select acc.reopen_period($1,'2026-09-01')`, [company]));
     await asUser(owner, (c) => post(c, company, '2026-09-20', lines));

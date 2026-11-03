@@ -3,12 +3,24 @@
 // - หน้าเว็บ: ไปเน็ตเสมอ ออฟไลน์ค่อยแสดงหน้า /offline (ไม่เก็บหน้าที่มีข้อมูลบัญชี เครื่องห้องคอมใช้ร่วมกัน)
 // - /api: ไม่แตะเลย
 const STATIC = 'static-v1';
-const PAGES = 'offline-v1';
+const PAGES = 'offline-v2';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(PAGES).then((c) => c.add(new Request('/offline', { cache: 'reload' }))));
+  event.waitUntil(cacheOfflinePage());
   self.skipWaiting();
 });
+
+// หน้า /offline เก็บแบบไม่มีสคริปต์ของ Next: ถ้ามี router มันจะเห็นว่า URL ไม่ตรงกับหน้า (เช่น /c/.../trial-balance) แล้วขึ้นหน้าผิดพลาด
+// ปุ่มลองใหม่ = โหลดหน้าเดิมซ้ำ (สคริปต์สั้นในหน้า)
+async function cacheOfflinePage() {
+  const res = await fetch(new Request('/offline', { cache: 'reload' }));
+  const html = (await res.text())
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<link[^>]+rel="(?:preload|modulepreload)"[^>]*>/gi, '')
+    .replace('</body>', '<script>document.querySelectorAll("button").forEach(function(b){b.addEventListener("click",function(){location.reload()})})</script></body>');
+  const cache = await caches.open(PAGES);
+  await cache.put('/offline', new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } }));
+}
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {

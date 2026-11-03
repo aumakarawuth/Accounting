@@ -12,6 +12,9 @@ import { liveRoutes } from './routes/live.js';
 import { masterDataRoutes } from './routes/masterdata.js';
 import { salesRoutes } from './routes/sales.js';
 import { purchaseRoutes } from './routes/purchases.js';
+import { taxRoutes } from './routes/tax.js';
+import { worksheetRoutes } from './routes/worksheet.js';
+import { bankRoutes } from './routes/bank.js';
 import type { RealtimeBus } from './realtime.js';
 import { teacherRoutes } from './routes/teacher.js';
 
@@ -72,6 +75,9 @@ export function buildApp(opts: {
     masterDataRoutes(scope, opts.pool, auth);
     salesRoutes(scope, opts.pool, auth);
     purchaseRoutes(scope, opts.pool, auth);
+    taxRoutes(scope, opts.pool, auth);
+    worksheetRoutes(scope, opts.pool, auth);
+    bankRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
     liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs });

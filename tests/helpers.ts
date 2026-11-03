@@ -57,7 +57,10 @@ export function post(c: pg.PoolClient, company: string, date: string, lines: Lin
 }
 
 export const money = (cents: number) => (cents / 100).toFixed(2);
-export const sqlstate = (e: any) => e?.code as string | undefined;
+export const sqlstate = (e: unknown) =>
+  typeof e === 'object' && e !== null && 'code' in e && typeof e.code === 'string'
+    ? e.code
+    : undefined;
 
 /** หลักตรวจสอบเลขผู้เสียภาษี 13 หลัก คิดแยกจาก SQL เพื่อเทียบกัน */
 function taxCheckDigit(first12: string) {

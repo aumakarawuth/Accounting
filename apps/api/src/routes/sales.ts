@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { withUser } from '../db.js';
+import { querySequence, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
@@ -29,17 +29,17 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     const { companyId } = CompanyParams.parse(req.params);
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      const [company, customers, items, accounts] = await Promise.all([
-        c.query(`select name, tax_id as "taxId", branch_no as "branchNo", address, vat_registered as "vatRegistered", vat_rate::text as "vatRate",
+      const [company, customers, items, accounts] = await querySequence([
+        () => c.query(`select name, tax_id as "taxId", branch_no as "branchNo", address, vat_registered as "vatRegistered", vat_rate::text as "vatRate",
                         app.can_write_company(id) as "canWrite", app.company_locked(id) as locked from acc.companies where id = $1`, [companyId]),
-        c.query(`select code, name, credit_days as "creditDays", vat_registered as "vatRegistered", tax_id as "taxId",
+        () => c.query(`select code, name, credit_days as "creditDays", vat_registered as "vatRegistered", tax_id as "taxId",
                         branch_no as "branchNo", address from acc.parties where company_id = $1 and is_customer and active order by code`, [companyId]),
-        c.query(`select i.code, i.name, i.unit, i.is_service as "isService", i.sale_price::text as "salePrice", a.code as "salesAccount"
+        () => c.query(`select i.code, i.name, i.unit, i.is_service as "isService", i.sale_price::text as "salePrice", a.code as "salesAccount"
                    from acc.items i left join acc.chart_of_accounts a on a.company_id = i.company_id and a.id = i.sales_account_id
                   where i.company_id = $1 and i.active order by i.code`, [companyId]),
-        c.query(`select code, name, type from acc.chart_of_accounts
+        () => c.query(`select code, name, type from acc.chart_of_accounts
                   where company_id = $1 and active and (type = 'revenue' or (type = 'asset' and code like '11%')) order by code`, [companyId]),
-      ]);
+      ] as const);
       return {
         company: company.rows[0], customers: customers.rows, items: items.rows,
         revenueAccounts: accounts.rows.filter((a) => a.type === 'revenue').map(({ code, name }) => ({ code, name })),
@@ -121,20 +121,20 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
            cross join lateral acc.document_settled(d.company_id, d.id) s
           where d.company_id = $1 and d.id = $2`, [companyId, documentId])).rows[0];
       if (!d) throw new HttpError(404, 'not_found', 'ไม่พบเอกสารนี้');
-      const [lines, settles, settledBy, notes] = await Promise.all([
-        c.query(`select l.line_no as "lineNo", l.description, l.qty::text, l.unit, l.unit_price::text as "unitPrice", l.amount::text,
+      const [lines, settles, settledBy, notes] = await querySequence([
+        () => c.query(`select l.line_no as "lineNo", l.description, l.qty::text, l.unit, l.unit_price::text as "unitPrice", l.amount::text,
                         a.code as "accountCode", a.name as "accountName"
                    from acc.document_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
                   where l.company_id = $1 and l.document_id = $2 order by l.line_no`, [companyId, documentId]),
-        c.query(`select t.id, t.doc_no as "docNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
+        () => c.query(`select t.id, t.doc_no as "docNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
                    from acc.allocations a join acc.documents t on t.company_id = a.company_id and t.id = a.target_id
                   where a.company_id = $1 and a.source_id = $2 order by a.id`, [companyId, documentId]),
-        c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, s.voided_at is not null as voided
+        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, s.voided_at is not null as voided
                    from acc.allocations a join acc.documents s on s.company_id = a.company_id and s.id = a.source_id
                   where a.company_id = $1 and a.target_id = $2 order by s.doc_date, s.doc_no`, [companyId, documentId]),
-        c.query(`select x.id, x.kind, x.doc_no as "docNo", x.total::text, x.voided_at is not null as voided
+        () => c.query(`select x.id, x.kind, x.doc_no as "docNo", x.total::text, x.voided_at is not null as voided
                    from acc.documents x where x.company_id = $1 and x.ref_document_id = $2 order by x.doc_no`, [companyId, documentId]),
-      ]);
+      ] as const);
       await c.query('select app.log_company_view($1)', [companyId]);
       const settledApplies = d.kind === 'sales_invoice' || d.kind === 'debit_note';
       return { ...d, open: settledApplies && !d.voidedAt ? d.open : null, lines: lines.rows, settles: settles.rows, settledBy: settledBy.rows, notes: notes.rows };

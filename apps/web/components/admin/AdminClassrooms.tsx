@@ -67,7 +67,7 @@ export function AdminClassrooms({ rooms, teachers, onIssued }: { rooms: AdminCla
                 <td className={cell}>
                   <select
                     aria-label={`${th.admin.teacher} ${r.name}`}
-                    className="h-11 w-full rounded-doc border border-rule-input bg-paper px-2"
+                    className="h-11 w-full rounded-doc border border-rule-input bg-paper px-2 text-base"
                     defaultValue={r.teacherId}
                     onChange={async (e) => {
                       try {

@@ -22,7 +22,7 @@ export default async function CompanyHome({ params }: { params: Promise<{ compan
           <h1 className="font-doc text-[22px] font-bold sm:text-2xl">{th.journal.heading(company.name, monthLabel(month))}</h1>
           <p className="text-[15px] text-ink2">{th.journal.entriesCount(entries.length)}</p>
         </div>
-        <Link href={`/c/${companyId}/journal/new`} className="ml-auto inline-flex min-h-11 items-center gap-3.5 rounded-doc bg-ink px-4 font-medium text-paper max-sm:hidden">
+        <Link href={`/c/${companyId}/journal/new`} className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-3.5 rounded-doc bg-ink px-4 font-medium text-paper max-sm:min-h-12">
           {th.keys.newJournal}
         </Link>
       </div>

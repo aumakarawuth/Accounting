@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { withUser } from '../db.js';
+import { querySequence, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
@@ -30,23 +30,23 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
     const { companyId } = CompanyParams.parse(req.params);
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      const [company, vendors, items, accounts, system] = await Promise.all([
-        c.query(`select name, tax_id as "taxId", branch_no as "branchNo", address, vat_registered as "vatRegistered", vat_rate::text as "vatRate",
+      const [company, vendors, items, accounts, system] = await querySequence([
+        () => c.query(`select name, tax_id as "taxId", branch_no as "branchNo", address, vat_registered as "vatRegistered", vat_rate::text as "vatRate",
                         app.can_write_company(id) as "canWrite", app.company_locked(id) as locked from acc.companies where id = $1`, [companyId]),
-        c.query(`select code, name, credit_days as "creditDays", vat_registered as "vatRegistered", tax_id as "taxId",
+        () => c.query(`select code, name, credit_days as "creditDays", vat_registered as "vatRegistered", tax_id as "taxId",
                         branch_no as "branchNo", address, wht_kind as "whtKind", wht_rate::text as "whtRate"
                    from acc.parties where company_id = $1 and is_vendor and active order by code`, [companyId]),
-        c.query(`select i.code, i.name, i.unit, i.is_service as "isService", i.purchase_price::text as "purchasePrice", a.code as "purchaseAccount"
+        () => c.query(`select i.code, i.name, i.unit, i.is_service as "isService", i.purchase_price::text as "purchasePrice", a.code as "purchaseAccount"
                    from acc.items i left join acc.chart_of_accounts a on a.company_id = i.company_id and a.id = i.purchase_account_id
                   where i.company_id = $1 and i.active order by i.code`, [companyId]),
-        c.query(`select code, name, type from acc.chart_of_accounts
+        () => c.query(`select code, name, type from acc.chart_of_accounts
                   where company_id = $1 and active and (type = 'expense' or (type = 'asset' and left(code, 2) in ('11', '13', '15', '16')))
                   order by code`, [companyId]),
         // ชื่อบัญชีที่ระบบลงให้เอง (ภาษีซื้อ เจ้าหนี้ หัก ณ ที่จ่าย) ใช้แสดงตัวอย่างรายการบัญชี ไม่มีในผังใช้ชื่อแม่แบบ
-        c.query(`select t.code, coalesce(a.name, t.name) as name from acc.coa_template t
+        () => c.query(`select t.code, coalesce(a.name, t.name) as name from acc.coa_template t
                    left join acc.chart_of_accounts a on a.company_id = $1 and a.code = t.code
                   where t.code in ('1410', '1411', '2110', '2230', '5140') order by t.code`, [companyId]),
-      ]);
+      ] as const);
       return {
         company: company.rows[0], vendors: vendors.rows, items: items.rows,
         expenseAccounts: accounts.rows.filter((a) => !a.code.startsWith('11')).map(({ code, name }) => ({ code, name })),
@@ -130,26 +130,26 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
            cross join lateral acc.purchase_settled(d.company_id, d.id) s
           where d.company_id = $1 and d.id = $2`, [companyId, documentId])).rows[0];
       if (!d) throw new HttpError(404, 'not_found', 'ไม่พบเอกสารนี้');
-      const [lines, settles, settledBy, notes, cert] = await Promise.all([
-        c.query(`select l.line_no as "lineNo", l.description, l.qty::text, l.unit, l.unit_price::text as "unitPrice", l.amount::text,
+      const [lines, settles, settledBy, notes, cert] = await querySequence([
+        () => c.query(`select l.line_no as "lineNo", l.description, l.qty::text, l.unit, l.unit_price::text as "unitPrice", l.amount::text,
                         a.code as "accountCode", a.name as "accountName"
                    from acc.purchase_document_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
                   where l.company_id = $1 and l.document_id = $2 order by l.line_no`, [companyId, documentId]),
-        c.query(`select t.id, t.doc_no as "docNo", t.vendor_doc_no as "vendorDocNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
+        () => c.query(`select t.id, t.doc_no as "docNo", t.vendor_doc_no as "vendorDocNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
                    from acc.purchase_allocations a join acc.purchase_documents t on t.company_id = a.company_id and t.id = a.target_id
                   where a.company_id = $1 and a.source_id = $2 order by a.id`, [companyId, documentId]),
-        c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, s.voided_at is not null as voided
+        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, s.voided_at is not null as voided
                    from acc.purchase_allocations a join acc.purchase_documents s on s.company_id = a.company_id and s.id = a.source_id
                   where a.company_id = $1 and a.target_id = $2 order by s.doc_date, s.doc_no`, [companyId, documentId]),
-        c.query(`select x.id, x.kind, x.doc_no as "docNo", x.total::text, x.voided_at is not null as voided
+        () => c.query(`select x.id, x.kind, x.doc_no as "docNo", x.total::text, x.voided_at is not null as voided
                    from acc.purchase_documents x where x.company_id = $1 and x.ref_document_id = $2 order by x.doc_no`, [companyId, documentId]),
-        c.query(`select w.cert_no as "certNo", to_char(w.cert_date, 'YYYY-MM-DD') as date, w.form, w.payer_name as "payerName",
+        () => c.query(`select w.cert_no as "certNo", to_char(w.cert_date, 'YYYY-MM-DD') as date, w.form, w.payer_name as "payerName",
                         w.payer_tax_id as "payerTaxId", w.payer_branch_no as "payerBranchNo", w.payer_address as "payerAddress",
                         w.payee_name as "payeeName", w.payee_tax_id as "payeeTaxId", w.payee_branch_no as "payeeBranchNo",
                         w.payee_address as "payeeAddress", w.wht_kind as "whtKind", w.wht_rate::text as "whtRate", w.base::text,
                         w.amount::text, w.voided_at is not null as voided
                    from acc.wht_certificates w where w.company_id = $1 and w.document_id = $2`, [companyId, documentId]),
-      ]);
+      ] as const);
       await c.query('select app.log_company_view($1)', [companyId]);
       return {
         ...d, open: d.kind === 'purchase_invoice' && !d.voidedAt ? d.open : null,

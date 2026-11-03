@@ -22,6 +22,7 @@ export const PostJournal = z
     date: IsoDate,
     description: z.string().max(500).default(''),
     lines: z.array(JournalLine).min(2).max(200),
+    adjusting: z.boolean().optional(), // รายการปรับปรุง: เลขที่ชุด AJ ลงวันสิ้นเดือน
   })
   .strict();
 
@@ -214,3 +215,15 @@ export const PurchaseListQuery = z.object({
   party: MasterCode.optional(),
   month: Month.optional(),
 }).strict();
+
+// ---- เฟส 2.4 ภาษี ----
+export const TaxMonthParams = z.object({ companyId: Uuid, month: Month });
+export const TaxMonthQuery = z.object({ month: Month.optional() }).strict();
+export const VatClosingParams = z.object({ companyId: Uuid, closingId: Uuid });
+export const WhtRemitParams = z.object({ companyId: Uuid, month: Month, form: z.enum(['pnd3', 'pnd53']) });
+export const TaxPayment = z.object({ date: IsoDate, cashAccount: AccountCode.optional() }).strict();
+export const VoidVatClose = z.object({ reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
+
+// ---- กระดาษทำการ ----
+export const WORKSHEET_FORMATS = [6, 8, 10] as const;
+export const WorksheetQuery = z.object({ month: Month, format: z.enum(['6', '8', '10']).optional() }).strict();

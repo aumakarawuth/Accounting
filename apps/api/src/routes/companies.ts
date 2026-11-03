@@ -285,8 +285,29 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     const key = idemKey(req);
     const out = await withUser(pool, await user(req), async (c) => {
       // เรียกฟังก์ชันลงบัญชีเป็นคำสั่งเดี่ยว (ห้ามวางใน WHERE: อาจถูกเรียกซ้ำต่อแถว)
-      const posted = await c.query('select acc.post_journal($1, $2, $3, $4::jsonb, $5) as id', [
-        companyId, body.date, body.description, JSON.stringify(body.lines), key,
+      const posted = await c.query('select acc.post_journal($1, $2, $3, $4::jsonb, $5, $6) as id', [
+        companyId, body.date, body.description, JSON.stringify(body.lines), key, body.adjusting ? 'AJ' : 'JV',
+      ]);
+      return docNo(c, companyId, posted.rows[0].id);
+    });
+    return reply.code(201).send({ id: out.id, docNo: out.doc_no });
+  });
+
+  // แก้ไขรายการ = กลับรายการเดิม + ผ่านรายการใหม่ ในธุรกรรมเดียว (ร่องรอยครบ เลขที่ไม่ข้าม)
+  // เฉพาะสมุดรายวันทั่วไป/รายการปรับปรุง เอกสารขาย/ซื้อ/ภาษีต้องยกเลิกที่ตัวเอกสาร
+  app.post('/companies/:companyId/journal/:entryId/replace', async (req, reply) => {
+    const { companyId, entryId } = EntryParams.parse(req.params);
+    const body = PostJournal.parse(req.body);
+    const key = idemKey(req);
+    const out = await withUser(pool, await user(req), async (c) => {
+      const old = (await c.query('select doc_prefix, doc_no from acc.journal_entries where company_id = $1 and id = $2', [companyId, entryId])).rows[0];
+      if (!old) throw new HttpError(404, 'not_found', 'ไม่พบรายการนี้');
+      if (old.doc_prefix !== 'JV' && old.doc_prefix !== 'AJ') {
+        throw new HttpError(422, 'ACC15', `รายการ ${old.doc_no} มาจากเอกสาร แก้ไขที่ตัวเอกสาร (ยกเลิกแล้วออกใหม่)`);
+      }
+      await c.query('select acc.reverse_journal($1, $2, $3, $4, $5)', [companyId, entryId, body.date, `${key}:rv`, `แก้ไข ${old.doc_no}`]);
+      const posted = await c.query('select acc.post_journal($1, $2, $3, $4::jsonb, $5, $6) as id', [
+        companyId, body.date, body.description, JSON.stringify(body.lines), key, old.doc_prefix,
       ]);
       return docNo(c, companyId, posted.rows[0].id);
     });

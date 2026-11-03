@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { api, type Account, type ApiError } from '@/lib/api';
 import { fromCents, formatMoney, toCents } from '@/lib/money';
-import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { addDays, addMonths, isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { th } from '@/i18n/th';
 import { clearDraft, setDraft } from '@/lib/presence';
 import { deleteDraft, hasContent, loadDraft, saveDraft } from '@/lib/drafts';
@@ -92,10 +92,20 @@ function AccountField({
   );
 }
 
-export function JournalForm({ companyId, accounts, locked = false }: { companyId: string; accounts: Account[]; locked?: boolean }) {
-  const [date, setDate] = useState(isoToThai(todayIso()));
-  const [description, setDescription] = useState('');
-  const [lines, setLines] = useState<Line[]>(() => [blank(), blank()]);
+export type EditSource = { id: string; docNo: string; date: string; description: string; lines: { code: string; debit: string; credit: string; memo: string }[] };
+
+export function JournalForm({ companyId, accounts, locked = false, adjusting = false, edit }: {
+  companyId: string; accounts: Account[]; locked?: boolean; adjusting?: boolean;
+  /** แก้ไขรายการที่ผ่านแล้ว: ฟอร์มเริ่มจากค่าเดิม ผ่านรายการ = กลับรายการเดิม + ลงรายการใหม่ */
+  edit?: EditSource;
+}) {
+  // รายการปรับปรุง (AJ) ลงวันสิ้นเดือน ร่างแยกจากสมุดรายวันปกติ · แก้ไขรายการ: ร่างแยกต่อรายการ
+  const draftKey = edit ? `${companyId}:edit:${edit.id}` : adjusting ? `${companyId}:AJ` : companyId;
+  const [date, setDate] = useState(() => isoToThai(edit ? edit.date : adjusting ? addDays(`${addMonths(todayIso().slice(0, 7), 1)}-01`, -1) : todayIso()));
+  const [description, setDescription] = useState(edit?.description ?? '');
+  const [lines, setLines] = useState<Line[]>(() => (edit
+    ? edit.lines.map((l) => ({ ...blank(), code: l.code, debit: l.debit === '0.00' ? '' : l.debit, credit: l.credit === '0.00' ? '' : l.credit, memo: l.memo }))
+    : [blank(), blank()]));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
   const idem = useRef(newKey()); // คีย์เดิมจนกว่าจะผ่านรายการสำเร็จ (กดซ้ำ/เน็ตหลุดไม่เกิดรายการซ้ำ)
@@ -128,7 +138,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
   useEffect(() => {
     if (locked) return;
     let alive = true;
-    void loadDraft(companyId).then((d) => {
+    void loadDraft(draftKey).then((d) => {
       if (!alive) return;
       if (d && hasContent(d)) {
         setDate(d.date);
@@ -140,7 +150,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
       loaded.current = true;
     });
     return () => { alive = false; };
-  }, [companyId, locked]);
+  }, [draftKey, locked]);
 
   // เก็บร่างลงเครื่องทุกครั้งที่แก้ (หน่วง 150ms) ฟอร์มว่าง = ลบร่าง
   // ที่ค้างอยู่ต้องเก็บทันทีเมื่อออกจากหน้า (กดเมนู/ปิดแท็บ/สลับแอป) ไม่อย่างนั้นสิ่งที่พิมพ์ล่าสุดหาย
@@ -150,12 +160,12 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
     const write = () => {
       pendingSave.current = null;
       const d = { date, description, lines: lines.map(({ code, debit, credit, memo }) => ({ code, debit, credit, memo })), idemKey: idem.current };
-      void (hasContent(d) ? saveDraft(companyId, d) : deleteDraft(companyId));
+      void (hasContent(d) ? saveDraft(draftKey, d) : deleteDraft(draftKey));
     };
     pendingSave.current = write;
     const t = setTimeout(write, 150);
     return () => clearTimeout(t);
-  }, [date, description, lines, locked, companyId]);
+  }, [date, description, lines, locked, draftKey]);
   useEffect(() => {
     const flush = () => pendingSave.current?.();
     const onHidden = () => { if (document.visibilityState === 'hidden') flush(); };
@@ -196,6 +206,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
       const payload = {
         date: isoDate,
         description,
+        ...(adjusting ? { adjusting: true } : {}),
         lines: lines
           .filter((l) => toCents(l.debit) !== 0n || toCents(l.credit) !== 0n)
           .map((l) => {
@@ -203,15 +214,16 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
             return { account_code: l.code, ...(d > 0n ? { debit: fromCents(d) } : { credit: fromCents(c) }), ...(l.memo ? { memo: l.memo } : {}) };
           }),
       };
-      const r = await api<{ id: string; docNo: string }>(`/companies/${companyId}/journal`, {
+      const r = await api<{ id: string; docNo: string }>(edit ? `/companies/${companyId}/journal/${edit.id}/replace` : `/companies/${companyId}/journal`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': idem.current },
         body: JSON.stringify(payload),
       });
       setResult({ ok: true, text: th.journal.posted(r.docNo), href: `/c/${companyId}/journal/${r.id}` });
+      if (edit) { void deleteDraft(draftKey); window.location.assign(`/c/${companyId}/journal/${r.id}`); return; }
       void clearDraft();
       pendingSave.current = null;
-      void deleteDraft(companyId);
+      void deleteDraft(draftKey);
       setRestored(null);
       setLines([blank(), blank()]);
       setDescription('');
@@ -222,7 +234,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
     } finally {
       setBusy(false);
     }
-  }, [canPost, isoDate, description, lines, companyId]);
+  }, [canPost, isoDate, description, lines, companyId, adjusting, draftKey, edit]);
 
   // ปุ่มลัดแบบโปรแกรมบัญชี (มีปุ่มบนจอให้กดได้เสมอ ปุ่มลัดเป็นทางเสริม)
   useEffect(() => {
@@ -249,7 +261,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
           <button
             type="button"
             className="min-h-11 text-sm underline"
-            onClick={() => { setLines([blank(), blank()]); setDescription(''); setRestored(null); idem.current = newKey(); void deleteDraft(companyId); }}
+            onClick={() => { setLines([blank(), blank()]); setDescription(''); setRestored(null); idem.current = newKey(); void deleteDraft(draftKey); }}
           >
             {th.journal.discardDraft}
           </button>
@@ -257,7 +269,11 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
       )}
       <section className="m-3 flex flex-col gap-4 border border-rule-strong bg-paper p-4 sm:m-5 sm:p-6">
         <div className="flex items-start justify-between border-b-2 border-ink pb-2.5">
-          <h1 className="font-doc text-[19px] font-bold sm:text-2xl">{th.journal.title}</h1>
+          <div>
+            <h1 className="font-doc text-[19px] font-bold sm:text-2xl">{edit ? th.journal.editTitle(edit.docNo) : adjusting ? th.journal.adjustTitle : th.journal.title}</h1>
+            {edit ? <p className="mt-1 text-sm text-ink2">{th.journal.editNote(edit.docNo)}</p>
+              : adjusting && <p className="mt-1 text-sm text-ink2">{th.journal.adjustNote}</p>}
+          </div>
           <p className="text-right text-sm text-ink2">
             {th.invoice.docNo} {th.journal.docNoPending}
           </p>
@@ -366,7 +382,7 @@ export function JournalForm({ companyId, accounts, locked = false }: { companyId
             type="button"
             variant="secondary"
             className="max-sm:hidden"
-            onClick={() => { setLines([blank(), blank()]); setDescription(''); setResult(null); setRestored(null); void deleteDraft(companyId); }}
+            onClick={() => { setLines([blank(), blank()]); setDescription(''); setResult(null); setRestored(null); void deleteDraft(draftKey); }}
           >
             {th.journal.clear}
           </Button>
