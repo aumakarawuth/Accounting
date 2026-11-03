@@ -18,7 +18,7 @@ type Props = {
 export function Topbar({ company, home, month, mode, work, userId, user }: Props) {
   const cell = 'border-l border-rule px-4 max-sm:border-0 max-sm:px-0';
   return (
-    <header className="flex items-center border-b border-rule-strong bg-paper max-sm:pl-1">
+    <header className="flex items-center border-b border-rule-strong bg-paper max-sm:pl-2">
       <BackButton fallback={home} />
       <div className="flex min-h-[52px] min-w-0 flex-1 items-center text-[15px] max-sm:flex-col max-sm:items-start max-sm:px-2 max-sm:py-2 sm:min-h-14 lg:min-h-[52px]">
         <span className="hidden w-[220px] shrink-0 px-4 font-semibold lg:block lg:w-[232px]">{th.app.name}</span>
