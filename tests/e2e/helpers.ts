@@ -64,7 +64,7 @@ export async function checkScreen(page: Page, info: TestInfo, name: string) {
 
 export async function login(page: Page, kind: 'student' | 'staff', id: string, password: string) {
   await page.goto(kind === 'staff' ? '/login/staff' : '/login');
-  await page.getByLabel(kind === 'staff' ? 'อีเมล' : 'รหัสนักเรียน').fill(id);
+  await page.getByLabel(kind === 'staff' ? 'ชื่อผู้ใช้' : 'รหัสนักเรียน').fill(id);
   await page.getByLabel('รหัสผ่าน', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'เข้าใช้งาน' }).click();
 }
