@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
-import { api, postJson, type ApiError, type SalesFormData, type SalesRow } from '@/lib/api';
+import { api, postJson, type ApiError, type ChequeRow, type SalesFormData, type SalesRow } from '@/lib/api';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { rateHundredths } from '@/lib/vat';
@@ -31,6 +31,11 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
   const [cashAccount, setCashAccount] = useState(form.cashAccounts[0]?.code ?? '1110');
   const [whtRate, setWhtRate] = useState(''); // '' = ไม่หัก
   const [whtAmount, setWhtAmount] = useState<string | null>(null); // null = ตามที่ระบบเสนอ
+  // รับเป็นเช็ค: ใบเสร็จลงบัญชีพักเช็ค (1220/1221) แล้วลงทะเบียนเช็คพร้อมกัน (acc.register_cheque)
+  const [byCheque, setByCheque] = useState(false);
+  const [chequeNo, setChequeNo] = useState('');
+  const [chequeBank, setChequeBank] = useState('');
+  const [chequeDate, setChequeDate] = useState(isoToThai(todayIso()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID()); // คีย์เดิมจนบันทึกสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
@@ -72,26 +77,31 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
   }, [open, amounts, whtRate, whtAmount]);
 
   const isoDate = thaiToIso(date);
+  const isoChequeDate = thaiToIso(chequeDate);
+  const chequeBad = !byCheque ? null : !/^[0-9A-Za-z-]{1,20}$/.test(chequeNo) ? th.cheques.invalid.chequeNo
+    : chequeBank.trim() === '' ? th.cheques.invalid.bank : isoChequeDate === null ? th.cheques.invalid.date : null;
+  const receiveCode = byCheque ? (isoChequeDate && isoDate && isoChequeDate > isoDate ? '1221' : '1220') : cashAccount;
   const whtBad = calc.wht === null || (calc.wht > 0n && calc.wht >= calc.total);
   const blocked = !party ? th.sales.customerRequired
-    : calc.bad ?? (calc.total === 0n ? th.sales.selectOne : isoDate === null ? th.sales.dateInvalid : whtBad ? th.sales.whtInvalid : null);
+    : calc.bad ?? (calc.total === 0n ? th.sales.selectOne : isoDate === null ? th.sales.dateInvalid : whtBad ? th.sales.whtInvalid : chequeBad);
   const canPost = writable && !busy && !blocked;
 
   // ร่างในเครื่อง + ครูดูสด
   const w = calc.wht ?? 0n;
   const entry: EntryLine[] = [
-    { code: cashAccount, debit: calc.total - w, credit: 0n },
+    { code: receiveCode, debit: calc.total - w, credit: 0n },
     ...(w > 0n ? [{ code: '1420', debit: w, credit: 0n }] : []),
     ...(calc.vat > 0n ? [{ code: '2211', debit: calc.vat, credit: 0n }] : []),
     { code: '1210', debit: 0n, credit: calc.total },
     ...(calc.vat > 0n ? [{ code: '2210', debit: 0n, credit: calc.vat }] : []),
   ];
-  const draft = useDocDraft(writable ? 'receipt' : null, companyId, { partyCode, amounts, date, cashAccount, whtRate, whtAmount, idemKey }, {
+  const draft = useDocDraft(writable ? 'receipt' : null, companyId, { partyCode, amounts, date, cashAccount, whtRate, whtAmount, idemKey, byCheque, chequeNo, chequeBank, chequeDate }, {
     isEmpty: (d) => !d.partyCode,
     restore: (d) => {
       if (initialParty && d.partyCode !== initialParty) return false; // เปิดจากหน้าเอกสารของลูกค้ารายอื่น: ไม่ทับด้วยร่างเก่า
       setPartyCode(d.partyCode); setAmounts(d.amounts); setDate(d.date); setCashAccount(d.cashAccount);
       setWhtRate(d.whtRate); setWhtAmount(d.whtAmount); setIdemKey(d.idemKey);
+      setByCheque(d.byCheque ?? false); setChequeNo(d.chequeNo ?? ''); setChequeBank(d.chequeBank ?? ''); if (d.chequeDate) setChequeDate(d.chequeDate);
     },
     live: calc.total > 0n ? { title: th.sales.receiptTitle, date: isoDate ?? date, description: party?.name ?? '', lines: liveLines(entry) } : null,
   });
@@ -107,19 +117,23 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
     setBusy(true);
     setError(null);
     try {
-      const r = await postJson<{ id: string }>(`/companies/${companyId}/receipts`, {
-        date: isoDate, partyCode, cashAccount,
-        ...(calc.wht! > 0n ? { whtAmount: fromCents(calc.wht!) } : {}),
+      const receipt = {
+        partyCode, ...(calc.wht! > 0n ? { whtAmount: fromCents(calc.wht!) } : {}),
         allocations: open.filter((x) => x.id in amounts).map((x) => ({ documentId: x.id, amount: fromCents(toCents(amounts[x.id]!)!) })),
-      }, { 'idempotency-key': idemKey });
+      };
+      const id = byCheque
+        ? (await postJson<ChequeRow>(`/companies/${companyId}/cheques`, {
+            direction: 'received', chequeNo, bankName: chequeBank.trim(), chequeDate: isoChequeDate, date: isoDate, receipt,
+          }, { 'idempotency-key': idemKey })).documentId!
+        : (await postJson<{ id: string }>(`/companies/${companyId}/receipts`, { date: isoDate, cashAccount, ...receipt }, { 'idempotency-key': idemKey })).id;
       draft.finish();
-      router.push(`/c/${companyId}/sales/documents/${r.id}`);
+      router.push(`/c/${companyId}/sales/documents/${id}`);
     } catch (e) {
       const err = e as ApiError;
       setError(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message);
       setBusy(false);
     }
-  }, [canPost, isoDate, open, companyId, partyCode, cashAccount, calc.wht, amounts, router, draft, idemKey]);
+  }, [canPost, isoDate, open, companyId, partyCode, cashAccount, calc.wht, amounts, router, draft, idemKey, byCheque, chequeNo, chequeBank, isoChequeDate]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'F9') { e.preventDefault(); void submit(); } };
@@ -179,12 +193,36 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
               {th.sales.date}
               <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={isoDate === null} />
             </label>
-            <label className="flex flex-col text-sm">
-              {th.sales.cashAccount}
-              <select className={inputCls} value={cashAccount} onChange={(e) => setCashAccount(e.target.value)}>
-                {form.cashAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}
-              </select>
+            {byCheque ? (
+              <label className="flex flex-col text-sm">
+                {th.cheques.chequeDate}
+                <input className={`${inputCls} font-num`} inputMode="numeric" value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} aria-invalid={isoChequeDate === null} />
+              </label>
+            ) : (
+              <label className="flex flex-col text-sm">
+                {th.sales.cashAccount}
+                <select className={inputCls} value={cashAccount} onChange={(e) => setCashAccount(e.target.value)}>
+                  {form.cashAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="col-span-2 flex min-h-11 items-center gap-3 text-[15px]">
+              <input type="checkbox" className="size-5 shrink-0 text-base accent-ink" checked={byCheque} onChange={(e) => setByCheque(e.target.checked)} />
+              {th.cheques.byCheque.received}
             </label>
+            {byCheque && (
+              <>
+                <label className="flex flex-col text-sm">
+                  {th.cheques.chequeNo}
+                  <input className={`${inputCls} font-num`} value={chequeNo} maxLength={20} onChange={(e) => setChequeNo(e.target.value.trim())} />
+                </label>
+                <label className="flex flex-col text-sm">
+                  {th.cheques.bankName}
+                  <input className={inputCls} value={chequeBank} maxLength={100} onChange={(e) => setChequeBank(e.target.value)} />
+                </label>
+                <p className="col-span-2 text-[13px] text-ink2">{th.cheques.byChequeNote.received} · {th.cheques.entryHint(receiveCode, '1210')}</p>
+              </>
+            )}
             <label className="flex flex-col text-sm">
               {th.sales.whtRate}
               <select className={inputCls} value={whtRate} onChange={(e) => { setWhtRate(e.target.value); setWhtAmount(null); }}>

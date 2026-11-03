@@ -192,3 +192,32 @@ export type Worksheet = {
   totals?: { tb: WsPair; adj: WsPair; atb: WsPair; is: WsPair; bs: WsPair };
   netIncome?: string; result?: { is: WsPair; bs: WsPair }; grand?: { is: WsPair; bs: WsPair };
 };
+
+// ---- เฟส 3.3 เช็ค ----
+export type ChequeStatus = 'on_hand' | 'deposited' | 'issued' | 'cleared' | 'bounced' | 'cancelled';
+export type ChequeRow = {
+  id: string; direction: 'received' | 'paid'; chequeNo: string; bankName: string; bankBranch: string; chequeDate: string; issueDate: string;
+  amount: string; partyName: string; holdingCode: string; bankCode: string | null; counterCode: string | null; status: ChequeStatus;
+  statusDate: string; depositCode: string | null; documentId: string | null; documentNo: string | null; entryId: string; entryDocNo: string;
+  statusEntryId: string | null; statusDocNo: string | null; postdated: boolean; description: string;
+};
+export type CodeName = { code: string; name: string };
+export type ChequePage = {
+  company: { name: string; canWrite: boolean; locked: boolean };
+  cheques: ChequeRow[]; bankAccounts: CodeName[]; accounts: CodeName[];
+};
+
+// ---- เฟส 3.4 สินทรัพย์ถาวร ----
+export type AssetStatus = 'active' | 'fully_depreciated' | 'disposed' | 'voided';
+export type AssetRow = {
+  id: string; code: string; name: string; acquiredDate: string; depStart: string; cost: string; salvage: string; lifeMonths: number;
+  monthly: string; assetCode: string; accumCode: string; expenseCode: string; monthsPosted: number; accumulated: string;
+  depThisMonth: string; bookValue: string; status: AssetStatus; disposalId: string | null; disposalDate: string | null;
+  proceeds: string | null; gainLoss: string | null; entryId: string | null; disposalEntryId: string | null; nextMonth: string | null;
+};
+export type DepreciationRunRow = { id: string; month: string; entryId: string | null; docNo: string | null; date: string | null; amount: string; lines: number; voided: boolean; voidDocNo: string | null };
+export type AssetPage = {
+  company: { name: string; canWrite: boolean; locked: boolean };
+  month: string; assets: AssetRow[]; runs: DepreciationRunRow[];
+  assetAccounts: CodeName[]; expenseAccounts: CodeName[]; accounts: CodeName[];
+};

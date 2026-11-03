@@ -45,7 +45,7 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         // ชื่อบัญชีที่ระบบลงให้เอง (ภาษีซื้อ เจ้าหนี้ หัก ณ ที่จ่าย) ใช้แสดงตัวอย่างรายการบัญชี ไม่มีในผังใช้ชื่อแม่แบบ
         () => c.query(`select t.code, coalesce(a.name, t.name) as name from acc.coa_template t
                    left join acc.chart_of_accounts a on a.company_id = $1 and a.code = t.code
-                  where t.code in ('1410', '1411', '2110', '2230', '5140') order by t.code`, [companyId]),
+                  where t.code in ('1410', '1411', '2110', '2120', '2121', '2230', '5140') order by t.code`, [companyId]),
       ] as const);
       return {
         company: company.rows[0], vendors: vendors.rows, items: items.rows,
