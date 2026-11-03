@@ -85,6 +85,16 @@ describe('นำเข้านักเรียนจาก CSV', () => {
     for (const b of bad) expect((await call(teacherC, 'POST', `/classrooms/${room}/import`, b)).statusCode, JSON.stringify(b)).toBe(400);
   });
 
+  it('ครูกำหนดรหัสผ่านเริ่มต้นในไฟล์ได้ นักเรียนเข้าด้วยรหัสนั้นแล้วต้องเปลี่ยนเอง; รหัสสั้นเกินถูกปฏิเสธ', async () => {
+    const code = `${tag}-pw`;
+    const r = await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: code, name: 'มานะ ตั้งใจ', password: 'Room5-2569' }] });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().results[0].tempPassword).toBe('Room5-2569');
+    expect((await login('student', code, 'Room5-2569')).res.json()).toEqual({ role: 'student', mustChange: true });
+    const short = await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: `${tag}-sh`, name: 'x', password: '123' }] });
+    expect(short.statusCode).toBe(400);
+  });
+
   it('รหัสที่เป็นบัญชีครูอยู่แล้วนำเข้าเป็นนักเรียนไม่ได้', async () => {
     await db.query(`update acc.users set student_code = 'T-CONFLICT' where id = $1`, [teacherId]).catch(() => {});
     const r = await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: 'T-CONFLICT', name: 'x' }] });
@@ -95,7 +105,7 @@ describe('นำเข้านักเรียนจาก CSV', () => {
 
 describe('หน้าผู้ดูแล: ครูและห้อง', () => {
   let newTeacher: string, temp: string;
-  const email = `new-${randomUUID().slice(0, 8)}@school.test`;
+  const email = `new-${randomUUID().slice(0, 8)}`;
 
   it('สร้างครู ได้รหัสชั่วคราว ล็อกอินได้แบบต้องเปลี่ยนรหัส; อีเมลซ้ำได้ 409', async () => {
     const r = await call(adminC, 'POST', '/admin/staff', { email: email.toUpperCase(), name: 'ครูใหม่' });
@@ -114,7 +124,7 @@ describe('หน้าผู้ดูแล: ครูและห้อง', ()
     expect((await call(adminC, 'POST', `/admin/classrooms/${id}/teacher`, { teacherId: newTeacher })).statusCode).toBe(200);
     const list = (await call(adminC, 'GET', '/admin/classrooms')).json();
     expect(list.find((x: { id: string }) => x.id === id)).toMatchObject({ teacherId: newTeacher, students: 0 });
-    expect(list.find((x: { id: string }) => x.id === room).students).toBe(2);
+    expect(list.find((x: { id: string }) => x.id === room).students).toBe(3);
     // กำหนดผู้ดูแลเป็นครูประจำห้องไม่ได้
     expect((await call(adminC, 'POST', `/admin/classrooms/${id}/teacher`, { teacherId: adminId })).statusCode).toBe(422);
   });

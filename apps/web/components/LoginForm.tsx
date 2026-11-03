@@ -58,8 +58,8 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
         <input
           name="identifier"
           className={`${input} ${kind === 'student' ? 'font-num' : ''} ${error ? 'border-red' : 'border-rule-input'}`}
-          inputMode={kind === 'student' ? 'numeric' : 'email'}
-          type={kind === 'student' ? 'text' : 'email'}
+          inputMode={kind === 'student' ? 'numeric' : 'text'}
+          type="text"
           autoComplete="username"
           autoCapitalize="none"
           required

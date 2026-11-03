@@ -59,7 +59,7 @@ export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: 
         }}
       >
         <label className="flex flex-col gap-1 text-sm">{th.admin.email}
-          <input className={input} type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <input className={input} type="text" autoCapitalize="none" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{2,39}" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </label>
         <label className="flex flex-col gap-1 text-sm">{th.admin.name}
           <input className={input} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />

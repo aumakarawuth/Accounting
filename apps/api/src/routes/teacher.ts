@@ -90,7 +90,8 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
     const temps = new Map<string, string>();
     const payload = await Promise.all(rows.map(async (r) => {
       if (existing.has(r.studentCode)) return { code: r.studentCode, name: r.name, hash: null };
-      const temp = temporaryPassword();
+      // ครูกำหนดรหัสเริ่มต้นมาในไฟล์ได้ (ว่าง = สุ่ม) นักเรียนต้องเปลี่ยนเองเมื่อเข้าครั้งแรก
+      const temp = r.password?.trim() || temporaryPassword();
       temps.set(r.studentCode, temp);
       return { code: r.studentCode, name: r.name, hash: await hashPassword(temp) };
     }));

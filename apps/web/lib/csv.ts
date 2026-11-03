@@ -41,8 +41,8 @@ export function parseCsv(text: string): CsvRow[] {
   return rows.filter((r) => r.cells.some((c) => c.trim() !== ''));
 }
 
-export type Problem = 'invalid_code' | 'empty_name' | 'name_too_long' | 'duplicate';
-export type StudentRow = { line: number; studentCode: string; name: string; problems: Problem[] };
+export type Problem = 'invalid_code' | 'empty_name' | 'name_too_long' | 'duplicate' | 'short_password';
+export type StudentRow = { line: number; studentCode: string; name: string; password: string; problems: Problem[] };
 
 const CODE = /^[0-9A-Za-z-]{1,20}$/;
 const clean = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim();
@@ -56,13 +56,15 @@ export function toStudentRows(table: CsvRow[]): { rows: StudentRow[]; header: bo
   const header = (first.length > 0 && !CODE.test(clean(first[0] ?? ''))) || first.some((c) => /รหัส|ชื่อ|code|name/i.test(c));
   let codeCol = 0;
   let nameCols: number[] = [];
+  let pwCol = -1;
   if (header) {
     const h = first.map((c) => clean(c).toLowerCase());
-    codeCol = h.findIndex((c) => /รหัส|code|student.?id/.test(c));
-    const name = h.findIndex((c, i) => i !== codeCol && /ชื่อ|name/.test(c) && !/สกุล|last|surname/.test(c));
+    pwCol = h.findIndex((c) => /รหัสผ่าน|password|pass/.test(c));
+    codeCol = h.findIndex((c, i) => i !== pwCol && /รหัส|code|student.?id/.test(c));
+    const name = h.findIndex((c, i) => i !== codeCol && i !== pwCol && /ชื่อ|name/.test(c) && !/สกุล|last|surname/.test(c));
     const last = h.findIndex((c) => /นามสกุล|สกุล|last|surname/.test(c));
     if (codeCol < 0) codeCol = 0;
-    nameCols = [name, last].filter((i) => i >= 0 && i !== codeCol);
+    nameCols = [name, last].filter((i) => i >= 0 && i !== codeCol && i !== pwCol);
   }
   const body = header ? table.slice(1) : table;
   const seen = new Map<string, number>();
@@ -70,12 +72,14 @@ export function toStudentRows(table: CsvRow[]): { rows: StudentRow[]; header: bo
     const studentCode = clean(r[codeCol] ?? '');
     const cols = nameCols.length ? nameCols : r.map((_, j) => j).filter((j) => j !== codeCol);
     const name = clean(cols.map((j) => r[j] ?? '').join(' '));
+    const password = pwCol >= 0 ? (r[pwCol] ?? '').trim() : '';
     const problems: Problem[] = [];
+    if (password && [...password].length < 6) problems.push('short_password');
     if (!CODE.test(studentCode)) problems.push('invalid_code');
     if (!name) problems.push('empty_name');
     if ([...name].length > 120) problems.push('name_too_long');
     seen.set(studentCode, (seen.get(studentCode) ?? 0) + 1);
-    return { line, studentCode, name, problems };
+    return { line, studentCode, name, password, problems };
   });
   for (const r of rows) if ((seen.get(r.studentCode) ?? 0) > 1) r.problems.push('duplicate');
   return { rows, header };

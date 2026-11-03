@@ -18,8 +18,8 @@ describe('อ่าน CSV รายชื่อนักเรียน', () =>
     const r = rows(decodeCsv(new TextEncoder().encode('﻿รหัสนักเรียน,ชื่อ-สกุล\r\n65001,กมลชนก ใจดี\r\n65002,เขมินท์  รักเรียน\r\n')));
     expect(r.header).toBe(true);
     expect(r.rows).toEqual([
-      { line: 2, studentCode: '65001', name: 'กมลชนก ใจดี', problems: [] },
-      { line: 3, studentCode: '65002', name: 'เขมินท์ รักเรียน', problems: [] },
+      { line: 2, studentCode: '65001', name: 'กมลชนก ใจดี', password: '', problems: [] },
+      { line: 3, studentCode: '65002', name: 'เขมินท์ รักเรียน', password: '', problems: [] },
     ]);
   });
 
@@ -35,7 +35,7 @@ describe('อ่าน CSV รายชื่อนักเรียน', () =>
 
   it('หัวตารางมีคอลัมน์อื่น (เลขที่, เลขบัตร) ไม่ถูกอ่าน', () => {
     const r = rows('เลขที่,รหัสนักเรียน,ชื่อ,นามสกุล,เลขบัตรประชาชน\n1,65006,อารียา,ดีงาม,1234567890123');
-    expect(r.rows[0]).toEqual({ line: 2, studentCode: '65006', name: 'อารียา ดีงาม', problems: [] });
+    expect(r.rows[0]).toEqual({ line: 2, studentCode: '65006', name: 'อารียา ดีงาม', password: '', problems: [] });
   });
 
   it('ช่องในเครื่องหมายคำพูด มีจุลภาคและ "" ข้างใน; ขึ้นบรรทัดในช่องไม่ทำให้เลขบรรทัดเพี้ยน', () => {
@@ -47,6 +47,17 @@ describe('อ่าน CSV รายชื่อนักเรียน', () =>
     const r = rows('65008,ก\nก123,ข\n65009,\n\n65008,ค\n');
     expect(r.rows.map((x) => [x.line, x.problems])).toEqual([
       [1, ['duplicate']], [2, ['invalid_code']], [3, ['empty_name']], [5, ['duplicate']],
+    ]);
+  });
+});
+
+describe('คอลัมน์รหัสผ่านเริ่มต้น', () => {
+  it('อ่านรหัสผ่านแยกจากรหัสนักเรียน ช่องว่าง = สุ่ม และรหัสสั้นเกินเป็นปัญหา', () => {
+    const r = rows('รหัสนักเรียน,ชื่อ,รหัสผ่าน\n6501,สมชาย ใจดี,abc12345\n6502,สมหญิง,\n6503,มานี,123\n');
+    expect(r.rows.map((x) => [x.studentCode, x.name, x.password, x.problems])).toEqual([
+      ['6501', 'สมชาย ใจดี', 'abc12345', []],
+      ['6502', 'สมหญิง', '', []],
+      ['6503', 'มานี', '123', ['short_password']],
     ]);
   });
 });

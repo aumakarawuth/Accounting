@@ -29,7 +29,7 @@ export function StudentImport({
     setMessage(null);
     try {
       const r = await postJson<{ results: Result[] }>(`/classrooms/${classroomId}/import`, {
-        rows: rows.map(({ studentCode, name }) => ({ studentCode, name })),
+        rows: rows.map(({ studentCode, name, password }) => ({ studentCode, name, ...(password ? { password } : {}) })),
       });
       const count = (s: Result['status']) => r.results.filter((x) => x.status === s).length;
       setMessage({ ok: true, text: th.import.done(count('created'), count('enrolled'), count('already')) });
