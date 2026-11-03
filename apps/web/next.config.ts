@@ -17,7 +17,8 @@ const config: NextConfig = {
   webpack(config, { isServer }) {
     if (isServer) {
       const externalizeArgon2 = ({ request }: { request?: string }, callback: (error?: Error | null, result?: string) => void) => {
-        if (request === '@node-rs/argon2' || request?.startsWith('@node-rs/argon2-')) {
+        // fastify ฝังผ่าน ../api/dist จึงไม่โดน serverExternalPackages: light-my-request ใช้ cookie แบบ ESM ที่ webpack require ไม่ได้
+        if (request === '@node-rs/argon2' || request?.startsWith('@node-rs/argon2-') || request === 'fastify' || request === 'light-my-request') {
           callback(null, `commonjs ${request}`);
           return;
         }
