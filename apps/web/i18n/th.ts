@@ -845,6 +845,8 @@ export const th = {
     tempFor: (name: string, pw: string) => `รหัสชั่วคราวของ ${name}: ${pw} แสดงครั้งเดียว`,
     resetPassword: 'รีเซ็ตรหัสผ่าน',
     confirmReset: 'ยืนยันรีเซ็ต',
+    newPassword: 'รหัสผ่านใหม่',
+    newPasswordHint: 'ตั้งรหัสเอง (ว่าง = สุ่ม)',
     deactivate: 'ปิดบัญชี',
     confirmDeactivate: 'ยืนยันปิดบัญชี (ถูกออกจากระบบทันที)',
     activate: 'เปิดบัญชี',
