@@ -30,7 +30,7 @@ export const th = {
   },
 
   nav: {
-    back: 'ย้อนกลับ',
+    back: 'กลับ',
     home: 'หน้าแรก',
     all: 'เมนูทั้งหมด',
     group: {
