@@ -6,7 +6,7 @@ import { postJson, type ApiError, type Staff } from '@/lib/api';
 import { th } from '@/i18n/th';
 import { nextSlipKey, type Slip } from '../PasswordSlips';
 
-type RowState = { confirm?: 'reset' | 'deactivate'; busy?: boolean; note?: string; error?: string };
+type RowState = { confirm?: 'reset' | 'deactivate'; busy?: boolean; note?: string; error?: string; pw?: string };
 
 export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: Slip[]) => void }) {
   const router = useRouter();
@@ -23,10 +23,10 @@ export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: 
   async function act(s: Staff, kind: 'reset' | 'deactivate' | 'activate') {
     if (rows[s.id]?.busy) return;
     if (kind !== 'activate' && rows[s.id]?.confirm !== kind) return set(s.id, { confirm: kind });
-    set(s.id, { confirm: rows[s.id]?.confirm, busy: true }); // กันกดซ้ำระหว่างรอ
+    set(s.id, { ...rows[s.id], busy: true }); // กันกดซ้ำระหว่างรอ
     try {
       if (kind === 'reset') {
-        const r = await postJson<{ tempPassword: string }>(`/admin/users/${s.id}/reset-password`, {});
+        const r = await postJson<{ tempPassword: string }>(`/admin/users/${s.id}/reset-password`, rows[s.id]?.pw?.trim() ? { password: rows[s.id]!.pw!.trim() } : {});
         set(s.id, { note: th.admin.tempFor(s.name, r.tempPassword) });
         onIssued([slip(s, r.tempPassword)]);
       } else {
@@ -97,6 +97,10 @@ export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: 
                   <td className={cell}>{s.active ? th.admin.active : th.admin.inactive}</td>
                   <td className={cell}>
                     <div className="flex flex-wrap gap-2">
+                      {st.confirm === 'reset' && (
+                        <input aria-label={th.admin.newPassword} placeholder={th.admin.newPasswordHint} className="h-11 w-48 rounded-doc border border-rule-input bg-paper px-3 text-sm"
+                          value={st.pw ?? ''} onChange={(e) => set(s.id, { ...st, pw: e.target.value })} />
+                      )}
                       <button type="button" disabled={st.busy} className={`${btn} ${st.confirm === 'reset' ? 'bg-ink text-paper' : ''} disabled:bg-disabled disabled:text-ink2`} onClick={() => act(s, 'reset')}>
                         {st.confirm === 'reset' ? th.admin.confirmReset : th.admin.resetPassword}
                       </button>

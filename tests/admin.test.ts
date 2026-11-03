@@ -135,6 +135,11 @@ describe('หน้าผู้ดูแล: ครูและห้อง', ()
     expect((await call(t.cookie, 'GET', '/auth/me')).statusCode).toBe(401);
     const t2 = await login('staff', email, reset);
     expect(t2.res.statusCode).toBe(200);
+    // ผู้ดูแลตั้งรหัสเองได้ ผู้ใช้ยังต้องเปลี่ยนเอง; สั้นเกินถูกปฏิเสธ
+    const own = await call(adminC, 'POST', `/admin/users/${newTeacher}/reset-password`, { password: 'ครูห้องห้า2569' });
+    expect(own.json().tempPassword).toBe('ครูห้องห้า2569');
+    expect((await login('staff', email, 'ครูห้องห้า2569')).res.json()).toEqual({ role: 'teacher', mustChange: true });
+    expect((await call(adminC, 'POST', `/admin/users/${newTeacher}/reset-password`, { password: '123' })).statusCode).toBe(400);
     expect((await call(adminC, 'POST', `/admin/users/${newTeacher}/active`, { active: false })).statusCode).toBe(200);
     expect((await call(t2.cookie, 'GET', '/auth/me')).statusCode).toBe(401);
     expect((await login('staff', email, reset)).res.statusCode).toBe(401);

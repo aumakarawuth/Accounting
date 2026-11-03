@@ -4,7 +4,7 @@ import type { AuthAdapter } from '../auth.js';
 import { withUser } from '../db.js';
 import { requireUser } from '../guard.js';
 import { hashPassword, temporaryPassword } from '../passwords.js';
-import { AssignTeacher, AuditQuery, ClassroomParams, CreateClassroom, CreateStaff, SetActive, UserParams, WorksheetFormats } from '../schemas-auth.js';
+import { AssignTeacher, AuditQuery, ClassroomParams, CreateClassroom, CreateStaff, ResetPassword, SetActive, UserParams, WorksheetFormats } from '../schemas-auth.js';
 
 // ผู้ดูแลระบบ: ครู/ห้อง และ audit log ของโรงเรียนตัวเอง (DB ตรวจบทบาทและโรงเรียนซ้ำ)
 export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter }) {
@@ -30,7 +30,8 @@ export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: A
 
   app.post('/admin/users/:userId/reset-password', async (req) => {
     const { userId } = UserParams.parse(req.params);
-    const temp = temporaryPassword();
+    const { password } = ResetPassword.parse(req.body ?? {});
+    const temp = password || temporaryPassword();
     const h = await hashPassword(temp);
     await withUser(pool, await admin(req), (c) => c.query('select acc.admin_reset_password($1, $2)', [userId, h]));
     return { tempPassword: temp };

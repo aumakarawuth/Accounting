@@ -48,3 +48,8 @@ export const JoinClassroom = z.object({
 }).strict();
 export const SetJoinCode = z.object({ enabled: z.boolean() }).strict();
 export const WorksheetFormats = z.object({ formats: z.array(z.union([z.literal(6), z.literal(8), z.literal(10)])).max(3) }).strict();
+
+// ผู้ดูแลตั้งรหัสเองได้ (ว่าง = สุ่ม) ผู้ใช้ยังต้องเปลี่ยนเองเมื่อเข้าครั้งแรก
+export const ResetPassword = z.object({
+  password: z.string().trim().max(128).refine((v) => v === '' || [...v].length >= 6, 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัว').optional(),
+}).strict();
