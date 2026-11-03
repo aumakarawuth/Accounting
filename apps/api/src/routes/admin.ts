@@ -37,6 +37,13 @@ export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: A
     return { tempPassword: temp };
   });
 
+  // ลบได้เฉพาะบัญชีที่ยังไม่มีงานในระบบ (ไม่งั้น 409 ให้ใช้ปิดบัญชี)
+  app.post('/admin/users/:userId/delete', async (req) => {
+    const { userId } = UserParams.parse(req.params);
+    await withUser(pool, await admin(req), (c) => c.query('select acc.admin_delete_user($1)', [userId]));
+    return { ok: true };
+  });
+
   app.post('/admin/users/:userId/active', async (req) => {
     const { userId } = UserParams.parse(req.params);
     const { active } = SetActive.parse(req.body);

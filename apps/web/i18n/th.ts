@@ -850,6 +850,8 @@ export const th = {
     deactivate: 'ปิดบัญชี',
     confirmDeactivate: 'ยืนยันปิดบัญชี (ถูกออกจากระบบทันที)',
     activate: 'เปิดบัญชี',
+    delete: 'ลบ',
+    confirmDelete: 'ยืนยันลบ (เฉพาะบัญชีที่ยังไม่มีงาน)',
     classroomName: 'ชื่อห้อง',
     teacher: 'ครูประจำห้อง',
     students: 'นักเรียน',
