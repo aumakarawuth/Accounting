@@ -179,3 +179,22 @@ describe('หน้าผู้ดูแล: ครูและห้อง', ()
     expect((await call(c2, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: 'X1', name: 'x' }] })).statusCode).toBe(403);
   });
 });
+
+describe('ลบบัญชี', () => {
+  it('ลบบัญชีที่ยังไม่มีงานได้ ลบตัวเองไม่ได้ ครูลบไม่ได้ และลบซ้ำได้ 422', async () => {
+    const name = `del-${randomUUID().slice(0, 8)}`;
+    const r = await call(adminC, 'POST', '/admin/staff', { email: name, name: 'ลบทิ้ง' });
+    const { id, tempPassword } = r.json();
+    await login('staff', name, tempPassword);
+    expect((await call(teacherC, 'POST', `/admin/users/${id}/delete`)).statusCode).toBe(403);
+    expect((await call(adminC, 'POST', `/admin/users/${adminId}/delete`)).statusCode).toBe(409);
+    expect((await call(adminC, 'POST', `/admin/users/${id}/delete`)).statusCode).toBe(200);
+    expect((await db.query('select count(*)::int n from acc.users where id=$1', [id])).rows[0].n).toBe(0);
+    expect((await login('staff', name, tempPassword)).res.statusCode).toBe(401);
+    expect((await call(adminC, 'POST', `/admin/users/${id}/delete`)).statusCode).toBe(422);
+  });
+
+  it('บัญชีที่มีงานแล้วลบไม่ได้ (409)', async () => {
+    expect((await call(adminC, 'POST', `/admin/users/${teacherId}/delete`)).statusCode).toBe(409);
+  });
+});

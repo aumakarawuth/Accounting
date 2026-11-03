@@ -6,7 +6,7 @@ import { postJson, type ApiError, type Staff } from '@/lib/api';
 import { th } from '@/i18n/th';
 import { nextSlipKey, type Slip } from '../PasswordSlips';
 
-type RowState = { confirm?: 'reset' | 'deactivate'; busy?: boolean; note?: string; error?: string; pw?: string };
+type RowState = { confirm?: 'reset' | 'deactivate' | 'delete'; busy?: boolean; note?: string; error?: string; pw?: string };
 
 export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: Slip[]) => void }) {
   const router = useRouter();
@@ -20,7 +20,7 @@ export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: 
   const slip = (s: { email: string; name: string }, temp: string): Slip =>
     ({ key: nextSlipKey(), idLabel: th.admin.email, id: s.email, name: s.name, temp, staff: true });
 
-  async function act(s: Staff, kind: 'reset' | 'deactivate' | 'activate') {
+  async function act(s: Staff, kind: 'reset' | 'deactivate' | 'activate' | 'delete') {
     if (rows[s.id]?.busy) return;
     if (kind !== 'activate' && rows[s.id]?.confirm !== kind) return set(s.id, { confirm: kind });
     set(s.id, { ...rows[s.id], busy: true }); // กันกดซ้ำระหว่างรอ
@@ -29,6 +29,10 @@ export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: 
         const r = await postJson<{ tempPassword: string }>(`/admin/users/${s.id}/reset-password`, rows[s.id]?.pw?.trim() ? { password: rows[s.id]!.pw!.trim() } : {});
         set(s.id, { note: th.admin.tempFor(s.name, r.tempPassword) });
         onIssued([slip(s, r.tempPassword)]);
+      } else if (kind === 'delete') {
+        await postJson(`/admin/users/${s.id}/delete`, {});
+        set(s.id, {});
+        router.refresh();
       } else {
         await postJson(`/admin/users/${s.id}/active`, { active: kind === 'activate' });
         set(s.id, { note: th.admin.saved });
@@ -111,6 +115,9 @@ export function AdminStaff({ staff, onIssued }: { staff: Staff[]; onIssued: (s: 
                       ) : (
                         <button type="button" disabled={st.busy} className={btn} onClick={() => act(s, 'activate')}>{th.admin.activate}</button>
                       )}
+                      <button type="button" disabled={st.busy} className={`${btn} border-red text-red ${st.confirm === 'delete' ? 'bg-red text-paper' : ''} disabled:bg-disabled disabled:text-ink2`} onClick={() => act(s, 'delete')}>
+                        {st.confirm === 'delete' ? th.admin.confirmDelete : th.admin.delete}
+                      </button>
                     </div>
                     {(st.note || st.error) && <p role="status" className={`mt-1 text-sm ${st.error ? 'neg' : ''}`}>{st.note ?? st.error}</p>}
                   </td>
