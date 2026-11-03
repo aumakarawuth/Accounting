@@ -92,14 +92,20 @@ function AccountField({
   );
 }
 
-export function JournalForm({ companyId, accounts, locked = false, adjusting = false }: {
+export type EditSource = { id: string; docNo: string; date: string; description: string; lines: { code: string; debit: string; credit: string; memo: string }[] };
+
+export function JournalForm({ companyId, accounts, locked = false, adjusting = false, edit }: {
   companyId: string; accounts: Account[]; locked?: boolean; adjusting?: boolean;
+  /** แก้ไขรายการที่ผ่านแล้ว: ฟอร์มเริ่มจากค่าเดิม ผ่านรายการ = กลับรายการเดิม + ลงรายการใหม่ */
+  edit?: EditSource;
 }) {
-  // รายการปรับปรุง (AJ) ลงวันสิ้นเดือน ร่างแยกจากสมุดรายวันปกติ
-  const draftKey = adjusting ? `${companyId}:AJ` : companyId;
-  const [date, setDate] = useState(() => isoToThai(adjusting ? addDays(`${addMonths(todayIso().slice(0, 7), 1)}-01`, -1) : todayIso()));
-  const [description, setDescription] = useState('');
-  const [lines, setLines] = useState<Line[]>(() => [blank(), blank()]);
+  // รายการปรับปรุง (AJ) ลงวันสิ้นเดือน ร่างแยกจากสมุดรายวันปกติ · แก้ไขรายการ: ร่างแยกต่อรายการ
+  const draftKey = edit ? `${companyId}:edit:${edit.id}` : adjusting ? `${companyId}:AJ` : companyId;
+  const [date, setDate] = useState(() => isoToThai(edit ? edit.date : adjusting ? addDays(`${addMonths(todayIso().slice(0, 7), 1)}-01`, -1) : todayIso()));
+  const [description, setDescription] = useState(edit?.description ?? '');
+  const [lines, setLines] = useState<Line[]>(() => (edit
+    ? edit.lines.map((l) => ({ ...blank(), code: l.code, debit: l.debit === '0.00' ? '' : l.debit, credit: l.credit === '0.00' ? '' : l.credit, memo: l.memo }))
+    : [blank(), blank()]));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
   const idem = useRef(newKey()); // คีย์เดิมจนกว่าจะผ่านรายการสำเร็จ (กดซ้ำ/เน็ตหลุดไม่เกิดรายการซ้ำ)
@@ -208,12 +214,13 @@ export function JournalForm({ companyId, accounts, locked = false, adjusting = f
             return { account_code: l.code, ...(d > 0n ? { debit: fromCents(d) } : { credit: fromCents(c) }), ...(l.memo ? { memo: l.memo } : {}) };
           }),
       };
-      const r = await api<{ id: string; docNo: string }>(`/companies/${companyId}/journal`, {
+      const r = await api<{ id: string; docNo: string }>(edit ? `/companies/${companyId}/journal/${edit.id}/replace` : `/companies/${companyId}/journal`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': idem.current },
         body: JSON.stringify(payload),
       });
       setResult({ ok: true, text: th.journal.posted(r.docNo), href: `/c/${companyId}/journal/${r.id}` });
+      if (edit) { void deleteDraft(draftKey); window.location.assign(`/c/${companyId}/journal/${r.id}`); return; }
       void clearDraft();
       pendingSave.current = null;
       void deleteDraft(draftKey);
@@ -227,7 +234,7 @@ export function JournalForm({ companyId, accounts, locked = false, adjusting = f
     } finally {
       setBusy(false);
     }
-  }, [canPost, isoDate, description, lines, companyId, adjusting, draftKey]);
+  }, [canPost, isoDate, description, lines, companyId, adjusting, draftKey, edit]);
 
   // ปุ่มลัดแบบโปรแกรมบัญชี (มีปุ่มบนจอให้กดได้เสมอ ปุ่มลัดเป็นทางเสริม)
   useEffect(() => {
@@ -263,8 +270,9 @@ export function JournalForm({ companyId, accounts, locked = false, adjusting = f
       <section className="m-3 flex flex-col gap-4 border border-rule-strong bg-paper p-4 sm:m-5 sm:p-6">
         <div className="flex items-start justify-between border-b-2 border-ink pb-2.5">
           <div>
-            <h1 className="font-doc text-[19px] font-bold sm:text-2xl">{adjusting ? th.journal.adjustTitle : th.journal.title}</h1>
-            {adjusting && <p className="mt-1 text-sm text-ink2">{th.journal.adjustNote}</p>}
+            <h1 className="font-doc text-[19px] font-bold sm:text-2xl">{edit ? th.journal.editTitle(edit.docNo) : adjusting ? th.journal.adjustTitle : th.journal.title}</h1>
+            {edit ? <p className="mt-1 text-sm text-ink2">{th.journal.editNote(edit.docNo)}</p>
+              : adjusting && <p className="mt-1 text-sm text-ink2">{th.journal.adjustNote}</p>}
           </div>
           <p className="text-right text-sm text-ink2">
             {th.invoice.docNo} {th.journal.docNoPending}

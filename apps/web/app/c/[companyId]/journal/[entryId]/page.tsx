@@ -28,7 +28,19 @@ export default async function EntryPage({ params }: { params: Promise<{ companyI
       {company.can_write && (
         entry.reverses ? <p className="text-sm text-ink2">{th.journal.isReversal}</p>
           : entry.reversedBy ? null
-          : <ReverseEntry companyId={companyId} entry={{ id: entry.id, docNo: entry.docNo, date: entry.date, periodClosed: entry.periodClosed }} locked={company.locked} />
+          : (
+            <div className="flex flex-col gap-3">
+              {!company.locked && /^(JV|AJ)-/.test(entry.docNo) && (
+                <>
+                  <p className="text-sm text-ink2">{th.journal.editOrDelete}</p>
+                  <Link href={`/c/${companyId}/journal/new?edit=${entry.id}`} className="inline-flex min-h-11 items-center justify-center self-start rounded-doc bg-ink px-4 font-medium text-paper max-sm:w-full max-sm:min-h-13">
+                    {th.journal.edit}
+                  </Link>
+                </>
+              )}
+              <ReverseEntry companyId={companyId} entry={{ id: entry.id, docNo: entry.docNo, date: entry.date, periodClosed: entry.periodClosed }} locked={company.locked} />
+            </div>
+          )
       )}
     </div>
   );
