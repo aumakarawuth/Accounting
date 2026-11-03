@@ -35,13 +35,19 @@ export function studentNav(companyId: string): Group[] {
       { label: n.vat, href: c('/tax/vat') },
       { label: n.wht, href: c('/tax/wht') },
     ] },
+    { title: n.group.cash, items: [
+      { label: n.cheques, href: c('/cheques') },
+      { label: n.bankRec, href: c('/bank-reconciliation') },
+    ] },
+    { title: n.group.assets, items: [
+      { label: n.fixedAssets, href: c('/fixed-assets') },
+    ] },
     { title: n.group.master, items: [
       { label: n.parties, href: c('/parties') },
       { label: n.items, href: c('/items') },
       { label: n.companyProfile, href: c('/settings') },
     ] },
     { title: n.group.other, items: [
-      { label: n.bankRec, href: c('/bank-reconciliation') },
       { label: n.reports, href: c('/reports') },
       { label: n.myWork, href: c('/work') },
     ] },

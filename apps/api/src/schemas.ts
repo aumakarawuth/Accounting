@@ -227,3 +227,58 @@ export const VoidVatClose = z.object({ reason: z.string().trim().min(1, 'ต้�
 // ---- กระดาษทำการ ----
 export const WORKSHEET_FORMATS = [6, 8, 10] as const;
 export const WorksheetQuery = z.object({ month: Month, format: z.enum(['6', '8', '10']).optional() }).strict();
+
+// ---- เฟส 3.3 เช็ค ----
+const ChequeNo = z.string().trim().regex(/^[0-9A-Za-z-]{1,20}$/, 'เลขที่เช็คเป็นตัวเลข/ตัวอักษร ไม่เกิน 20 ตัว');
+const Allocations = z.array(z.object({ documentId: Uuid, amount: Money }).strict()).min(1, 'เลือกใบอย่างน้อย 1 ใบ').max(50);
+export const NewCheque = z.object({
+  direction: z.enum(['received', 'paid']),
+  chequeNo: ChequeNo,
+  bankName: z.string().trim().min(1, 'ต้องระบุธนาคาร').max(100),
+  bankBranch: z.string().trim().max(100).optional(),
+  chequeDate: IsoDate,
+  date: IsoDate,
+  amount: Money.optional(),
+  partyName: z.string().trim().max(160).optional(),
+  description: z.string().trim().max(300).optional(),
+  bankAccount: AccountCode.optional(),
+  counterAccount: AccountCode.optional(),
+  // รับเช็คเป็นใบเสร็จรับชำระ / จ่ายเช็คเป็นการจ่ายชำระ (ตัดยอดค้างรายใบ)
+  receipt: z.object({ partyCode: MasterCode, whtAmount: Money.optional(), allocations: Allocations }).strict().optional(),
+  payment: z.object({ partyCode: MasterCode, ...Wht, allocations: Allocations }).strict().optional(),
+}).strict();
+export const ChequeParams = z.object({ companyId: Uuid, chequeId: Uuid });
+export const ChequeAction = z.object({
+  action: z.enum(['deposit', 'clear', 'bounce', 'cancel']),
+  date: IsoDate,
+  bankAccount: AccountCode.optional(),
+  note: z.string().trim().max(300).optional(),
+}).strict();
+
+// ---- เฟส 3.4 สินทรัพย์ถาวร ----
+export const NewFixedAsset = z.object({
+  code: MasterCode,
+  name: z.string().trim().min(1, 'ต้องมีชื่อสินทรัพย์').max(160),
+  acquiredDate: IsoDate,
+  depStart: Month.optional(),
+  cost: Money,
+  salvage: Money.optional(),
+  lifeMonths: z.number().int().min(1).max(1200),
+  assetAccount: AccountCode,
+  accumAccount: AccountCode,
+  expenseAccount: AccountCode.optional(),
+  counterAccount: AccountCode.optional(),
+  description: z.string().trim().max(300).optional(),
+}).strict();
+export const FixedAssetParams = z.object({ companyId: Uuid, assetId: Uuid });
+export const DepreciationRunParams = z.object({ companyId: Uuid, runId: Uuid });
+export const DisposalParams = z.object({ companyId: Uuid, disposalId: Uuid });
+export const DepreciationRun = z.object({ month: Month }).strict();
+export const DisposeAsset = z.object({
+  date: IsoDate,
+  proceeds: Money.optional(),
+  proceedsAccount: AccountCode.optional(),
+  description: z.string().trim().max(300).optional(),
+}).strict();
+export const VoidWithReason = z.object({ date: IsoDate.optional(), reason: z.string().trim().min(1, 'ต้องระบุเหตุผล').max(300) }).strict();
+export const VoidRun = z.object({ date: IsoDate.optional() }).strict();

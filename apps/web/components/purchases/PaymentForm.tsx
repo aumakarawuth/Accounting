@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
-import { api, postJson, type ApiError, type PurchaseFormData, type PurchaseRow, type WhtKind } from '@/lib/api';
+import { api, postJson, type ApiError, type ChequeRow, type PurchaseFormData, type PurchaseRow, type WhtKind } from '@/lib/api';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
 import { rateHundredths } from '@/lib/vat';
@@ -33,6 +33,12 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
   const [cashAccount, setCashAccount] = useState(form.cashAccounts[0]?.code ?? '1110');
   const [whtKind, setWhtKind] = useState<WhtKind | '' | null>(null); // null = ตามที่ตั้งไว้ที่ผู้ขาย
   const [whtRate, setWhtRate] = useState<string | null>(null);
+  // จ่ายเป็นเช็ค: ใบสำคัญจ่ายลงเช็คจ่าย (2120/2121) แล้วลงทะเบียนเช็คพร้อมกัน เงินออกจากบัญชีที่สั่งจ่ายเมื่อเช็คผ่าน
+  const [byCheque, setByCheque] = useState(false);
+  const [chequeNo, setChequeNo] = useState('');
+  const [chequeBank, setChequeBank] = useState('');
+  const [chequeDate, setChequeDate] = useState(isoToThai(todayIso()));
+  const bankAccounts = form.cashAccounts.filter((a) => a.code !== '1110' && a.code !== '1140');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID()); // คีย์เดิมจนบันทึกสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
@@ -76,10 +82,16 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
     return { total, vat, bad, wht };
   }, [open, amounts, wKind, wRate, wRateOk]);
 
+  const isoChequeDate = thaiToIso(chequeDate);
+  const draftIso = thaiToIso(date);
+  const payCode = byCheque ? (isoChequeDate && draftIso && isoChequeDate > draftIso ? '2121' : '2120') : cashAccount;
+  const chequeBad = !byCheque ? null : !bankAccounts.some((a) => a.code === cashAccount) ? th.cheques.invalid.bankAccount
+    : !/^[0-9A-Za-z-]{1,20}$/.test(chequeNo) ? th.cheques.invalid.chequeNo
+    : chequeBank.trim() === '' ? th.cheques.invalid.bank : isoChequeDate === null ? th.cheques.invalid.date : null;
   const entry: EntryLine[] = [
     { code: '2110', debit: calc.total, credit: 0n },
     ...(calc.vat > 0n ? [{ code: '1410', debit: calc.vat, credit: 0n }] : []),
-    { code: cashAccount, debit: 0n, credit: calc.total - calc.wht.amount },
+    { code: payCode, debit: 0n, credit: calc.total - calc.wht.amount },
     ...(calc.wht.amount > 0n ? [{ code: '2230', debit: 0n, credit: calc.wht.amount }] : []),
     ...(calc.vat > 0n ? [{ code: '1411', debit: 0n, credit: calc.vat }] : []),
   ];
@@ -89,16 +101,17 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
     : calc.bad ?? (calc.total === 0n ? th.purchases.selectOne : isoDate === null ? th.sales.dateInvalid
       : wKind && !vendor.taxId ? th.purchases.whtNeedsTaxId
       : !wRateOk ? th.purchases.whtRateInvalid
-      : wKind && calc.wht.amount === 0n ? th.purchases.whtTooSmall : null);
+      : wKind && calc.wht.amount === 0n ? th.purchases.whtTooSmall : chequeBad);
   const canPost = writable && !busy && !blocked;
 
   // ร่างในเครื่อง + ครูดูสด
-  const draft = useDocDraft(writable ? 'payment' : null, companyId, { partyCode, amounts, date, cashAccount, whtKind, whtRate, idemKey }, {
+  const draft = useDocDraft(writable ? 'payment' : null, companyId, { partyCode, amounts, date, cashAccount, whtKind, whtRate, idemKey, byCheque, chequeNo, chequeBank, chequeDate }, {
     isEmpty: (d) => !d.partyCode,
     restore: (d) => {
       if (initialParty && d.partyCode !== initialParty) return false; // เปิดจากหน้าเอกสารของผู้ขายรายอื่น: ไม่ทับด้วยร่างเก่า
       setPartyCode(d.partyCode); setAmounts(d.amounts); setDate(d.date); setCashAccount(d.cashAccount);
       setWhtKind(d.whtKind); setWhtRate(d.whtRate); setIdemKey(d.idemKey);
+      setByCheque(d.byCheque ?? false); setChequeNo(d.chequeNo ?? ''); setChequeBank(d.chequeBank ?? ''); if (d.chequeDate) setChequeDate(d.chequeDate);
     },
     live: calc.total > 0n ? { title: th.purchases.paymentTitle, date: isoDate ?? date, description: vendor?.name ?? '', lines: liveLines(entry) } : null,
   });
@@ -108,30 +121,36 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
     draft.discard();
   };
 
-  const submit = useCallback(async () => {
+  // ไม่ห่อ useCallback: React Compiler จัดการ memo เอง (มือห่อแล้ว compiler ข้ามทั้งคอมโพเนนต์)
+  const submit = async () => {
     if (!canPost || !isoDate || !open) return;
     if (!navigator.onLine) { setError(th.error.offline); return; }
     setBusy(true);
     setError(null);
     try {
-      const r = await postJson<{ id: string }>(`/companies/${companyId}/payments`, {
-        date: isoDate, partyCode, cashAccount, ...(wKind ? { whtKind: wKind, whtRate: wRate } : {}),
+      const payment = {
+        partyCode, ...(wKind ? { whtKind: wKind, whtRate: wRate } : {}),
         allocations: open.filter((x) => x.id in amounts).map((x) => ({ documentId: x.id, amount: fromCents(toCents(amounts[x.id]!)!) })),
-      }, { 'idempotency-key': idemKey });
+      };
+      const id = byCheque
+        ? (await postJson<ChequeRow>(`/companies/${companyId}/cheques`, {
+            direction: 'paid', chequeNo, bankName: chequeBank.trim(), chequeDate: isoChequeDate, date: isoDate, bankAccount: cashAccount, payment,
+          }, { 'idempotency-key': idemKey })).documentId!
+        : (await postJson<{ id: string }>(`/companies/${companyId}/payments`, { date: isoDate, cashAccount, ...payment }, { 'idempotency-key': idemKey })).id;
       draft.finish();
-      router.push(`/c/${companyId}/purchases/documents/${r.id}`);
+      router.push(`/c/${companyId}/purchases/documents/${id}`);
     } catch (e) {
       const err = e as ApiError;
       setError(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message);
       setBusy(false);
     }
-  }, [canPost, isoDate, open, companyId, partyCode, cashAccount, wKind, wRate, amounts, router, draft, idemKey]);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'F9') { e.preventDefault(); void submit(); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [submit]);
+  }); // ผูกใหม่ทุกครั้งที่ render ให้ F9 ใช้ค่าล่าสุดเสมอ
 
   const inputCls = 'h-11 w-full border-b border-rule-input bg-transparent px-0.5 text-base';
   const h2 = 'border-b border-rule-strong pb-1.5 font-doc text-[17px] font-bold';
@@ -190,11 +209,33 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
                 <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={isoDate === null} />
               </label>
               <label className="flex flex-col text-sm">
-                {th.purchases.cashAccount}
+                {byCheque ? th.cheques.bankAccount : th.purchases.cashAccount}
                 <select className={inputCls} value={cashAccount} onChange={(e) => setCashAccount(e.target.value)}>
-                  {form.cashAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}
+                  {(byCheque ? bankAccounts : form.cashAccounts).map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}
                 </select>
               </label>
+              <label className="col-span-2 flex min-h-11 items-center gap-3 text-[15px]">
+                <input type="checkbox" className="size-5 shrink-0 text-base accent-ink" checked={byCheque}
+                  onChange={(e) => { setByCheque(e.target.checked); if (e.target.checked && !bankAccounts.some((a) => a.code === cashAccount)) setCashAccount(bankAccounts[0]?.code ?? cashAccount); }} />
+                {th.cheques.byCheque.paid}
+              </label>
+              {byCheque && (
+                <>
+                  <label className="flex flex-col text-sm">
+                    {th.cheques.chequeNo}
+                    <input className={`${inputCls} font-num`} value={chequeNo} maxLength={20} onChange={(e) => setChequeNo(e.target.value.trim())} />
+                  </label>
+                  <label className="flex flex-col text-sm">
+                    {th.cheques.bankName}
+                    <input className={inputCls} value={chequeBank} maxLength={100} onChange={(e) => setChequeBank(e.target.value)} />
+                  </label>
+                  <label className="flex flex-col text-sm">
+                    {th.cheques.chequeDate}
+                    <input className={`${inputCls} font-num`} inputMode="numeric" value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} aria-invalid={isoChequeDate === null} />
+                  </label>
+                  <p className="col-span-2 text-[13px] text-ink2">{th.cheques.byChequeNote.paid}</p>
+                </>
+              )}
               <label className="flex flex-col text-sm">
                 {th.purchases.wht}
                 <select className={inputCls} value={wKind} onChange={(e) => { setWhtKind(e.target.value as WhtKind | ''); setWhtRate(null); }}>
