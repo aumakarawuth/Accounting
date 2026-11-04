@@ -198,3 +198,23 @@ describe('ลบบัญชี', () => {
     expect((await call(adminC, 'POST', `/admin/users/${teacherId}/delete`)).statusCode).toBe(409);
   });
 });
+
+describe('ลบนักเรียน', () => {
+  it('ครูประจำห้องลบนักเรียนที่ยังไม่มีงานได้ ครูห้องอื่นลบไม่ได้', async () => {
+    const code = `del${randomUUID().slice(0, 6)}`;
+    const r = await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: code, name: 'ลบทิ้ง' }] });
+    const id = (await db.query('select id from acc.users where student_code=$1', [code])).rows[0].id as string;
+    expect(r.statusCode).toBe(200);
+    expect((await call(otherTeacherC, 'POST', `/teacher/students/${id}/delete`)).statusCode).toBe(403);
+    expect((await call(teacherC, 'POST', `/teacher/students/${id}/delete`)).statusCode).toBe(200);
+    expect((await db.query('select count(*)::int n from acc.users where id=$1', [id])).rows[0].n).toBe(0);
+  });
+
+  it('นักเรียนที่มีบริษัทแล้วลบไม่ได้ (409)', async () => {
+    const code = `job${randomUUID().slice(0, 6)}`;
+    await call(otherTeacherC, 'POST', `/classrooms/${otherRoom}/import`, { rows: [{ studentCode: code, name: 'มีงาน' }] });
+    expect((await call(otherTeacherC, 'POST', `/classrooms/${otherRoom}/companies`, { name: 'บริษัททดสอบลบ' })).statusCode).toBeLessThan(300);
+    const id = (await db.query('select id from acc.users where student_code=$1', [code])).rows[0].id as string;
+    expect((await call(adminC, 'POST', `/teacher/students/${id}/delete`)).statusCode).toBe(409);
+  });
+});

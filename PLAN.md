@@ -280,4 +280,5 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   (สเปก `docs/phase4-spec.md`, สมมติฐาน `docs/assumptions.md` ข้อ 33–34, `docs/owasp-top10.md`)
   ยังค้าง: ทดสอบกับผู้ใช้จริง 5–10 คน (`docs/user-test.md` เจ้าของโปรเจกต์ทำ), ZAP/ผู้เชี่ยวชาญกับ staging, CSP แบบ nonce
 - ช่วงพัฒนา: Supabase โปรเจกต์ใหม่ (ap-southeast-1) + Vercel `accounting-web` (sin1) ใช้งานอยู่ ขั้นตอนใน `docs/deploy-dev.md`
+- 4 พ.ย. 2569: เฟส 3 (สินค้าคงเหลือ กระทบยอดธนาคาร เช็ค สินทรัพย์ถาวร) เสร็จ · k6 500 คนรันซ้ำผ่าน (`docs/load-test.md`) · เฟส 4 กำลังทำ (branch `claude/phase4-exercises`)
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอนเฟสกลาง)

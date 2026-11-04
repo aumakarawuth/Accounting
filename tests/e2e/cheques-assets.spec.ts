@@ -159,7 +159,12 @@ test('ทะเบียนทรัพย์สิน: ลงทะเบีย
   await sell.getByRole('button', { name: 'ยืนยัน' }).click();
   await expect(sell).toBeHidden();
   const next = m === 12 ? '2032-01' : `2031-${String(m + 1).padStart(2, '0')}`;
-  await page.goto(`${home}/fixed-assets?month=${next}`);
+  // หลังยืนยัน หน้าอาจรีเฟรชเดือนเดิมอยู่ (Safari) รอให้นิ่งก่อนเปลี่ยนเดือน
+  await page.waitForLoadState('networkidle');
+  await expect(async () => {
+    await page.goto(`${home}/fixed-assets?month=${next}`);
+    await expect(page).toHaveURL(new RegExp(`month=${next}$`));
+  }).toPass();
   row = rowOf(page, code);
   await expect(row).toContainText('จำหน่ายแล้ว');
   await expect(row).toContainText('กำไร(ขาดทุน) 500.00');
