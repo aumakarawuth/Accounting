@@ -14,7 +14,8 @@ COPY apps/api apps/api
 COPY apps/web apps/web
 # rewrite /api ของ Next ถูกเขียนลงไฟล์ตอน build (ใช้เมื่อเข้าเว็บตรงไม่ผ่าน Caddy) ปกติ Caddy ส่ง /api ไป API เอง
 ARG API_URL=http://api:4000
-ENV API_URL=$API_URL
+# ดูสดผ่าน WebSocket /api/ws (API server แยก) ค่า NEXT_PUBLIC_* ฝังลงโค้ดฝั่งเบราว์เซอร์ตอน build
+ENV API_URL=$API_URL NEXT_PUBLIC_REALTIME=ws
 RUN pnpm --filter @accounting/api build && pnpm --filter @accounting/web build \
   && cp -r apps/web/public apps/web/.next/standalone/apps/web/public \
   && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static

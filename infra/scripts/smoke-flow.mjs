@@ -104,6 +104,32 @@ if (!(await gotEvent)) fail('SSE ไม่ได้ event หลังลงร�
 await reader.cancel();
 console.log(`ลงรายการ ${entry.docNo ?? entry.doc_no} + ได้ event ดูสดผ่าน Caddy`);
 
+// WebSocket ผ่าน Caddy (wss://…/api/ws): origin อื่นต้องถูกปฏิเสธ · ของเราสมัครช่องแล้วได้ event
+const cookie = [...student.jar].map(([k, v]) => `${k}=${v}`).join('; ');
+const wsUrl = `${origin.replace(/^http/, 'ws')}/api/ws`;
+function socket(headers) {
+  const s = new WebSocket(wsUrl, { headers });
+  const msgs = [];
+  s.onmessage = (m) => msgs.push(JSON.parse(String(m.data)));
+  const opened = new Promise((resolve) => { s.onopen = () => resolve(true); s.onerror = () => resolve(false); });
+  const waitFor = async (pred, ms = 10_000) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) { const m = msgs.find(pred); if (m) return m; await new Promise((r) => setTimeout(r, 50)); }
+    return null;
+  };
+  return { s, opened, waitFor };
+}
+const evil = socket({ cookie, origin: 'https://evil.example' });
+if (await evil.opened) fail('WebSocket จาก origin อื่นเปิดได้');
+const ws = socket({ cookie, origin });
+if (!(await ws.opened)) fail('เปิด WebSocket ผ่าน Caddy ไม่ได้');
+ws.s.send(JSON.stringify({ op: 'sub', ch: `company:${companyId}` }));
+if (!(await ws.waitFor((m) => m.op === 'ok'))) fail('สมัครช่องผ่าน WebSocket ไม่ได้');
+await post(student, companyId, 'ทดสอบ WebSocket', '1.00');
+if (!(await ws.waitFor((m) => !m.op && m.k === 'journal'))) fail('WebSocket ไม่ได้ event หลังลงรายการ');
+ws.s.close();
+console.log('WebSocket ผ่าน Caddy: origin อื่นถูกปฏิเสธ · ได้ event หลังลงรายการ');
+
 const tb = await student.json('GET', `/api/companies/${companyId}/trial-balance?month=2026-10`);
 console.log(`งบทดลอง: ${JSON.stringify(tb).length} ไบต์`);
 for (const f of ['trial-balance.pdf', 'trial-balance.xlsx', 'ledger.pdf']) {

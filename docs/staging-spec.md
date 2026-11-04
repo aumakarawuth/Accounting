@@ -56,3 +56,13 @@ PLAN.md ข้อ 7 ระบุ pgBackRest/WAL-G งานนี้ใช้เ
   header ความปลอดภัย, ล็อกอินจริงด้วยผู้ดูแลที่สร้างตอนทดสอบ, PDF ส่งออกได้ (pdfkit ใน standalone),
   ดูสด SSE ผ่าน Caddy → backup → เขียนข้อมูลเพิ่ม → ซ้อมกู้คืนต้องเห็นข้อมูลที่เขียนหลัง backup (พิสูจน์ว่าเล่น WAL)
 - `scripts/security-check.mjs` กับ `https://localhost`
+
+## 6. Realtime ฝั่ง self-host (สลับ adapter)
+
+- API (`server.ts`) เปิด WebSocket `/ws` (ผ่าน Caddy = `wss://<โดเมน>/api/ws`) การเชื่อมต่อเดียวต่อแท็บฟังได้หลายช่อง
+  แทน SSE ที่ต้องเปิด 1 การเชื่อมต่อต่อช่อง · ส่วนฝัง API บน Vercel ไม่ import โค้ด WebSocket เลย (`buildApp({ websocket })`)
+- โปรโตคอล: `{op:'sub'|'unsub', ch}` → `{op:'ok'|'err', ch, code}` และ event `{ch, k, ...}` แบบเดียวกับ SSE (สัญญาณเท่านั้น)
+- เว็บ (`apps/web/lib/realtime.ts`): build ด้วย `NEXT_PUBLIC_REALTIME=ws` (image ของ infra และ CI e2e) = ลอง WebSocket ก่อน
+  ต่อไม่ได้ตั้งแต่ครั้งแรก/ต่อใหม่ไม่ได้ 3 รอบ = SSE · ไม่ตั้ง (Vercel) = SSE อย่างเดียว · API ปิดได้ด้วย `REALTIME_WEBSOCKET=off`
+- ทดสอบ: `tests/realtime-ws.test.ts` (Origin, ต้องล็อกอิน, สิทธิ์ช่อง, เพดาน, ข้อความเสีย, ออกจากระบบแล้วตัด)
+  · e2e ดูสดตรวจว่าป้าย "กำลังดูอยู่" มาทาง WebSocket (`E2E_WS=1`) · smoke ผ่าน Caddy (wss)

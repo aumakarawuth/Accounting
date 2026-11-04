@@ -9,6 +9,11 @@ test('ดูสด: ครูเห็นร่างที่นักเรี
   const student = await sctx.newPage();
   const teacher = await tctx.newPage();
   const errors = [...watchErrors(student), ...watchErrors(teacher)];
+  // ป้าย "กำลังดูอยู่" ต้องมาทาง WebSocket /api/ws เมื่อ API รันแบบ server แยก (CI ตั้ง E2E_WS=1; Vercel ใช้ SSE)
+  const wsFrames: string[] = [];
+  student.on('websocket', (ws) => {
+    if (new URL(ws.url()).pathname === '/api/ws') ws.on('framereceived', (f) => wsFrames.push(String(f.payload)));
+  });
 
   const home = await studentHome(student);
   await student.goto(`${home}/journal/new`);
@@ -30,6 +35,7 @@ test('ดูสด: ครูเห็นร่างที่นักเรี
   await checkScreen(teacher, info, 'teacher-live');
 
   await expect(student.getByText(/กำลังดูอยู่/)).toBeVisible({ timeout: 10_000 });
+  if (process.env.E2E_WS === '1') expect(wsFrames.some((f) => JSON.parse(f).k === 'watch')).toBe(true);
   await checkScreen(student, info, 'student-watched');
 
   await teacher.goto('/teacher');
