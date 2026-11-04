@@ -132,6 +132,13 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
                                when 'draft' then 3 when 'passed' then 4 else 5 end,
                  s.updated_at, u.student_code`)).rows));
 
+  // ลบนักเรียนที่ยังไม่มีงาน (มีงานแล้ว 409)
+  app.post('/teacher/students/:studentId/delete', async (req) => {
+    const { studentId } = StudentParams.parse(req.params);
+    await withUser(pool, await requireUser(auth, req, ['teacher', 'admin']), (c) => c.query('select acc.delete_student($1)', [studentId]));
+    return { ok: true };
+  });
+
   app.post('/teacher/students/:studentId/revoke-sessions', async (req) => {
     const { studentId } = StudentParams.parse(req.params);
     const n = await withUser(pool, await teacher(req), async (c) =>
