@@ -1,0 +1,173 @@
+# ชุด self-host (docs/self-host.md, สเปก docs/staging-spec.md) รันจากโฟลเดอร์ infra:  docker compose up -d --build
+# เปิดสู่ภายนอกเฉพาะ Caddy 80/443 ที่เหลืออยู่ในเครือข่ายภายใน
+name: accounting
+
+x-api-env: &api-env
+  NODE_ENV: production
+  AUTH_ADAPTER: session
+  DATABASE_URL: postgres://app_web:${APP_DB_PASSWORD:?ต้องตั้ง APP_DB_PASSWORD}@pgbouncer:6432/accounting
+  # LISTEN ต้องต่อตรง ไม่ผ่าน PgBouncer (transaction pooling)
+  REALTIME_DATABASE_URL: postgres://app_web:${APP_DB_PASSWORD}@db:5432/accounting
+  PG_POOL_MAX: "20"
+  COOKIE_SECURE: "true"
+  WEB_ORIGIN: https://${SITE_ADDRESS:-localhost}
+  # เชื่อ X-Forwarded-For เฉพาะจาก Caddy (IP คงที่ด้านล่าง)
+  TRUST_PROXY: 172.29.0.10
+  REQUESTS_PER_USER_PER_MINUTE: ${REQUESTS_PER_USER_PER_MINUTE:-600}
+  REQUESTS_PER_IP_PER_MINUTE: ${REQUESTS_PER_IP_PER_MINUTE:-60000}
+  LOGIN_PER_IP_PER_MINUTE: ${LOGIN_PER_IP_PER_MINUTE:-1200}
+
+services:
+  db:
+    build: ./db
+    image: accounting-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: accounting
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้ง POSTGRES_PASSWORD}
+    shm_size: 256mb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - pgrun:/var/run/postgresql
+      - backups:/backups
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "accounting"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [internal]
+
+  # migration + ผังบัญชีตั้งต้น + role app_web ทุกครั้งที่ up (ทำซ้ำได้) แล้วจบ
+  migrate:
+    image: accounting-api        # image เดียวกับ api (build ที่ service api)
+    pull_policy: never
+    command: ["node", "scripts/bootstrap-db.mjs"]
+    environment:
+      ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/accounting
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/pgbouncer/entrypoint.sh"]
+    environment:
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/entrypoint.sh:/etc/pgbouncer/entrypoint.sh:ro
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    networks: [internal]
+
+  api:
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    image: accounting-api
+    restart: unless-stopped
+    environment: *api-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      pgbouncer: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [internal]
+
+  web:
+    build: { context: .., dockerfile: apps/web/Dockerfile }
+    image: accounting-web
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:4000
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [internal]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1/32}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web: { condition: service_healthy }
+    networks:
+      internal:
+        ipv4_address: 172.29.0.10
+
+  # base backup + pg_dump ทุกวัน (WAL ถูกเก็บต่อเนื่องโดย db เอง) ต่อฐานผ่านซ็อกเก็ตที่ใช้ร่วมกัน ไม่ต้องใช้รหัส
+  backup:
+    image: accounting-db
+    pull_policy: never
+    restart: unless-stopped
+    user: postgres
+    command: ["/infra/backup-loop.sh"]
+    environment:
+      POSTGRES_DB: accounting
+      BACKUP_AT: ${BACKUP_AT:-02:30}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+    volumes:
+      - pgrun:/var/run/postgresql
+      - backups:/backups
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    network_mode: none
+
+  # ส่ง backup ออกนอกเครื่อง: docker compose --profile offsite up -d (remote "offsite" ตั้งด้วย RCLONE_CONFIG_OFFSITE_* ใน .env)
+  offsite:
+    profiles: [offsite]
+    image: rclone/rclone:1.71
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/offsite.sh"]
+    env_file: [.env]
+    volumes:
+      - ./offsite.sh:/offsite.sh:ro
+      - backups:/backups:ro
+    networks: [egress]
+
+  # ซ้อมกู้คืน: infra/scripts/restore-drill.sh (ไม่แตะฐานจริง ไดรฟ์ backups อ่านอย่างเดียว)
+  drill:
+    profiles: [drill]
+    image: accounting-db
+    pull_policy: never
+    entrypoint: ["/infra/restore-drill.sh"]
+    environment:
+      POSTGRES_DB: accounting
+      RESTORE_TARGET_TIME: ${RESTORE_TARGET_TIME:-}
+    volumes:
+      - pgrun:/var/run/postgresql
+      - backups:/backups:ro
+      - drill:/drill
+    network_mode: none
+
+volumes:
+  pgdata:
+  pgrun:
+  backups:
+  drill:
+  caddy-data:
+  caddy-config:
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+  egress: {}
