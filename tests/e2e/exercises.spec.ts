@@ -50,6 +50,18 @@ async function newClass(browser: Browser, teacher: Page, t: string) {
   return { roomName, code, temp, password: `สอบบัญชี-${randomUUID().slice(0, 8)}` };
 }
 
+async function fillItem(page: Page, no: number, date: string, narrative: string, lines: [string, string, 'D' | 'C'][]) {
+  const item = page.getByRole('listitem', { name: `ข้อ ${no}`, exact: true });
+  await item.getByLabel('วันที่').fill(date);
+  await item.getByLabel('รายการค้า').fill(narrative);
+  for (const [k, [code, amount, side]] of lines.entries()) {
+    const box = item.getByRole('combobox', { name: `ข้อ ${no} รหัสบัญชี ${k + 1}` });
+    await box.fill(code);
+    await box.press('Escape');
+    await item.getByLabel(`ข้อ ${no} ${side === 'D' ? 'เดบิต' : 'เครดิต'} ${k + 1}`).fill(amount);
+  }
+}
+
 test('ครูสร้างโจทย์ → สอบ → นักเรียนเริ่มสอบ → ครูเปิดเฉลย → ผลและไฟล์ส่งออก', async ({ browser }, info) => {
   test.setTimeout(180_000);
   const t = tag(info);
