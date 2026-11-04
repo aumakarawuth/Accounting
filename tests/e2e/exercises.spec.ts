@@ -5,7 +5,7 @@ import { checkScreen, env, isPhone, login, watchErrors } from './helpers';
 
 // เฟส 4: ครูสร้างชุดโจทย์ (หน้าจอ) → มอบหมายเป็นการสอบ → นักเรียนเริ่มสอบ ลงรายการ → ครูเห็นคะแนน เปิดเฉลย → นักเรียนเห็นผลและเฉลย
 // · ส่งออกคะแนน/รายงาน PDF และ Excel · โหมดสาธิต (ลงรายการตามเฉลย ตัวอักษรใหญ่) ทุกจอ
-// ชื่อบริษัทมีชื่อจอ + เลขสุ่ม รันซ้ำบนฐานเดิมได้ · ปิดสอบทุกครั้งตอนจบ (ไม่ให้นักเรียนค้างโหมด 1 เซสชัน)
+// ครู ห้อง และนักเรียนใหม่ต่อการรัน (ดู newClass) · ชื่อมีชื่อจอ + เลขสุ่ม รันซ้ำบนฐานเดิมได้ · ปิดสอบทุกครั้งตอนจบ
 
 const tag = (info: TestInfo) => `${info.project.name.toUpperCase().replace(/[^A-Z0-9]/g, '')}-${randomUUID().slice(0, 4)}`;
 
@@ -19,16 +19,35 @@ async function contexts(browser: Browser, info: TestInfo) {
 
 const originOf = (page: Page) => new URL(page.url()).origin;
 
-async function fillItem(page: Page, no: number, date: string, narrative: string, lines: [string, string, 'D' | 'C'][]) {
-  const item = page.getByRole('listitem', { name: `ข้อ ${no}`, exact: true });
-  await item.getByLabel('วันที่').fill(date);
-  await item.getByLabel('รายการค้า').fill(narrative);
-  for (const [k, [code, amount, side]] of lines.entries()) {
-    const box = item.getByRole('combobox', { name: `ข้อ ${no} รหัสบัญชี ${k + 1}` });
-    await box.fill(code);
-    await box.press('Escape');
-    await item.getByLabel(`ข้อ ${no} ${side === 'D' ? 'เดบิต' : 'เครดิต'} ${k + 1}`).fill(amount);
-  }
+/**
+ * ผู้ดูแลสร้างครูใหม่ + ห้องใหม่ → ครูเข้าครั้งแรก (เปลี่ยนรหัส) แล้วนำเข้านักเรียนใหม่ 1 คน
+ * ครู/นักเรียนตัวอย่างจึงไม่ได้ห้องหรือบริษัทเพิ่ม (เทสต์อื่นคาดว่าครูมีห้องเดียว นักเรียนมีบริษัทเดียว)
+ */
+async function newClass(browser: Browser, teacher: Page, t: string) {
+  const origin = new URL(teacher.url()).origin;
+  const actx = await browser.newContext({ extraHTTPHeaders: { origin } });
+  const admin = actx.request;
+  expect((await admin.post(`${origin}/api/auth/login`, { data: { kind: 'staff', identifier: env.adminEmail, password: env.adminPassword } })).status()).toBe(200);
+  const username = `exam-${t.toLowerCase()}`;
+  const staff = await admin.post(`${origin}/api/admin/staff`, { data: { email: username, name: `ครูสอบ ${t}`, role: 'teacher' } });
+  expect(staff.status()).toBe(201);
+  const { id: teacherId, tempPassword } = await staff.json() as { id: string; tempPassword: string };
+  const roomName = `ห้องสอบ ${t}`;
+  const room = await admin.post(`${origin}/api/admin/classrooms`, { data: { name: roomName, teacherId } });
+  expect(room.status()).toBe(201);
+  const roomId = (await room.json()).id as string;
+  await actx.close();
+
+  await login(teacher, 'staff', username, tempPassword);
+  await teacher.waitForURL('**/change-password');
+  await teacher.context().setExtraHTTPHeaders({ origin });
+  expect((await teacher.request.post('/api/auth/change-password', { data: { newPassword: `ครูสอบบัญชี-${randomUUID().slice(0, 8)}` } })).status()).toBe(200);
+  const code = `E${randomUUID().replace(/-/g, '').slice(0, 10)}`;
+  const temp = `ชั่วคราว-${randomUUID().slice(0, 8)}`;
+  const imp = await teacher.request.post(`/api/classrooms/${roomId}/import`, { data: { rows: [{ studentCode: code, name: `นักเรียนสอบ ${t}`, password: temp }] } });
+  expect(imp.status()).toBe(200);
+  await teacher.goto('/teacher');
+  return { roomName, code, temp, password: `สอบบัญชี-${randomUUID().slice(0, 8)}` };
 }
 
 test('ครูสร้างโจทย์ → สอบ → นักเรียนเริ่มสอบ → ครูเปิดเฉลย → ผลและไฟล์ส่งออก', async ({ browser }, info) => {
@@ -39,8 +58,8 @@ test('ครูสร้างโจทย์ → สอบ → นักเร�
   let assignmentId = '';
   try {
     // ---- ครูสร้างชุดโจทย์บนหน้าจอ ----
-    await login(teacher, 'staff', env.teacherEmail, env.teacherPassword);
-    await teacher.waitForURL('**/teacher');
+    await teacher.goto('/login/staff');
+    const room = await newClass(browser, teacher, t);
     await teacher.getByRole('link', { name: 'โจทย์', exact: true }).click();
     await expect(teacher.getByRole('heading', { name: 'โจทย์', exact: true })).toBeVisible();
     await teacher.getByRole('link', { name: 'สร้างชุดโจทย์' }).click();
@@ -58,6 +77,7 @@ test('ครูสร้างโจทย์ → สอบ → นักเร�
 
     // ---- มอบหมายเป็นการสอบ 30 นาที ----
     await teacher.getByRole('radio', { name: 'สอบ' }).check({ force: true });
+    await teacher.getByLabel('ห้อง', { exact: true }).selectOption({ label: room.roomName });
     await teacher.getByLabel('ชื่อบริษัท', { exact: true }).fill(`สอบ E2E ${t}`);
     await teacher.getByLabel('เวลาสอบ (นาที)').fill('30');
     await teacher.getByLabel('นักเรียนเห็นผลตรวจ').selectOption('answers');
@@ -68,11 +88,13 @@ test('ครูสร้างโจทย์ → สอบ → นักเร�
     await expect(teacher.getByText('ยังไม่เปิดเฉลย')).toBeVisible();
 
     // ---- นักเรียนเริ่มสอบ ----
-    await login(student, 'student', env.studentCode, env.studentPassword);
-    await expect(student.getByRole('heading', { name: 'เลือกบริษัท' }).or(student.locator('main'))).toBeVisible();
+    await login(student, 'student', room.code, room.temp);
+    await student.waitForURL('**/change-password');
     await student.context().setExtraHTTPHeaders({ origin: originOf(student) });
-    const mine = await (await student.request.get('/api/me/companies')).json() as { id: string; name: string }[];
-    const co = mine.find((c) => c.name === `สอบ E2E ${t}`)!.id;
+    expect((await student.request.post('/api/auth/change-password', { data: { newPassword: room.password } })).status()).toBe(200);
+    await student.goto('/');
+    await student.waitForURL(/\/c\/[0-9a-f-]{36}$/); // บริษัทเดียว (ของงานนี้) เข้าให้เลย
+    const co = student.url().split('/').pop()!;
     await student.goto(`/c/${co}/work`);
     await expect(student.getByText(/^สอบ 30 นาที/)).toBeVisible();
     await expect(student.getByText('นำเงินสดมาลงทุน')).toHaveCount(0); // ยังไม่เริ่ม = ไม่เห็นโจทย์
@@ -97,12 +119,11 @@ test('ครูสร้างโจทย์ → สอบ → นักเร�
 
     // ---- ครูเห็นคะแนนอัตโนมัติ เปิดเฉลย ส่งออกคะแนน ----
     await teacher.reload();
-    const row = isPhone(info) ? teacher.locator('li').filter({ hasText: env.studentCode }) : teacher.getByRole('row').filter({ hasText: env.studentCode });
+    const row = isPhone(info) ? teacher.locator('li').filter({ hasText: room.code }) : teacher.getByRole('row').filter({ hasText: room.code });
     await expect(row.first()).toContainText('1.00/3.00');
     await checkScreen(teacher, info, 'teacher-assignment');
     await teacher.getByRole('button', { name: 'เปิดเฉลย' }).click();
     await expect(teacher.getByText('เปิดเฉลยแล้ว')).toBeVisible();
-    await teacher.context().setExtraHTTPHeaders({ origin: originOf(teacher) });
     const pdf = await teacher.request.get(`/export/assignment/${assignmentId}/scores.pdf`);
     expect(pdf.status()).toBe(200);
     expect(pdf.headers()['content-type']).toBe('application/pdf');
