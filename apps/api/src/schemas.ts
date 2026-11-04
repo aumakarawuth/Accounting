@@ -282,3 +282,47 @@ export const DisposeAsset = z.object({
 }).strict();
 export const VoidWithReason = z.object({ date: IsoDate.optional(), reason: z.string().trim().min(1, 'ต้องระบุเหตุผล').max(300) }).strict();
 export const VoidRun = z.object({ date: IsoDate.optional() }).strict();
+
+// ---- เฟส 4 โจทย์ / มอบหมาย / สอบ (ตรงกับ check ใน migration 20261110000100) ----
+const ExerciseLine = z.object({
+  account_code: z.string().regex(/^[0-9]{3,10}$/, 'รหัสบัญชีต้องเป็นตัวเลข 3–10 หลัก'),
+  debit: Money.optional(),
+  credit: Money.optional(),
+}).strict();
+const ExerciseItem = z.object({
+  date: IsoDate,
+  narrative: z.string().trim().min(1, 'ต้องมีข้อความรายการค้า').max(2000),
+  points: z.string().regex(/^\d{1,3}(\.\d{1,2})?$/, 'คะแนนต้องเป็นตัวเลข').default('1'),
+  lines: z.array(ExerciseLine).min(2, 'เฉลยต้องมีอย่างน้อย 2 บรรทัด').max(20),
+}).strict();
+export const ExerciseSetBody = z.object({
+  title: z.string().trim().min(1, 'ต้องมีชื่อชุดโจทย์').max(200),
+  companyName: z.string().trim().min(1, 'ต้องมีชื่อบริษัท').max(120),
+  description: z.string().max(4000).default(''),
+  items: z.array(ExerciseItem).min(1, 'ต้องมีอย่างน้อย 1 ข้อ').max(200),
+  version: z.number().int().positive().optional(),
+}).strict();
+export const SetParams = z.object({ setId: Uuid });
+export const AssignmentParams = z.object({ assignmentId: Uuid });
+const Feedback = z.enum(['none', 'score', 'items', 'answers']);
+const Reveal = z.enum(['anytime', 'after_submit', 'after_release']);
+const Instant = z.iso.datetime({ offset: true });
+export const AssignBody = z.object({
+  classroomId: Uuid.nullable().default(null),
+  mode: z.enum(['practice', 'submit', 'exam', 'demo']),
+  companyName: z.string().trim().max(120).optional(),
+  feedback: Feedback.default('items'),
+  reveal: Reveal.default('anytime'),
+  checkDate: z.boolean().default(true),
+  opensAt: Instant.nullable().optional(),
+  closesAt: Instant.nullable().optional(),
+  durationMinutes: z.number().int().min(1).max(600).optional(),
+}).strict();
+export const DemoBody = z.object({ companyName: z.string().trim().min(1, 'ต้องมีชื่อบริษัท').max(120) }).strict();
+export const AssignmentOptionsBody = z.object({ feedback: Feedback.optional(), reveal: Reveal.optional(), checkDate: z.boolean().optional() }).strict();
+export const AssignmentActionBody = z.object({
+  action: z.enum(['release', 'hide', 'close', 'reopen', 'open-companies', 'extend']),
+  minutes: z.number().int().min(1).max(600).optional(),
+  companyId: Uuid.optional(),
+}).strict();
+

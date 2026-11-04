@@ -13,8 +13,9 @@ export default async function TeacherLayout({ children }: { children: React.Reac
       <header className="print:hidden flex flex-wrap items-center gap-x-4 border-b border-rule-strong bg-paper px-4 text-[15px] sm:px-6">
         <span className="mr-2 flex min-h-[52px] items-center font-semibold">{th.app.name} · {th.app.teacherSuffix}</span>
         <nav aria-label={th.app.teacherSuffix} className="flex max-sm:order-last max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:border-t max-sm:border-rule">
-          {[['/teacher', th.teacher.classrooms], ['/teacher/live', th.live.nav], ['/teacher/submissions', th.submission.list]].map(([href, label]) => (
-            <Link key={href} href={href!} className="flex min-h-11 items-center justify-center border-l border-rule px-4 max-sm:flex-1 max-sm:first:border-l-0">{label}</Link>
+          {[['/teacher', th.teacher.classrooms], ['/teacher/live', th.live.nav], ['/teacher/exercises', th.exercises.nav],
+            ['/teacher/submissions', th.submission.list], ['/teacher/demo', th.demo.nav]].map(([href, label]) => (
+            <Link key={href} href={href!} className="flex min-h-11 items-center justify-center border-l border-rule px-4 text-center leading-tight max-sm:flex-1 max-sm:px-1 max-sm:text-sm max-sm:first:border-l-0">{label}</Link>
           ))}
         </nav>
         <span className="ml-auto text-sm">{me.displayName}</span>

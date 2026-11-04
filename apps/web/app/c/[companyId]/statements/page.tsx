@@ -1,3 +1,4 @@
+import { ExportLinks } from '@/components/ExportLinks';
 import Link from 'next/link';
 import { MonthNav } from '@/components/MonthNav';
 import { StatementsView } from '@/components/reports/StatementsView';
@@ -29,6 +30,7 @@ export default async function StatementsPage({
             <Link href={href(month, 'ytd')} aria-current={scope === 'ytd' ? 'page' : undefined} className={`${tab} border-l-0`}>{th.statements.scopeYtd}</Link>
           </nav>
           <MonthNav month={month} href={(m) => href(m)} />
+          <ExportLinks base={`/export/company/${companyId}/statements`} query={`month=${month}&scope=${scope}`} />
         </div>
       </div>
       <StatementsView st={st} company={company.name} />

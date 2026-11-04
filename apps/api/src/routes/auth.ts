@@ -52,6 +52,8 @@ export function authRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
     await pool.query('select app.session_create($1, $2, $3, $4, $5::interval)', [
       found.user_id, tokenHash(token), clientInfo(req), cfg.idleSeconds, `${cfg.maxAgeSeconds} seconds`,
     ]);
+    // โหมดสอบ: 1 เซสชันต่อคน ล็อกอินเครื่องใหม่ระหว่างสอบ = เครื่องเก่าออก
+    await pool.query('select app.exam_single_session($1, $2)', [found.user_id, tokenHash(token)]);
     setCookie(reply, token);
     return { role: found.role, mustChange: found.must_change };
   });

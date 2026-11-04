@@ -4,6 +4,7 @@ import { withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
+import { ledger, ledgerAccounts, statements, trialBalance } from '../reports.js';
 import {
   AccountParams, CommentParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, NewComment, PeriodParams,
   PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery,
@@ -39,7 +40,7 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       const r = await c.query(
         `select c.id, c.name, c.version, c.mode, app.can_write_company(c.id) as can_write,
                 coalesce(s.status, case c.mode when 'submit' then 'draft' end) as status,
-                app.company_locked(c.id) as locked
+                app.company_locked(c.id) as locked, app.company_assignment(c.id) as assignment
            from acc.companies c left join acc.submissions s on s.company_id = c.id where c.id = $1`,
         [companyId],
       );
@@ -81,171 +82,41 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     });
   });
 
-  // งบทดลอง: ยอดสะสมตั้งแต่เริ่มบริษัทถึงสิ้นเดือนที่เลือก (จาก account_balances)
-  // ยอดสุทธิของแต่ละบัญชีลงช่องเดบิตหรือเครดิตช่องเดียว; ยอดรวมคำนวณใน SQL (ไม่บวกเงินใน JS)
+  // งบทดลอง แยกประเภท งบการเงิน: SQL อยู่ที่ reports.ts (ใช้ร่วมกับไฟล์ส่งออก PDF/Excel)
   app.get('/companies/:companyId/trial-balance', async (req) => {
     const { companyId } = CompanyParams.parse(req.params);
     const { month, all } = TrialBalanceQuery.parse(req.query);
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      const r = await c.query(
-        `with net as (
-           select a.code, a.name, a.type, a.normal_side,
-                  coalesce(sum(b.debit_total - b.credit_total) filter (where p.start_date <= $2::date), 0) as net,
-                  count(b.*) filter (where p.start_date <= $2::date) as touched
-             from acc.chart_of_accounts a
-             left join acc.account_balances b on b.company_id = a.company_id and b.account_id = a.id
-             left join acc.periods p on p.company_id = b.company_id and p.id = b.period_id
-            where a.company_id = $1
-            group by a.code, a.name, a.type, a.normal_side
-         )
-         select code, name, type, normal_side as "normalSide",
-                greatest(net, 0)::numeric(18,2)::text as debit,
-                greatest(-net, 0)::numeric(18,2)::text as credit,
-                sum(greatest(net, 0)) over ()::numeric(18,2)::text as "totalDebit",
-                sum(greatest(-net, 0)) over ()::numeric(18,2)::text as "totalCredit"
-           from net
-          where $3 or net <> 0
-          order by code`,
-        [companyId, `${month}-01`, all === '1'],
-      );
-      const first = r.rows[0];
-      return {
-        month,
-        rows: r.rows.map(({ totalDebit: _d, totalCredit: _c, ...row }) => row),
-        totalDebit: first?.totalDebit ?? '0.00',
-        totalCredit: first?.totalCredit ?? '0.00',
-      };
+      return trialBalance(c, companyId, month, all === '1');
     });
   });
 
-  // บัญชีที่มีความเคลื่อนไหวหรือมียอดในเดือนนี้ (หน้าเลือกบัญชีของแยกประเภท)
-  // ยอดหันตามด้านปกติของบัญชี: บวก = ด้านปกติ, ติดลบ = กลับด้าน
   app.get('/companies/:companyId/ledger-accounts', async (req) => {
     const { companyId } = CompanyParams.parse(req.params);
     const { month } = MonthQuery.parse(req.query);
     if (!month) throw new HttpError(400, 'invalid', 'ต้องระบุเดือน');
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      const r = await c.query(
-        `with s as (
-           select a.code, a.name, a.normal_side,
-                  case a.normal_side when 'debit' then 1 else -1 end as sign,
-                  coalesce(sum(b.debit_total - b.credit_total) filter (where p.start_date < $2::date), 0) as open_net,
-                  coalesce(sum(b.debit_total) filter (where p.start_date = $2::date), 0) as dr,
-                  coalesce(sum(b.credit_total) filter (where p.start_date = $2::date), 0) as cr
-             from acc.chart_of_accounts a
-             join acc.account_balances b on b.company_id = a.company_id and b.account_id = a.id
-             join acc.periods p on p.company_id = b.company_id and p.id = b.period_id
-            where a.company_id = $1 and p.start_date <= $2::date
-            group by a.code, a.name, a.normal_side
-         )
-         select code, name, normal_side as "normalSide",
-                (open_net * sign)::numeric(18,2)::text as opening,
-                dr::numeric(18,2)::text as debit, cr::numeric(18,2)::text as credit,
-                ((open_net + dr - cr) * sign)::numeric(18,2)::text as closing
-           from s where open_net <> 0 or dr <> 0 or cr <> 0
-          order by code`,
-        [companyId, `${month}-01`],
-      );
-      return r.rows;
+      return ledgerAccounts(c, companyId, month);
     });
   });
 
-  // แยกประเภทบัญชีเดียว ในเดือนที่เลือก: ยอดยกมา → รายการ (ยอดคงเหลือต่อเนื่อง) → ยอดยกไป
   app.get('/companies/:companyId/ledger', async (req) => {
     const { companyId } = CompanyParams.parse(req.params);
     const { month, account } = LedgerQuery.parse(req.query);
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      const a = (await c.query(
-        `select id, code, name, type, normal_side from acc.chart_of_accounts where company_id = $1 and code = $2`,
-        [companyId, account])).rows[0];
-      if (!a) throw new HttpError(404, 'not_found', `ไม่พบรหัสบัญชี ${account}`);
-      const from = `${month}-01`;
-      const r = await c.query(
-        `with sign as (select case $3::text when 'debit' then 1 else -1 end as s),
-         opening as (
-           select coalesce(sum(l.debit - l.credit), 0) as net
-             from acc.journal_lines l join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
-            where l.company_id = $1 and l.account_id = $2 and e.entry_date < $4::date
-         ), lines as (
-           select e.entry_date, e.posted_at, l.line_no, e.doc_no, e.description, l.memo, l.debit, l.credit,
-                  e.reverses_entry_id is not null as reversal
-             from acc.journal_lines l join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
-            where l.company_id = $1 and l.account_id = $2
-              and e.entry_date >= $4::date and e.entry_date < ($4::date + interval '1 month')
-         )
-         select (select (net * s)::numeric(18,2)::text from opening, sign) as opening,
-                coalesce(json_agg(json_build_object(
-                  'date', entry_date::text, 'docNo', doc_no, 'description', description, 'memo', memo,
-                  'debit', debit::text, 'credit', credit::text, 'reversal', reversal,
-                  'balance', (((select net from opening) + running) * (select s from sign))::numeric(18,2)::text)
-                  order by entry_date, posted_at, line_no), '[]') as lines,
-                (select coalesce(sum(debit), 0)::numeric(18,2)::text from lines) as "totalDebit",
-                (select coalesce(sum(credit), 0)::numeric(18,2)::text from lines) as "totalCredit",
-                (((select net from opening) + coalesce((select sum(debit - credit) from lines), 0)) * (select s from sign))::numeric(18,2)::text as closing
-           from (select *, sum(debit - credit) over (order by entry_date, posted_at, line_no) as running from lines) x`,
-        [companyId, a.id, a.normal_side, from],
-      );
-      return {
-        month,
-        account: { code: a.code, name: a.name, type: a.type, normalSide: a.normal_side },
-        ...r.rows[0],
-      };
+      return ledger(c, companyId, month, account);
     });
   });
 
-  // งบการเงิน: กำไรขาดทุน (เดือนนี้หรือต้นปีถึงเดือนนี้) + ฐานะการเงิน ณ สิ้นเดือน
-  // ยอดหันตามด้านปกติ (บัญชีปรับลด เช่น ค่าเสื่อมราคาสะสม/ถอนใช้ส่วนตัว/ส่วนลด จึงติดลบ = หักออก)
-  // ยังไม่มีปิดบัญชีสิ้นปี: กำไรสะสมตั้งแต่เริ่มบริษัทแสดงเป็น "ยังไม่ได้ปิดบัญชี" ในส่วนทุน
   app.get('/companies/:companyId/statements', async (req) => {
     const { companyId } = CompanyParams.parse(req.params);
     const { month, scope } = StatementsQuery.parse(req.query);
-    const to = `${month}-01`;
-    const from = scope === 'month' ? to : `${month.slice(0, 4)}-01-01`;
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      const r = await c.query(
-        `with b as (
-           select a.code, a.name, a.type, case a.normal_side when 'debit' then 1 else -1 end as s,
-                  coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date between $2::date and $3::date), 0) as period_net,
-                  coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date <= $3::date), 0) as cum_net
-             from acc.chart_of_accounts a
-             left join acc.account_balances x on x.company_id = a.company_id and x.account_id = a.id
-             left join acc.periods p on p.company_id = x.company_id and p.id = x.period_id
-            where a.company_id = $1
-            group by a.code, a.name, a.type, a.normal_side
-         ), lines as (
-           select type, code, name, (period_net * s) as period_amt, (cum_net * s) as balance from b
-         ), t as (
-           select coalesce(sum(period_amt) filter (where type = 'revenue'), 0) as rev,
-                  coalesce(sum(period_amt) filter (where type = 'expense'), 0) as exp,
-                  coalesce(sum(balance) filter (where type = 'revenue'), 0) - coalesce(sum(balance) filter (where type = 'expense'), 0) as unclosed,
-                  coalesce(sum(balance) filter (where type = 'asset'), 0) as assets,
-                  coalesce(sum(balance) filter (where type = 'liability'), 0) as liabilities,
-                  coalesce(sum(balance) filter (where type = 'equity'), 0) as equity
-             from lines
-         )
-         select json_build_object(
-           'revenue', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', period_amt::numeric(18,2)::text) order by code), '[]') from lines where type = 'revenue' and period_amt <> 0),
-           'expense', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', period_amt::numeric(18,2)::text) order by code), '[]') from lines where type = 'expense' and period_amt <> 0),
-           'assets', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', balance::numeric(18,2)::text) order by code), '[]') from lines where type = 'asset' and balance <> 0),
-           'liabilities', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', balance::numeric(18,2)::text) order by code), '[]') from lines where type = 'liability' and balance <> 0),
-           'equity', (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'amount', balance::numeric(18,2)::text) order by code), '[]') from lines where type = 'equity' and balance <> 0),
-           'totalRevenue', rev::numeric(18,2)::text,
-           'totalExpense', exp::numeric(18,2)::text,
-           'netIncome', (rev - exp)::numeric(18,2)::text,
-           'unclosedProfit', unclosed::numeric(18,2)::text,
-           'totalAssets', assets::numeric(18,2)::text,
-           'totalLiabilities', liabilities::numeric(18,2)::text,
-           'totalEquity', (equity + unclosed)::numeric(18,2)::text,
-           'totalLiabilitiesEquity', (liabilities + equity + unclosed)::numeric(18,2)::text,
-           'balanced', assets = liabilities + equity + unclosed
-         ) as st from t`,
-        [companyId, from, to],
-      );
-      return { month, scope, from: from.slice(0, 7), ...r.rows[0].st };
+      return statements(c, companyId, month, scope);
     });
   });
 

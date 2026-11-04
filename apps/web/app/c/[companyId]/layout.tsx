@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { Topbar } from '@/components/Topbar';
 import { SideNav, BottomTabs } from '@/components/Nav';
 import { PresenceReporter } from '@/components/PresenceReporter';
+import { ExamClock } from '@/components/exercises/ExamClock';
+import { DemoScale } from '@/components/exercises/DemoScale';
 import type { ApiError, Company } from '@/lib/api';
 import { requireMe, serverApi } from '@/lib/server-api';
 import { monthLabel, todayIso } from '@/lib/date';
@@ -22,11 +24,17 @@ export default async function CompanyLayout({
     if ((e as ApiError).status === 404 || (e as ApiError).status === 400) notFound();
     throw e;
   }
+  const asg = company.assignment;
+  // แถบบน: โหมดของงาน (สอบ/สาธิต) แทนโหมดของบริษัท
+  const mode = asg?.mode === 'exam' || asg?.mode === 'demo' ? asg.mode : company.mode;
+  const clock = asg?.mode === 'exam' && asg.deadline && asg.lockReason !== 'submitted' && asg.lockReason !== 'closed';
   return (
     // พิมพ์เอกสาร: ซ่อนแถบบน/เมนู ให้เหลือแต่กระดาษ
     <div className="flex h-dvh flex-col print:block print:h-auto">
       <div className="contents print:hidden">
-      <Topbar company={company.name} home={`/c/${companyId}`} month={monthLabel(todayIso())} mode={company.mode} work={company.mode === 'submit' ? company.status : null} user={`${me.studentCode ?? ''} ${me.displayName}`.trim()} userId={me.id} />
+      <Topbar company={company.name} home={`/c/${companyId}`} month={monthLabel(todayIso())} mode={mode} work={company.mode === 'submit' ? company.status : null} user={`${me.studentCode ?? ''} ${me.displayName}`.trim()} userId={me.id} />
+      {clock && <ExamClock deadline={asg.deadline!} serverNow={asg.now} />}
+      {asg?.mode === 'demo' && company.can_write && <DemoScale />}
       </div>
       <div className="flex min-h-0 flex-1 print:block">
         <div className="contents print:hidden"><SideNav companyId={companyId} /></div>

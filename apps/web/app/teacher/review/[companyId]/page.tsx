@@ -5,7 +5,8 @@ import { SubmissionPanel } from '@/components/SubmissionPanel';
 import { PeriodTable } from '@/components/PeriodTable';
 import { StatementsView } from '@/components/reports/StatementsView';
 import { serverApi } from '@/lib/server-api';
-import type { ApiError, Company, EntryRow, Periods, Statements, Submission, TeacherSubmission } from '@/lib/api';
+import type { Account, ApiError, AssignmentView, Company, EntryRow, Periods, Statements, Submission, TeacherSubmission } from '@/lib/api';
+import { AssignmentPanel } from '@/components/exercises/AssignmentPanel';
 import { isoToThai, todayIso } from '@/lib/date';
 import { th } from '@/i18n/th';
 
@@ -27,6 +28,9 @@ export default async function ReviewPage({ params }: { params: Promise<{ company
     serverApi<TeacherSubmission[]>('/teacher/submissions'),
     serverApi<Periods>(`/companies/${companyId}/periods`),
   ]);
+  const [view, accounts] = company.assignment
+    ? await Promise.all([serverApi<AssignmentView>(`/companies/${companyId}/assignment`), serverApi<Account[]>(`/companies/${companyId}/accounts`)])
+    : [null, []];
   const me = list.find((s) => s.companyId === companyId);
   const cell = 'border border-rule px-2.5 py-2';
   return (
@@ -39,6 +43,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ company
         <p className="text-sm text-ink2">{th.submission.viewLogged}</p>
       </div>
       <SubmissionPanel companyId={companyId} sub={sub} viewer="teacher" />
+      {view && <AssignmentPanel view={view} companyId={companyId} accounts={accounts} canWrite={false} />}
       <StatementsView st={st} company={company.name} />
       <section className="flex flex-col gap-2" aria-label={th.closing.teacherTitle}>
         <h2 className="text-[17px] font-semibold">{th.closing.teacherTitle}</h2>

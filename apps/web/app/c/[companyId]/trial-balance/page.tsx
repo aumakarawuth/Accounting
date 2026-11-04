@@ -1,3 +1,4 @@
+import { ExportLinks } from '@/components/ExportLinks';
 import Link from 'next/link';
 import { MonthNav } from '@/components/MonthNav';
 import { Money } from '@/components/Money';
@@ -37,6 +38,7 @@ export default async function TrialBalancePage({
           <Link href={href(month, !all)} className="flex min-h-11 items-center text-sm underline">
             {all ? th.trialBalance.showActive : th.trialBalance.showAll}
           </Link>
+          <ExportLinks base={`/export/company/${companyId}/trial-balance`} query={`month=${month}`} />
         </div>
       </div>
 

@@ -1,3 +1,4 @@
+import { ExportLinks } from '@/components/ExportLinks';
 import Link from 'next/link';
 import { MonthNav } from '@/components/MonthNav';
 import { Money } from '@/components/Money';
@@ -29,7 +30,10 @@ export default async function LedgerPage({
     <div className="flex flex-col gap-4 p-4 sm:p-6">
       <div className="flex flex-wrap items-end gap-3 border-b-2 border-ink pb-2.5">
         <h1 className="font-doc text-[20px] font-bold sm:text-2xl">{th.ledger.title}</h1>
-        <div className="sm:ml-auto"><MonthNav month={month} href={(m) => href(m)} /></div>
+        <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
+          <MonthNav month={month} href={(m) => href(m)} />
+          <ExportLinks base={`/export/company/${companyId}/ledger`} query={`month=${month}`} />
+        </div>
       </div>
 
       <div className="flex gap-5">

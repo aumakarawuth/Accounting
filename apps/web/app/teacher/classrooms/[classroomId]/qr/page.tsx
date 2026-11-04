@@ -14,7 +14,8 @@ export default async function JoinQrPage({ params }: { params: Promise<{ classro
   const h = await headers();
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
   const proto = h.get('x-forwarded-proto') ?? (/^(localhost|127\.)/.test(host) ? 'http' : 'https');
-  const origin = `${proto}://${host}`;
+  // ตั้ง WEB_ORIGIN แล้วใช้ค่านั้น (header Host/X-Forwarded-Host ปลอมได้ ถ้ามี proxy ที่ไม่ล้างให้ QR ชี้ไปโดเมนอื่น)
+  const origin = process.env.WEB_ORIGIN?.split(',')[0]?.trim() || `${proto}://${host}`;
   const back = <Link href="/teacher" className="flex min-h-11 items-center self-start text-sm underline print:hidden">‹ {th.teacher.backToRooms}</Link>;
 
   if (!room.joinCode) {
