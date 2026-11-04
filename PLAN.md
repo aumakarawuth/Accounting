@@ -274,4 +274,5 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
 - **เฟส 3** (3 พ.ย. 2569): สินค้าคงเหลือ/ต้นทุนขาย และกระทบยอดธนาคาร merge แล้ว · **เช็ครับ/เช็คจ่าย และสินทรัพย์ถาวร** (ทะเบียน ค่าเสื่อมรายเดือนเป็น AJ จำหน่าย)
   ทำแล้วใน migration 026–027 รอเจ้าของโปรเจกต์ตรวจและ apply กับ Supabase (รายละเอียด `docs/phase3-spec.md` ข้อ 3–4, สมมติฐาน `docs/assumptions.md` ข้อ 31–32)
 - ช่วงพัฒนา: Supabase โปรเจกต์ใหม่ (ap-southeast-1) + Vercel `accounting-web` (sin1) ใช้งานอยู่ ขั้นตอนใน `docs/deploy-dev.md`
+- 4 พ.ย. 2569: เฟส 3 (สินค้าคงเหลือ กระทบยอดธนาคาร เช็ค สินทรัพย์ถาวร) เสร็จ · k6 500 คนรันซ้ำผ่าน (`docs/load-test.md`) · เฟส 4 กำลังทำ (branch `claude/phase4-exercises`)
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอนเฟสกลาง)

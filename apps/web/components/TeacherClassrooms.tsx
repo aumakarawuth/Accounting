@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { postJson, type ApiError, type Classroom } from '@/lib/api';
 import { th } from '@/i18n/th';
 import { nextSlipKey, PasswordSlips, type Slip } from './PasswordSlips';
@@ -8,10 +9,11 @@ import { OpenCompanies } from './OpenCompanies';
 import { JoinCodePanel } from './JoinCodePanel';
 import { StudentImport } from './StudentImport';
 
-type RowState = { confirm?: boolean; busy?: boolean; note?: string; error?: string };
+type RowState = { confirm?: boolean; confirmDelete?: boolean; busy?: boolean; note?: string; error?: string };
 
 // รีเซ็ตรหัส: กดสองจังหวะ (ปุ่มเปลี่ยนเป็น "ยืนยัน" ในที่เดิม ไม่ใช้ popup) รหัสชั่วคราวไปรวมที่ใบรหัสผ่านด้านล่าง
 export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
+  const router = useRouter();
   const [state, setState] = useState<Record<string, RowState>>({});
   const [importing, setImporting] = useState<string | null>(null);
   const [slips, setSlips] = useState<Slip[]>([]);
@@ -29,6 +31,18 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
       addSlips([{ key: nextSlipKey(), idLabel: th.slips.studentCode, id: s.studentCode, name: s.name, room: room.name, temp: r.tempPassword }]);
     } catch (e) {
       set(s.id, { error: (e as ApiError).message });
+    }
+  }
+  async function remove(id: string) {
+    if (state[id]?.busy) return;
+    if (!state[id]?.confirmDelete) return set(id, { confirmDelete: true });
+    set(id, { confirmDelete: true, busy: true });
+    try {
+      await postJson(`/teacher/students/${id}/delete`, {});
+      set(id, {});
+      router.refresh();
+    } catch (e) {
+      set(id, { error: (e as ApiError).message });
     }
   }
   async function kick(id: string) {
@@ -74,6 +88,9 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
                         {st.confirm ? th.teacher.confirmReset : th.teacher.resetPassword}
                       </button>
                       <button type="button" className={btn} onClick={() => kick(s.id)}>{th.teacher.kickDevice}</button>
+                      <button type="button" disabled={st.busy} className={`${btn} border-red text-red ${st.confirmDelete ? 'bg-red text-paper' : ''} disabled:bg-disabled disabled:text-ink2`} onClick={() => remove(s.id)}>
+                        {st.confirmDelete ? th.teacher.confirmDeleteStudent : th.teacher.deleteStudent}
+                      </button>
                       {(st.note || st.error) && (
                         <p role="status" className={`basis-full text-sm ${st.error ? 'neg' : ''}`}>{st.note ?? st.error}</p>
                       )}
