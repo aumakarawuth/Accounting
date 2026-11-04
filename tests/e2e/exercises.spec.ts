@@ -89,7 +89,7 @@ test('ครูสร้างโจทย์ → สอบ → นักเร�
 
     // ---- มอบหมายเป็นการสอบ 30 นาที ----
     await teacher.getByRole('radio', { name: 'สอบ' }).check({ force: true });
-    await teacher.getByLabel('ห้อง', { exact: true }).selectOption({ label: room.roomName });
+    await teacher.getByRole('combobox', { name: 'ห้อง', exact: true }).selectOption({ label: room.roomName });
     await teacher.getByLabel('ชื่อบริษัท', { exact: true }).fill(`สอบ E2E ${t}`);
     await teacher.getByLabel('เวลาสอบ (นาที)').fill('30');
     await teacher.getByLabel('นักเรียนเห็นผลตรวจ').selectOption('answers');
