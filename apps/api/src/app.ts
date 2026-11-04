@@ -17,6 +17,7 @@ import { worksheetRoutes } from './routes/worksheet.js';
 import { bankRoutes } from './routes/bank.js';
 import { chequeRoutes } from './routes/cheques.js';
 import { assetRoutes } from './routes/assets.js';
+import { exerciseRoutes } from './routes/exercises.js';
 import type { RealtimeBus } from './realtime.js';
 import { teacherRoutes } from './routes/teacher.js';
 
@@ -53,10 +54,17 @@ export function buildApp(opts: {
     if (wait) throw new HttpError(429, 'rate_limited', 'ส่งคำขอถี่เกินไป', { retryAfter: wait });
     if (SAFE.has(req.method) || opts.cfg.allowedOrigins === false) return;
     let origin = req.headers.origin;
-    if (!origin && req.headers.referer) origin = new URL(req.headers.referer).origin;
+    // Referer ที่ไม่ใช่ URL (ปลอม/เสีย) = ไม่มีที่มา → 403 ไม่ใช่ 500 (พบจากการทดสอบเจาะระบบ เฟส 4)
+    if (!origin && req.headers.referer) origin = URL.canParse(req.headers.referer) ? new URL(req.headers.referer).origin : undefined;
     if (!origin || !opts.cfg.allowedOrigins.includes(origin)) {
       throw new HttpError(403, 'csrf', 'คำขอนี้ไม่ได้มาจากหน้าเว็บของระบบ');
     }
+  });
+
+  // ข้อมูลบัญชี/ผู้ใช้ทุกคำตอบ: ห้ามเก็บใน cache ของเบราว์เซอร์หรือ proxy และห้ามเดาชนิดไฟล์ (OWASP A05)
+  app.addHook('onSend', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    reply.header('x-content-type-options', 'nosniff');
   });
 
   app.setErrorHandler((err, req, reply) => {
@@ -82,6 +90,7 @@ export function buildApp(opts: {
     bankRoutes(scope, opts.pool, auth);
     chequeRoutes(scope, opts.pool, auth);
     assetRoutes(scope, opts.pool, auth);
+    exerciseRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
     liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs });

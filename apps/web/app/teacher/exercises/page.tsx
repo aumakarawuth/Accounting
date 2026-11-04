@@ -1,0 +1,57 @@
+import Link from 'next/link';
+import { serverApi } from '@/lib/server-api';
+import type { AssignmentSummary, ExerciseSetSummary } from '@/lib/api';
+import { th } from '@/i18n/th';
+
+const when = (iso: string) => new Date(iso).toLocaleDateString('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' });
+
+// โจทย์: ชุดโจทย์ของครู + งานที่มอบหมายแล้ว (รวมการสอบ) เรียงใหม่ก่อน
+export default async function ExercisesPage() {
+  const { sets, assignments } = await serverApi<{ sets: ExerciseSetSummary[]; assignments: AssignmentSummary[] }>('/teacher/exercises');
+  const t = th.exercises;
+  const rooms = assignments.filter((a) => a.mode !== 'demo');
+  return (
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      <div className="flex flex-wrap items-end gap-3 border-b-2 border-ink pb-2.5">
+        <h1 className="font-doc text-[22px] font-bold sm:text-2xl">{t.title}</h1>
+        <Link href="/teacher/exercises/new" className="ml-auto flex min-h-11 items-center rounded-doc bg-ink px-4 font-medium text-paper">{t.newSet}</Link>
+      </div>
+
+      <section aria-label={t.assignments} className="flex flex-col gap-2">
+        <h2 className="text-[17px] font-semibold">{t.assignments}</h2>
+        {rooms.length === 0 ? <p className="text-ink2">{t.noAssignments}</p> : (
+          <ul className="border-t border-rule-strong bg-paper">
+            {rooms.map((a) => (
+              <li key={a.id} className="border-b border-rule">
+                <Link href={`/teacher/assignments/${a.id}`} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
+                  <span className="font-medium">{a.title}</span>
+                  <span className="text-sm">{th.assign.modes[a.mode]}{a.closedAt ? ` · ${th.assignment.closed}` : ''}</span>
+                  <span className="text-[13px] text-ink2">{th.company.classroom(a.classroom ?? '')} · {a.companyName}</span>
+                  <span className="text-right font-num text-[13px] text-ink2">{when(a.createdAt)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section aria-label={t.sets} className="flex flex-col gap-2">
+        <h2 className="text-[17px] font-semibold">{t.sets}</h2>
+        {sets.length === 0 ? <p className="text-ink2">{t.noSets}</p> : (
+          <ul className="border-t border-rule-strong bg-paper">
+            {sets.map((s) => (
+              <li key={s.id} className="border-b border-rule">
+                <Link href={`/teacher/exercises/${s.id}`} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
+                  <span className="font-medium">{s.title}</span>
+                  <span className="text-sm">{t.summary(s.items, s.points)}</span>
+                  <span className="text-[13px] text-ink2">{s.companyName}</span>
+                  <span className="text-right text-[13px] text-ink2">{t.assignedCount(s.assignments)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

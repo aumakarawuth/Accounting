@@ -1,3 +1,4 @@
+import { ExportLinks } from '@/components/ExportLinks';
 import Link from 'next/link';
 import { MonthNav } from '@/components/MonthNav';
 import { serverApi } from '@/lib/server-api';
@@ -39,7 +40,10 @@ export default async function WorksheetPage({
           <h1 className="font-doc text-[20px] font-bold sm:text-2xl">{t.heading(company.name, monthEndLabel(month))}</h1>
           <p className="text-sm text-ink2">{w.format === 6 ? t.noteSix : t.note}</p>
         </div>
-        <div className="sm:ml-auto print:hidden"><MonthNav month={month} href={(m) => href(m)} /></div>
+        <div className="flex flex-wrap items-center gap-3 sm:ml-auto print:hidden">
+          <MonthNav month={month} href={(m) => href(m)} />
+          {w.format && <ExportLinks base={`/export/company/${companyId}/worksheet`} query={`month=${month}&format=${w.format}`} />}
+        </div>
       </div>
 
       {w.refused && <p role="status" className="border border-rule-strong bg-band px-4 py-2.5">{w.refused}</p>}

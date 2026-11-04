@@ -30,6 +30,9 @@ API_URL=http://127.0.0.1:4000 pnpm --filter @accounting/web dev
 - เทสต์ทั้งหมด: `pnpm test` (สร้างฐาน `accounting_test` ใหม่ทุกครั้ง)
 - ตรวจเส้นทางผู้ดูแล → ครูนำเข้า CSV → ใบรหัสผ่าน → นักเรียนเข้าใช้: `node tests/e2e-admin.mjs <base> <อีเมลผู้ดูแล> <รหัสชั่วคราว> <โฟลเดอร์ csv> <โฟลเดอร์ภาพ>`
 - ตรวจครูเปิดบริษัททั้งห้อง → นักเรียนลงรายการ → งบทดลอง/แยกประเภท 3 ขนาดจอ: `node tests/e2e-reports.mjs <base> <อีเมลครู> <รหัสครู> <รหัสนักเรียน> <รหัสผ่าน> <โฟลเดอร์ภาพ>`
+- ทดสอบเจาะระบบเบื้องต้นกับเว็บที่ deploy แล้ว: `node scripts/security-check.mjs <base> <รหัสนักเรียน> <รหัสผ่าน> [id บริษัทของคนอื่น]` (เช็กลิสต์ `docs/owasp-top10.md`)
+- PDF/Excel: สร้างที่ `apps/web/lib/export/` (route `/export/...`) ฟอนต์ไทยฝังใน `lib/export/fonts.ts` (base64 ของ IBM Plex Sans Thai Looped, OFL)
+  ดูไฟล์ PDF ที่ได้เป็นภาพ: `pdftoppm -r 80 -png ไฟล์.pdf ภาพ` · ข้อความ: `pdftotext -layout ไฟล์.pdf -`
 - lint: `pnpm lint`
 - เทสต์หน้าจอ 3 ขนาด (Playwright) ต้องเปิดเว็บ + API กับฐาน accounting_dev ก่อน: `pnpm --filter @accounting/tests e2e`
   (ภาพอยู่ที่ `tests/e2e-results/screens/<phone|ipad|pc>/` ตรวจอัตโนมัติ: ไม่เลื่อนแนวนอนเกินจอ, ช่องกรอก ≥ 16px, ปุ่ม ≥ 44px บนจอสัมผัส, ไม่มี error ใน console)

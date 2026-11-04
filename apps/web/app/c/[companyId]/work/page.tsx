@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import type { Company, EntryRow, Submission } from '@/lib/api';
+import type { Account, AssignmentView, Company, EntryRow, Submission } from '@/lib/api';
+import { AssignmentPanel } from '@/components/exercises/AssignmentPanel';
 import { SubmissionPanel } from '@/components/SubmissionPanel';
 import { serverApi } from '@/lib/server-api';
 import { isoToThai } from '@/lib/date';
@@ -13,11 +14,15 @@ export default async function WorkPage({ params }: { params: Promise<{ companyId
     serverApi<EntryRow[]>(`/companies/${companyId}/journal`),
   ]);
   const sub = company.mode === 'submit' ? await serverApi<Submission>(`/companies/${companyId}/submission`) : null;
+  const [view, accounts] = company.assignment
+    ? await Promise.all([serverApi<AssignmentView>(`/companies/${companyId}/assignment`), serverApi<Account[]>(`/companies/${companyId}/accounts`)])
+    : [null, []];
   const commented = entries.filter((e) => e.comments > 0);
   return (
     <div className="flex flex-col gap-5 p-4 sm:p-6">
       <h1 className="border-b-2 border-ink pb-2.5 font-doc text-[22px] font-bold sm:text-2xl">{th.workPage.title} · {company.name}</h1>
-      {sub ? <SubmissionPanel companyId={companyId} sub={sub} viewer="student" /> : <p className="border border-rule-strong bg-paper p-4">{th.workPage.practice}</p>}
+      {view && <AssignmentPanel view={view} companyId={companyId} accounts={accounts} canWrite={company.can_write} />}
+      {sub ? <SubmissionPanel companyId={companyId} sub={sub} viewer="student" /> : !view && <p className="border border-rule-strong bg-paper p-4">{th.workPage.practice}</p>}
       <section aria-label={th.workPage.commented} className="flex flex-col gap-2">
         <h2 className="text-[17px] font-semibold">{th.workPage.commented}</h2>
         {commented.length === 0 ? (

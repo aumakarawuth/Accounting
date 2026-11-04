@@ -15,7 +15,7 @@ export const patchJson = <T>(path: string, data: unknown) =>
 
 export type Me = { id: string; role: 'admin' | 'teacher' | 'student' | 'ta'; displayName: string; studentCode: string | null; mustChange: boolean };
 export type WorkStatus = 'draft' | 'submitted' | 'reviewing' | 'returned' | 'passed' | 'closed';
-export type Company = { id: string; name: string; version: number; can_write: boolean; mode: 'practice' | 'submit'; status: WorkStatus | null; locked: boolean };
+export type Company = { id: string; name: string; version: number; can_write: boolean; mode: 'practice' | 'submit'; status: WorkStatus | null; locked: boolean; assignment: CompanyAssignment | null };
 export type Account = { code: string; name: string; type: string; normal_side: 'debit' | 'credit' };
 export type EntryRow = { id: string; doc_no: string; date: string; description: string; total: string; reverses_doc_no: string | null; comments: number };
 export type Classroom = { id: string; name: string; joinCode: string | null; students: { id: string; studentCode: string; name: string; companies: number }[] };
@@ -220,4 +220,63 @@ export type AssetPage = {
   company: { name: string; canWrite: boolean; locked: boolean };
   month: string; assets: AssetRow[]; runs: DepreciationRunRow[];
   assetAccounts: CodeName[]; expenseAccounts: CodeName[]; accounts: CodeName[];
+};
+
+// ---- เฟส 4 โจทย์ / มอบหมาย / สอบ / สาธิต ----
+export type AssignmentMode = 'practice' | 'submit' | 'exam' | 'demo';
+export type Feedback = 'none' | 'score' | 'items' | 'answers';
+export type Reveal = 'anytime' | 'after_submit' | 'after_release';
+export type LockReason = 'submitted' | 'closed' | 'not_open' | 'exam_not_started' | 'exam_over';
+export type CompanyAssignment = {
+  id: string; mode: AssignmentMode; title: string; startedAt: string | null; deadline: string | null; closesAt: string | null;
+  lockReason: LockReason | null; now: string;
+};
+export type ExerciseLine = { account_code: string; debit?: string | null; credit?: string | null };
+export type ExerciseItem = { no?: number; date: string; narrative: string; points: string; lines: ExerciseLine[] };
+export type ExerciseSetSummary = { id: string; title: string; companyName: string; version: number; updatedAt: string; items: number; points: string; assignments: number };
+export type AssignmentSummary = {
+  id: string; mode: AssignmentMode; title: string; companyName: string; classroom: string | null; createdAt: string;
+  releasedAt: string | null; closedAt: string | null; durationMinutes: number | null; companies: number; demoCompanyId: string | null;
+};
+export type ExerciseSetDetail = {
+  id: string; title: string; companyName: string; description: string; version: number; updatedAt: string;
+  items: (ExerciseItem & { no: number })[];
+  assignments: { id: string; mode: AssignmentMode; classroom: string | null; companyName: string; createdAt: string; closedAt: string | null; demoCompanyId: string | null }[];
+  classrooms: { id: string; name: string }[];
+};
+export type ItemStatus = 'correct' | 'wrong' | 'date' | 'missing';
+export type GradeItem = {
+  no: number; status: ItemStatus; points: string; earned: string; entryId: string | null; docNo: string | null; entryDate: string | null;
+  missing?: string[]; extra?: string[];
+};
+export type AssignmentInfo = {
+  id: string; mode: AssignmentMode; title: string; feedback: Feedback; reveal: Reveal; checkDate: boolean;
+  opensAt: string | null; closesAt: string | null; durationMinutes: number | null; releasedAt: string | null; closedAt: string | null;
+};
+export type AssignmentView = {
+  assignment: AssignmentInfo;
+  attempt: { startedAt: string; deadline: string } | null;
+  now: string;
+  lockReason: LockReason | null;
+  viewer: 'teacher' | 'student';
+  itemsVisible: boolean;
+  items: { no: number; date: string; narrative: string; points: string; answer: { code: string; debit: string; credit: string }[] | null }[] | null;
+  result: null | {
+    level: Exclude<Feedback, 'none'>; score: string; maxScore: string; correct: number; total: number;
+    items?: GradeItem[]; extraEntries?: { id: string; docNo: string; date: string }[];
+    answers?: { no: number; lines: { code: string; debit: string; credit: string }[] }[];
+  };
+  resultHidden: 'teacher_only' | Reveal | null;
+};
+export type OverviewStudent = {
+  studentId: string; studentCode: string; name: string; companyId: string | null; companyName: string | null; status: WorkStatus | null;
+  teacherScore: string | null; maxScore: string | null; startedAt: string | null; deadline: string | null; extraMinutes: number | null;
+  lockReason: LockReason | null; entries: number;
+  grade: null | { score: string; maxScore: string; correct: number; extra: number; items: { no: number; status: ItemStatus; earned: string }[] };
+};
+export type AssignmentOverview = {
+  assignment: AssignmentInfo & { companyName: string; setId: string | null; classroomId: string | null; classroom: string | null; createdAt: string };
+  items: { no: number; date: string; narrative: string; points: string }[];
+  students: OverviewStudent[];
+  now: string;
 };

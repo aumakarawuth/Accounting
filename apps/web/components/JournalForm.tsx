@@ -17,7 +17,7 @@ const blank = (): Line => ({ key: ++seq, code: '', debit: '', credit: '', memo: 
 const newKey = () => crypto.randomUUID();
 
 /** ค้นหารหัสบัญชีด้วยการพิมพ์ (รหัสหรือชื่อ) ไม่ใช้ดรอปดาวน์ยาว */
-function AccountField({
+export function AccountField({
   accounts, value, onChange, label,
 }: { accounts: Account[]; value: string; onChange: (code: string) => void; label: string }) {
   const [q, setQ] = useState(value);
@@ -94,17 +94,22 @@ function AccountField({
 
 export type EditSource = { id: string; docNo: string; date: string; description: string; lines: { code: string; debit: string; credit: string; memo: string }[] };
 
-export function JournalForm({ companyId, accounts, locked = false, adjusting = false, edit }: {
+export type Prefill = { key: string; date: string; description: string; lines: { code: string; debit: string; credit: string }[] };
+
+export function JournalForm({ companyId, accounts, locked = false, adjusting = false, edit, prefill }: {
   companyId: string; accounts: Account[]; locked?: boolean; adjusting?: boolean;
   /** แก้ไขรายการที่ผ่านแล้ว: ฟอร์มเริ่มจากค่าเดิม ผ่านรายการ = กลับรายการเดิม + ลงรายการใหม่ */
   edit?: EditSource;
+  /** โหมดสาธิต: เริ่มจากเฉลยของโจทย์ข้อหนึ่ง (ผ่านรายการตามปกติ) */
+  prefill?: Prefill;
 }) {
-  // รายการปรับปรุง (AJ) ลงวันสิ้นเดือน ร่างแยกจากสมุดรายวันปกติ · แก้ไขรายการ: ร่างแยกต่อรายการ
-  const draftKey = edit ? `${companyId}:edit:${edit.id}` : adjusting ? `${companyId}:AJ` : companyId;
-  const [date, setDate] = useState(() => isoToThai(edit ? edit.date : adjusting ? addDays(`${addMonths(todayIso().slice(0, 7), 1)}-01`, -1) : todayIso()));
-  const [description, setDescription] = useState(edit?.description ?? '');
-  const [lines, setLines] = useState<Line[]>(() => (edit
-    ? edit.lines.map((l) => ({ ...blank(), code: l.code, debit: l.debit === '0.00' ? '' : l.debit, credit: l.credit === '0.00' ? '' : l.credit, memo: l.memo }))
+  // รายการปรับปรุง (AJ) ลงวันสิ้นเดือน ร่างแยกจากสมุดรายวันปกติ · แก้ไขรายการ: ร่างแยกต่อรายการ · ลงตามเฉลย: ร่างแยกต่อข้อ
+  const draftKey = edit ? `${companyId}:edit:${edit.id}` : prefill ? `${companyId}:ex:${prefill.key}` : adjusting ? `${companyId}:AJ` : companyId;
+  const source = edit ?? prefill;
+  const [date, setDate] = useState(() => isoToThai(source ? source.date : adjusting ? addDays(`${addMonths(todayIso().slice(0, 7), 1)}-01`, -1) : todayIso()));
+  const [description, setDescription] = useState(source?.description ?? '');
+  const [lines, setLines] = useState<Line[]>(() => (source
+    ? source.lines.map((l) => ({ ...blank(), code: l.code, debit: l.debit === '0.00' ? '' : l.debit, credit: l.credit === '0.00' ? '' : l.credit, memo: 'memo' in l ? String(l.memo) : '' }))
     : [blank(), blank()]));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
