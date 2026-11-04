@@ -112,3 +112,14 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+
+  # ชุด self-host (infra/): build image ทั้งหมด → up ด้วย https://localhost → ล็อกอิน/ลงรายการ/ส่งออก/ดูสด
+  # → backup → เขียนเพิ่ม → ซ้อมกู้คืนจริง (docs/self-host.md)
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sh infra/scripts/smoke.sh
+        timeout-minutes: 25

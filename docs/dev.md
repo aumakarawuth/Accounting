@@ -59,4 +59,6 @@ API_URL=http://127.0.0.1:4000 pnpm --filter @accounting/web dev
 - คุมเฉพาะ `/c/` (หน้าบริษัทของนักเรียน) ดูเหตุผลใน `docs/assumptions.md` ข้อ 24
 - ถ้าแก้ `public/sw.js` ให้เปลี่ยนชื่อ cache (`static-vN`/`offline-vN`) เครื่องที่ติดตั้งแล้วจะล้าง cache เก่าเอง
 - ทำ Docker ของเว็บ (output standalone) ต้องคัดลอก `public/` และ `.next/static/` ไปด้วย ไม่อย่างนั้นไม่มีไอคอน/sw.js
+  (ทำแล้วใน `apps/web/Dockerfile`) ทดสอบชุด Docker ทั้งระบบ: `sh infra/scripts/smoke.sh` (ต้องว่างพอร์ต 80/443, `docs/self-host.md`)
+  เครือข่ายที่มี proxy ตรวจ TLS: ส่ง CA ตอน build ด้วย build secret `build_ca` (ดูหัว Dockerfile)
 

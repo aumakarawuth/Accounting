@@ -281,4 +281,12 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   ยังค้าง: ทดสอบกับผู้ใช้จริง 5–10 คน (`docs/user-test.md` เจ้าของโปรเจกต์ทำ), ZAP/ผู้เชี่ยวชาญกับ staging, CSP แบบ nonce
 - ช่วงพัฒนา: Supabase โปรเจกต์ใหม่ (ap-southeast-1) + Vercel `accounting-web` (sin1) ใช้งานอยู่ ขั้นตอนใน `docs/deploy-dev.md`
 - 4 พ.ย. 2569: เฟส 3 (สินค้าคงเหลือ กระทบยอดธนาคาร เช็ค สินทรัพย์ถาวร) เสร็จ · k6 500 คนรันซ้ำผ่าน (`docs/load-test.md`) · เฟส 4 กำลังทำ (branch `claude/phase4-exercises`)
-- สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอนเฟสกลาง)
+- **เฟสกลาง ส่วนที่ไม่ต้องมี server** (4 พ.ย. 2569, สเปก `docs/staging-spec.md`, คู่มือ `docs/self-host.md`): `infra/docker-compose.yml`
+  (Postgres 16 + PgBouncer transaction + API + เว็บ standalone + Caddy HTTPS) · migration/role `app_web` อัตโนมัติทุก deploy
+  · backup ต่อเนื่อง (base backup รายวัน + WAL archive + pg_dump) ส่งนอกเครื่องด้วย rclone crypt · สคริปต์ซ้อมกู้คืน (ถึงล่าสุด/ย้อนเวลา)
+  ทดสอบทั้งชุดบนเครื่องด้วย localhost: ล็อกอิน ลงรายการ ดูสดผ่าน Caddy ส่งออก PDF/Excel → backup → ลงเพิ่ม → กู้คืนเห็นรายการหลัง backup
+  → กู้ย้อนเวลาไม่เห็น · security-check 25/25 · CI job `infra` รัน `infra/scripts/smoke.sh` ทุก PR
+  (ใช้เครื่องมือของ Postgres แทน pgBackRest/WAL-G: `docs/assumptions.md` ข้อ 35)
+  ยังค้าง (ต้องมี server/domain/bucket ซึ่งมีค่าใช้จ่าย: ขออนุญาตก่อน): staging จริง, k6 บน server จริง, deploy ผ่าน GitHub Actions → SSH,
+  สลับ adapter Realtime, monitoring
+- สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

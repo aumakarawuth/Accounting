@@ -24,7 +24,7 @@ export default tseslint.config(
   },
   {
     // สคริปต์ CLI/ทดสอบพิมพ์ผลลัพธ์ได้
-    files: ['apps/api/src/cli/**', 'scripts/**', 'tests/**'],
+    files: ['apps/api/src/cli/**', 'scripts/**', 'infra/**', 'tests/**'],
     rules: { 'no-console': 'off' },
   },
 );

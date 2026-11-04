@@ -1,0 +1,26 @@
+# SITE_ADDRESS = โดเมนจริง (Caddy ขอใบรับรอง Let's Encrypt เองและเปลี่ยน http→https) · ทดสอบบนเครื่อง = localhost (CA ภายในของ Caddy)
+{
+	admin off
+	servers {
+		# มี Cloudflare/LB หน้าเว็บ: ใส่ช่วง IP ของมันใน TRUSTED_PROXIES เพื่อให้ X-Forwarded-For เป็น IP ผู้ใช้จริง
+		# ค่าเริ่มต้นไม่เชื่อใคร (ห้ามใช้ private_ranges ถ้าไม่มี proxy: Docker อาจทำให้ทุกคำขอดูเหมือนมาจาก IP ภายใน)
+		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
+	}
+}
+
+{$SITE_ADDRESS:localhost} {
+	request_body {
+		max_size 5MB
+	}
+	header -Server
+
+	# API ตรง (ตัด /api ออกเหมือน rewrite ของ Next) · SSE ดูสด: Caddy flush ทันทีสำหรับ text/event-stream
+	handle_path /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy web:3000
+	}
+}

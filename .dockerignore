@@ -1,0 +1,12 @@
+# บริบท build ของ image (apps/api/Dockerfile, apps/web/Dockerfile) ส่งเฉพาะโค้ด ไม่ส่งของที่ build แล้ว/ความลับ
+**/node_modules
+**/.next
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+.git
+tests
+docs
+infra
+!infra/bootstrap-db.mjs
