@@ -115,7 +115,7 @@ test('เน็ตหลุด: กดบันทึกขณะออฟไล
   expect(posted).toBe(0);
   await context.setOffline(false);
   // เน็ตหลุดระหว่างส่ง (คำขอถูกตัด): บอกเป็นภาษาไทย ไม่ใช่ข้อความอังกฤษของเบราว์เซอร์
-  await page.route('**/inventory/adjustments', (r) => r.abort('internetdisconnected'));
+  await page.route('**/inventory/adjustments', (r) => r.abort('failed'));
   await form.getByRole('button', { name: 'บันทึกปรับสต็อก' }).click();
   await expect(form.getByRole('alert')).toContainText('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
   await page.unroute('**/inventory/adjustments');
