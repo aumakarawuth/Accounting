@@ -96,34 +96,40 @@ test('มือถือ: ปุ่มกลับ (แอปที่ติด�
   expect(errors).toEqual([]);
 });
 
-test('เน็ตหลุด: กดบันทึกขณะออฟไลน์ไม่ส่งคำขอ บอกให้รอออนไลน์', async ({ page, context }) => {
-  const errors = watchErrors(page);
-  const home = await studentHome(page);
-  const code = `OF-${tag()}`;
-  await addTrackedItem(page, home, code);
-  await page.goto(`${home}/inventory`);
-  const form = page.getByRole('form', { name: /^ปรับสต็อก/ });
-  await form.getByLabel('สินค้า', { exact: true }).selectOption(code);
-  await form.getByLabel(/^จำนวน/).fill('1');
-  await form.getByLabel('ต้นทุนต่อหน่วย').fill('1');
-  await form.getByLabel('บัญชีคู่').selectOption('3110');
-  let posted = 0;
-  page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/inventory/adjustments')) posted++; });
-  await context.setOffline(true);
-  await form.getByRole('button', { name: 'บันทึกปรับสต็อก' }).click();
-  await expect(form.getByRole('alert')).toContainText('ไม่มีอินเทอร์เน็ต');
-  expect(posted).toBe(0);
-  await context.setOffline(false);
-  // เน็ตหลุดระหว่างส่ง (คำขอถูกตัด): บอกเป็นภาษาไทย ไม่ใช่ข้อความอังกฤษของเบราว์เซอร์
-  await page.route('**/inventory/adjustments', (r) => r.abort('failed'));
-  await form.getByRole('button', { name: 'บันทึกปรับสต็อก' }).click();
-  await expect(form.getByRole('alert')).toContainText('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
-  await page.unroute('**/inventory/adjustments');
-  // กลับมาออนไลน์ กดซ้ำสองครั้งเร็ว ๆ ได้รายการเดียว
-  await form.getByRole('button', { name: 'บันทึกปรับสต็อก' }).dblclick();
-  await expect(form.getByRole('status')).toContainText(/IA-\d+/);
-  await expect(page.getByRole('row').filter({ hasText: code })).toContainText('1 ชิ้น');
-  expect(errors).toEqual([]);
+test.describe(() => {
+  // page.route ไม่ดักคำขอที่ผ่าน service worker (หน้า /c/ อยู่ใต้ sw.js) บน WebKit คำขอจึงไม่ถูกตัด
+  // ปิด service worker เฉพาะข้อนี้ เพื่อจำลองเน็ตหลุดกลางคำขอได้ทุกเบราว์เซอร์ (ส่วน PWA ทดสอบใน pwa.spec.ts)
+  test.use({ serviceWorkers: 'block' });
+
+  test('เน็ตหลุด: กดบันทึกขณะออฟไลน์ไม่ส่งคำขอ บอกให้รอออนไลน์', async ({ page, context }) => {
+    const errors = watchErrors(page);
+    const home = await studentHome(page);
+    const code = `OF-${tag()}`;
+    await addTrackedItem(page, home, code);
+    await page.goto(`${home}/inventory`);
+    const form = page.getByRole('form', { name: /^ปรับสต็อก/ });
+    await form.getByLabel('สินค้า', { exact: true }).selectOption(code);
+    await form.getByLabel(/^จำนวน/).fill('1');
+    await form.getByLabel('ต้นทุนต่อหน่วย').fill('1');
+    await form.getByLabel('บัญชีคู่').selectOption('3110');
+    let posted = 0;
+    page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/inventory/adjustments')) posted++; });
+    await context.setOffline(true);
+    await form.getByRole('button', { name: 'บันทึกปรับสต็อก' }).click();
+    await expect(form.getByRole('alert')).toContainText('ไม่มีอินเทอร์เน็ต');
+    expect(posted).toBe(0);
+    await context.setOffline(false);
+    // เน็ตหลุดระหว่างส่ง (คำขอถูกตัด): บอกเป็นภาษาไทย ไม่ใช่ข้อความอังกฤษของเบราว์เซอร์
+    await page.route('**/inventory/adjustments', (r) => r.abort('failed'));
+    await form.getByRole('button', { name: 'บันทึกปรับสต็อก' }).click();
+    await expect(form.getByRole('alert')).toContainText('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+    await page.unroute('**/inventory/adjustments');
+    // กลับมาออนไลน์ กดซ้ำสองครั้งเร็ว ๆ ได้รายการเดียว
+    await form.getByRole('button', { name: 'บันทึกปรับสต็อก' }).dblclick();
+    await expect(form.getByRole('status')).toContainText(/IA-\d+/);
+    await expect(page.getByRole('row').filter({ hasText: code })).toContainText('1 ชิ้น');
+    expect(errors).toEqual([]);
+  });
 });
 
 test('ผู้ดูแลระบบ: ทุกลิงก์ในหน้าผู้ดูแลเปิดได้ ไม่มี error · นักเรียน/ครูเข้าหน้าผู้ดูแลไม่ได้', async ({ page, browser }, info) => {
