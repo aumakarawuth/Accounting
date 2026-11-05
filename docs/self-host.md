@@ -67,7 +67,7 @@ cd infra && docker compose up -d --build --wait
 | ออกนอกเครื่อง | ทุก `OFFSITE_EVERY_MINUTES` | object storage ผ่าน rclone (profile `offsite`) |
 
 - เก็บ `BACKUP_KEEP` ชุด (ค่าเริ่มต้น 7 วัน) WAL ที่เก่ากว่าชุดเก่าสุดถูกลบ → กู้ย้อนเวลาได้ถึง 7 วัน
-- สถานะ: `docker compose exec backup cat /backups/last-success` (ใส่ใน Uptime Kuma ตอน go-live: เตือนถ้าเก่ากว่า 26 ชม.)
+- สถานะ: `docker compose exec backup cat /backups/last-success` · เปิด monitoring (ข้อ 6) แล้ว Prometheus เตือนเองถ้าเก่ากว่า 26 ชม. หรือ WAL archive ล้ม
   WAL ค้าง: `select * from pg_stat_archiver` (`failed_count` เพิ่ม = archive ล้ม ดิสก์ของ WAL จะโตจนเต็ม)
 - backup ทันที: `infra/scripts/backup-now.sh`
 
@@ -131,12 +131,45 @@ infra/scripts/restore-drill.sh --time '2026-11-04 10:30:00+07'  # ย้อน�
 
 pg_dump ใช้กู้บางตาราง/ย้ายไป Postgres รุ่นใหม่: `pg_restore -l` ดูรายการ แล้ว `pg_restore -d <ฐานชั่วคราว> -t <ตาราง>`
 
-## 6. สิ่งที่ยังไม่อยู่ในชุดนี้ (go-live)
+## 6. monitoring
 
-- monitoring: Prometheus + Grafana, Sentry, Uptime Kuma, `pg_stat_statements` (PLAN.md ข้อ 12 Go-live)
+```sh
+# infra/.env: MONITOR_DB_PASSWORD (openssl rand -hex 32) และ GRAFANA_ADMIN_PASSWORD (≥ 12 ตัว)
+docker compose --profile monitoring up -d --wait     # หรือใส่ COMPOSE_PROFILES=monitoring ใน .env ให้ทุกคำสั่งเปิดด้วย
+```
+
+| ตัว | ทำอะไร | เข้าที่ (บน server เท่านั้น) |
+|---|---|---|
+| Prometheus | เก็บตัวชี้วัด 30 วัน + เงื่อนไขเตือน `infra/monitoring/alerts.yml` | `127.0.0.1:9090` (`/alerts`) |
+| Grafana | แดชบอร์ด "ระบบบัญชี: ภาพรวม" (provision จากไฟล์) | `127.0.0.1:3001` ผู้ใช้ `admin` |
+| Uptime Kuma | ตรวจจากมุมผู้ใช้ + ส่งแจ้งเตือน | `127.0.0.1:3002` |
+| postgres-exporter | การเชื่อมต่อ ทรานแซกชัน ล็อก คำสั่ง SQL ที่หนัก (`pg_stat_statements`) | ภายใน |
+| node-exporter | CPU/RAM/ดิสก์ของเครื่อง + สถานะ backup/WAL (ไฟล์ที่ service backup เขียน) | ภายใน |
+
+- หน้าจอทั้งสามผูกกับ `127.0.0.1` ไม่เปิดสู่อินเทอร์เน็ต เข้าจากเครื่องตัวเองด้วย SSH tunnel:
+  `ssh -L 3001:127.0.0.1:3001 -L 3002:127.0.0.1:3002 -L 9090:127.0.0.1:9090 <server>` แล้วเปิด `http://localhost:3001`
+- ตัวชี้วัดของ API อยู่พอร์ต 9464 และของ Caddy อยู่ 9180 ในเครือข่ายภายในเท่านั้น (`/api/metrics` จากภายนอก = 404)
+  label ของ route เป็นแม่แบบ (`/companies/:companyId`) ไม่มี id/ชื่อผู้ใช้ใน metrics
+- role `monitor` ∈ `pg_monitor` อ่านได้แค่สถิติ ไม่มีสิทธิ์ schema `acc`/`app` (ไม่เห็นข้อมูลบัญชี)
+  ตาราง "คำสั่ง SQL ที่ใช้เวลารวมมากสุด" แสดง `queryid` ดูข้อความคำสั่ง (ค่าคงที่ถูกแทนด้วย `$1` แล้ว):
+  `docker compose exec db psql -U postgres -d accounting -c "select query from monitoring.pg_stat_statements where queryid = <queryid>"`
+- เงื่อนไขเตือน: บริการไม่ตอบ · API 5xx > 2% · p95 > 1 วินาที · pool รอการเชื่อมต่อ · การเชื่อมต่อ DB > 80%
+  · **backup เก่ากว่า 26 ชม.** · **WAL archive ล้ม** · ดิสก์เหลือ < 15% · RAM เหลือ < 10%
+
+### ตั้งแจ้งเตือนครั้งแรก (ทำในหน้าเว็บ ไม่มีความลับใน repo)
+
+1. Uptime Kuma: สร้างบัญชีผู้ดูแลตอนเปิดครั้งแรก → Settings → Notifications เพิ่มช่องทาง เช่น Telegram, อีเมล (SMTP), Discord (LINE Notify ปิดบริการแล้วตั้งแต่ มี.ค. 2568)
+2. Uptime Kuma: เพิ่ม monitor แบบ HTTP(s) `https://<โดเมน>/login` และ `https://<โดเมน>/api/health` ทุก 60 วินาที
+   และแบบ HTTP(s) - Json Query ที่ `http://prometheus:9090/api/v1/alerts` นิพจน์ `$count(data.alerts[state="firing"])` ค่าที่คาด `0`
+   (ส่งต่อทุกเงื่อนไขเตือนของ Prometheus ไปช่องทางเดียวกัน ไม่ต้องตั้ง Alertmanager)
+3. ใส่ monitor ภายนอกอีกตัวที่อยู่นอก server (เช่น UptimeRobot แผนฟรี) ตรวจ `/api/health` เพราะถ้าเครื่องดับ Kuma บนเครื่องเดียวกันก็ดับด้วย
+
+## 7. สิ่งที่ยังไม่อยู่ในชุดนี้ (go-live)
+
+- Sentry (เก็บ error ฝั่งเบราว์เซอร์/เซิร์ฟเวอร์): บริการภายนอก มีแผนฟรีแต่ส่งข้อมูลออกนอกเครื่อง ต้องให้เจ้าของโปรเจกต์ตัดสิน (PDPA) ตอนนี้ดู error ฝั่ง API จาก log และ 5xx ใน Grafana
 - Cloudflare หน้าเว็บ: ตั้ง `TRUSTED_PROXIES` เป็นช่วง IP ของ Cloudflare (ไม่อย่างนั้นตัวจำกัดอัตราจะนับทุกคนเป็น IP ของ Cloudflare)
 - ตัวจำกัดอัตราอยู่ในหน่วยความจำของ API 1 ตัว (ถ้าเพิ่ม API หลายตัวต้องย้ายไป Redis)
-- Realtime ยังเป็น SSE + LISTEN/NOTIFY (WebSocket `apps/realtime` ตามแผนเมื่อจำเป็น)
+- read replica สำหรับรายงาน/แดชบอร์ดครู (PLAN.md ข้อ 10) เมื่อวัดแล้วฐานหลักรับไม่ไหว
 
 ## บันทึกการซ้อมกู้คืน
 

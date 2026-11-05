@@ -22,6 +22,7 @@ import type { RealtimeBus } from './realtime.js';
 import { teacherRoutes } from './routes/teacher.js';
 
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
+export type StreamCounter = (transport: 'ws' | 'sse', delta: 1 | -1) => void;
 
 export function buildApp(opts: {
   pool: pg.Pool;
@@ -33,7 +34,9 @@ export function buildApp(opts: {
   trustProxy?: boolean | string;
   streamMaxMs?: number;
   // WebSocket ดูสด (self-host: server.ts ส่ง registerWebSocket จาก ws.ts) Vercel ไม่ส่ง = โค้ด/ไลบรารี WebSocket ไม่ถูก bundle
-  websocket?: (app: FastifyInstance, ctx: { pool: pg.Pool; auth: AuthAdapter; cfg: AuthConfig; bus: RealtimeBus }) => Promise<void>;
+  websocket?: (app: FastifyInstance, ctx: { pool: pg.Pool; auth: AuthAdapter; cfg: AuthConfig; bus: RealtimeBus; onStream?: StreamCounter }) => Promise<void>;
+  // ตัวชี้วัด Prometheus (self-host: server.ts ส่ง createMetrics จาก metrics.ts) Vercel ไม่ส่ง
+  metrics?: { register(app: FastifyInstance): void; stream: StreamCounter };
 }) {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 256 * 1024, trustProxy: opts.trustProxy ?? 'loopback' });
   const limiter = opts.limiter ?? memoryLimiter();
@@ -49,6 +52,7 @@ export function buildApp(opts: {
     },
   };
   app.register(cookie);
+  opts.metrics?.register(app);
 
   // CSRF: คำขอที่เปลี่ยนข้อมูลต้องมาจาก origin ของเว็บเรา (เสริม cookie SameSite=Lax)
   app.addHook('onRequest', async (req) => {
@@ -95,11 +99,11 @@ export function buildApp(opts: {
     exerciseRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
-    liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs });
+    liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs, onStream: opts.metrics?.stream });
   });
   if (opts.websocket && opts.bus) {
     const { websocket, bus } = opts;
-    app.register(async (scope) => websocket(scope, { pool: opts.pool, auth, cfg: opts.cfg, bus }));
+    app.register(async (scope) => websocket(scope, { pool: opts.pool, auth, cfg: opts.cfg, bus, onStream: opts.metrics?.stream }));
   }
   return app;
 }

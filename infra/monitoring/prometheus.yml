@@ -1,0 +1,19 @@
+# Prometheus ของชุด self-host (docs/self-host.md ข้อ "monitoring") อ่านทุกตัวในเครือข่ายภายในของ compose
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: api          # คำขอ/เวลาตอบ/สตรีมดูสด/pool (apps/api/src/metrics.ts)
+    static_configs: [{ targets: ['api:9464'] }]
+  - job_name: caddy        # คำขอที่ขอบ (รวมที่ไม่ถึง API) ต่อ status
+    static_configs: [{ targets: ['caddy:9180'] }]
+  - job_name: postgres     # การเชื่อมต่อ ล็อก ขนาดฐาน คำสั่งหนัก (pg_stat_statements)
+    static_configs: [{ targets: ['postgres-exporter:9187'] }]
+  - job_name: node         # เครื่อง: CPU RAM ดิสก์ + สถานะ backup/WAL archive (textfile)
+    static_configs: [{ targets: ['node-exporter:9100'] }]
+  - job_name: prometheus
+    static_configs: [{ targets: ['localhost:9090'] }]

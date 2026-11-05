@@ -291,4 +291,7 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
 - **สลับ adapter Realtime** (4 พ.ย. 2569, `docs/staging-spec.md` ข้อ 6): self-host ดูสดผ่าน WebSocket `/api/ws` (การเชื่อมต่อเดียวทุกช่อง
   ตรวจ Origin/เซสชัน/สิทธิ์ช่องเหมือน SSE) SSE คงไว้เป็นทางสำรองและใช้บน Vercel · ยังไม่ใช้ Redis (`docs/assumptions.md` ข้อ 36)
   ยังค้าง: adapter Auth (Better Auth/Keycloak) — ตอนนี้ระบบเซสชันของเราเองทำงานได้ทั้งสองที่ ยังไม่มีเหตุให้เปลี่ยน
+- **monitoring** (5 พ.ย. 2569, `docs/self-host.md` ข้อ 6): profile `monitoring` = Prometheus (เงื่อนไขเตือน 9 ข้อ รวม backup เก่า/WAL archive ล้ม)
+  + Grafana แดชบอร์ดภาพรวม + Uptime Kuma + postgres-exporter (`pg_stat_statements`) + node-exporter · API มี `/metrics` พอร์ตแยกในเครือข่ายภายใน
+  ยังค้าง: Sentry (รอเจ้าของโปรเจกต์ตัดสินเรื่องส่งข้อมูลออกนอกเครื่อง), ตั้งช่องทางแจ้งเตือนจริงบน server (`docs/assumptions.md` ข้อ 37)
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

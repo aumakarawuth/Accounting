@@ -126,3 +126,11 @@
     - ยังไม่ใช้ Redis pub/sub (PLAN.md ข้อ 3): Postgres NOTIFY ส่งถึงทุก instance ที่ LISTEN อยู่แล้ว (instance ละ 1 การเชื่อมต่อ)
       Redis จำเป็นเมื่อมี API หลาย instance เพื่อใช้ตัวจำกัดอัตราร่วมกัน (ทำพร้อมตอนนั้น)
     - SSE ยังอยู่เป็นทางสำรอง: Vercel (ไม่มี WebSocket) และเครือข่ายโรงเรียนที่ปิด WebSocket (ต่อไม่ได้ครั้งแรก = สลับเป็น SSE ทันที)
+37. **monitoring (เตรียม go-live)** ตัดสินเองระหว่างทำ (แจ้งเปลี่ยนได้ รายละเอียด `docs/self-host.md` ข้อ 6):
+    - Prometheus + Grafana + Uptime Kuma + postgres-exporter + node-exporter เป็น profile `monitoring` ในชุด compose เดิม (เครื่องเดียวกัน)
+      หน้าจอผูก `127.0.0.1` เข้าด้วย SSH tunnel · แนะนำ monitor ภายนอกเพิ่มอีกตัว (เครื่องดับ = Kuma บนเครื่องดับด้วย)
+    - ไม่ใช้ Alertmanager: ให้ Uptime Kuma อ่าน `/api/v1/alerts` ของ Prometheus แล้วส่งทางช่องทางเดียวกับการตรวจหน้าเว็บ (ตั้งค่าครั้งเดียวในหน้าเว็บ)
+    - `pg_stat_statements` และ role `monitor` สร้างใน `infra/bootstrap-db.mjs` (ชั้น infra ของ self-host) ไม่ใช่ migration ของแอป
+      เพราะไม่ใช่ schema ข้อมูล และ Supabase มีของตัวเองอยู่แล้ว
+    - สถานะ backup และ WAL archive เขียนเป็นไฟล์ textfile ให้ node-exporter (postgres-exporter ไม่มีตัวอ่าน `pg_stat_archiver`)
+    - ยังไม่ใส่ Sentry: ส่ง error ออกนอกเครื่อง (อาจมีข้อมูลผู้เยาว์) ต้องให้เจ้าของโปรเจกต์ตัดสินเรื่อง PDPA ก่อน
