@@ -31,6 +31,9 @@ export function studentNav(companyId: string): Group[] {
       { label: n.payment, href: c('/purchases/payments') },
       { label: n.payables, href: c('/purchases/payables') },
     ] },
+    { title: n.group.inventory, items: [
+      { label: n.inventory, href: c('/inventory') },
+    ] },
     { title: n.group.tax, items: [
       { label: n.vat, href: c('/tax/vat') },
       { label: n.wht, href: c('/tax/wht') },

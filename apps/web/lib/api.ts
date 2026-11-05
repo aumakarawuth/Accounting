@@ -1,8 +1,18 @@
+import { th } from '@/i18n/th';
+
 // เรียกจากเบราว์เซอร์ผ่าน /api (Next rewrite ไป API ที่ origin เดียวกัน cookie จึงติดไปเอง)
 export type ApiError = { status: number; code: string; message: string; ref?: string; [k: string]: unknown };
 
+/** เน็ตหลุดระหว่างส่ง (fetch โยน TypeError ข้อความอังกฤษของเบราว์เซอร์) → ApiError ข้อความไทยรูปแบบเดียวกับ error จาก API
+ *  คำขอที่มี idempotency-key ส่งใหม่ด้วยคีย์เดิมได้ปลอดภัย (ถ้าเซิร์ฟเวอร์บันทึกไปแล้วได้ผลเดิม) */
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, { cache: 'no-store', credentials: 'same-origin', ...init });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, { cache: 'no-store', credentials: 'same-origin', ...init });
+  } catch {
+    throw { status: 0, code: 'network', message: th.error.network } as ApiError;
+  }
   const body = await res.json().catch(() => ({ code: 'server', message: 'server' }));
   if (!res.ok) throw { status: res.status, ...body } as ApiError;
   return body as T;
@@ -65,6 +75,8 @@ export type LiveCompany = {
 };
 export type JournalEntry = {
   id: string; docNo: string; date: string; description: string; total: string; postedAt: string; periodClosed: boolean;
+  /** ลงจากสมุดรายวันเอง (JV/AJ) แก้/กลับรายการได้ · false = มาจากเอกสาร/ทะเบียน ต้องยกเลิกที่ตัวเอกสาร */
+  manual: boolean;
   reverses: { id: string; docNo: string } | null; reversedBy: { id: string; docNo: string } | null;
   lines: { lineNo: number; code: string; name: string; debit: string; credit: string; memo: string }[];
   comments: EntryComment[];
@@ -82,14 +94,24 @@ export type Party = {
   vatRegistered: boolean; creditDays: number; whtKind: WhtKind | null; whtRate: string | null; active: boolean; version: number;
 };
 export type Item = {
-  code: string; name: string; unit: string; isService: boolean; salePrice: string | null; purchasePrice: string | null;
+  code: string; name: string; unit: string; isService: boolean; trackInventory: boolean; salePrice: string | null; purchasePrice: string | null;
   salesAccount: string | null; purchaseAccount: string | null; active: boolean; version: number;
 };
+export type InventoryItem = { code: string; name: string; unit: string; active: boolean; quantity: string; value: string; unitCost: string };
+export type InventoryOverview = {
+  company: { name: string; canWrite: boolean; locked: boolean };
+  items: InventoryItem[]; totalValue: string; glBalance: string; accounts: { code: string; name: string }[];
+};
+export type StockCardRow = {
+  date: string; kind: string; reference: string; entryId: string; entryDocNo: string; qtyIn: string; qtyOut: string; unitCost: string;
+  valueIn: string; valueOut: string; balanceQty: string; balanceValue: string;
+};
+export type StockCard = { item: { code: string; name: string; unit: string; trackInventory: boolean }; card: StockCardRow[] };
 export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note';
 export type SalesFormData = {
   company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };
   customers: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string }[];
-  items: { code: string; name: string; unit: string; isService: boolean; salePrice: string | null; salesAccount: string | null }[];
+  items: { code: string; name: string; unit: string; isService: boolean; trackInventory: boolean; salePrice: string | null; salesAccount: string | null }[];
   revenueAccounts: { code: string; name: string }[];
   cashAccounts: { code: string; name: string }[];
 };

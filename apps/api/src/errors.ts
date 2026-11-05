@@ -51,6 +51,12 @@ export function toHttp(err: unknown): { status: number; body: { code: string; me
   // check/FK ของ DB เป็นด่านสุดท้าย (Zod ตรวจก่อนแล้ว) ข้อความ DB เป็นชื่อ constraint ภาษาอังกฤษ จึงไม่ส่งต่อ
   if (pgErr?.code === '23514') return { status: 422, body: { code: '23514', message: 'ข้อมูลไม่ผ่านเงื่อนไขของระบบ ตรวจช่องที่กรอกอีกครั้ง' } };
   if (pgErr?.code === '23503') return { status: 422, body: { code: '23503', message: 'ข้อมูลที่อ้างถึงไม่มีอยู่ในบริษัทนี้' } };
+  // ข้อความ unique ของ DB เป็นภาษาอังกฤษ (ชื่อ constraint) ไม่ส่งต่อ เช่น นำเข้า statement งวดเดิมซ้ำ
+  if (pgErr?.code === '23505') return { status: 409, body: { code: '23505', message: 'มีข้อมูลนี้อยู่แล้ว (ซ้ำกับที่บันทึกไว้)' } };
+  // ค่าที่แปลงเป็นวันที่/ตัวเลขไม่ได้ หรือเกินช่วง = ผู้ส่งผิด ไม่ใช่ 500
+  if (pgErr?.code && ['22007', '22008', '22P02', '22003'].includes(pgErr.code)) {
+    return { status: 400, body: { code: 'invalid', message: 'รูปแบบวันที่หรือตัวเลขไม่ถูกต้อง' } };
+  }
   const status = pgErr?.code ? STATUS[pgErr.code] : undefined;
   if (status) return { status, body: { code: pgErr.code!, message: pgErr.message } };
   const ref = randomUUID().slice(0, 8);

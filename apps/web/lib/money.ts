@@ -32,6 +32,13 @@ export function toCents(input: string): bigint | null {
   return BigInt(int) * 100n + BigInt(frac.padEnd(2, '0'));
 }
 
+/** ยอดจาก API ที่อาจติดลบ ("-20.00") → สตางค์; รูปแบบผิด = null */
+export function toSignedCents(input: string): bigint | null {
+  const s = input.trim();
+  const v = toCents(s.startsWith('-') ? s.slice(1) : s);
+  return v === null ? null : s.startsWith('-') ? -v : v;
+}
+
 /** สตางค์ → สตริงทศนิยมสำหรับส่ง API ("1250.00") */
 export function fromCents(cents: bigint): string {
   const neg = cents < 0n;
