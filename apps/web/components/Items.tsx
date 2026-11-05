@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/Button';
-import { SelectField, TextField } from '@/components/Fields';
+import { CheckField, SelectField, TextField } from '@/components/Fields';
 import { Money } from '@/components/Money';
 import { patchJson, postJson, type ApiError, type ChartRow, type Item } from '@/lib/api';
 import { MASTER_CODE, MONEY } from '@/lib/taxid';
@@ -53,7 +53,7 @@ export function Items({ companyId, initial, chart, editable }: { companyId: stri
             <div className="min-w-0">
               <p><span className="font-num">{it.code}</span> <span className="font-medium">{it.name}</span></p>
               <p className="text-[13px] text-ink2">
-                {[it.isService ? th.items.service : th.items.goods, it.unit,
+                {[it.isService ? th.items.service : th.items.goods, it.trackInventory && th.items.tracked, it.unit,
                   it.salesAccount && `${th.items.salesAccount} ${it.salesAccount} ${names.get(it.salesAccount) ?? ''}`,
                   !it.active && th.master.inactive].filter(Boolean).join(' · ')}
               </p>
@@ -86,6 +86,7 @@ function ItemForm({ companyId, chart, item, onDone }: { companyId: string; chart
   const [name, setName] = useState(item?.name ?? '');
   const [unit, setUnit] = useState(item?.unit ?? '');
   const [service, setService] = useState(item?.isService ?? false);
+  const [track, setTrack] = useState(item?.trackInventory ?? false);
   const [sale, setSale] = useState(item?.salePrice ?? '');
   const [purchase, setPurchase] = useState(item?.purchasePrice ?? '');
   const [salesAcc, setSalesAcc] = useState(item?.salesAccount ?? '');
@@ -107,7 +108,7 @@ function ItemForm({ companyId, chart, item, onDone }: { companyId: string; chart
     setBusy(true);
     setError(null);
     const body: Record<string, unknown> = {
-      name: name.trim(), unit: unit.trim(), isService: service, salePrice: sale || null, purchasePrice: purchase || null,
+      name: name.trim(), unit: unit.trim(), isService: service, trackInventory: !service && track, salePrice: sale || null, purchasePrice: purchase || null,
       salesAccount: salesAcc || null, purchaseAccount: purchaseAcc || null,
     };
     try {
@@ -150,6 +151,7 @@ function ItemForm({ companyId, chart, item, onDone }: { companyId: string; chart
         </div>
         <span className="text-[13px] text-ink2">{th.items.note}</span>
       </fieldset>
+      {!service && <CheckField label={th.items.track} checked={track} onChange={setTrack} note={th.items.trackNote} />}
       <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
         <TextField label={th.items.salePrice} value={sale} onChange={(v) => setSale(v.trim())} inputMode="decimal" mono error={errors.sale} />
         <TextField label={th.items.purchasePrice} value={purchase} onChange={(v) => setPurchase(v.trim())} inputMode="decimal" mono error={errors.purchase} />
