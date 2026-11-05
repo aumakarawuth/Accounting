@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { z } from 'zod';
-import type { AuthAdapter } from '../auth.js';
+import type { AuthAdapter, AuthUser } from '../auth.js';
 import { withUser } from '../db.js';
 import { HttpError } from '../errors.js';
 import { requireUser } from '../guard.js';
@@ -20,7 +20,17 @@ const Presence = z.object({
     }).strict()).max(200),
   }).strict().nullable().optional(),
 }).strict();
-const Channel = z.string().regex(/^(company|student):[0-9a-f-]{36}$/);
+export const Channel = z.string().regex(/^(company|student):[0-9a-f-]{36}$/);
+
+/** ช่องที่ผู้ใช้ฟังได้ (SSE และ WebSocket ใช้ร่วมกัน): ช่องของตัวเอง หรือบริษัทที่อ่านได้ตาม RLS (ไม่ได้ = 404 กัน IDOR) */
+export async function authorizeChannel(pool: pg.Pool, user: AuthUser, channel: string) {
+  const [kind, id] = channel.split(':') as ['company' | 'student', string];
+  if (kind === 'student' && id !== user.id) throw new HttpError(403, 'forbidden', 'ฟังช่องของคนอื่นไม่ได้');
+  if (kind === 'company') {
+    const ok = await withUser(pool, user, async (c) => (await c.query('select app.can_read_company($1) ok', [id])).rows[0].ok);
+    if (!ok) throw new HttpError(404, 'not_found', 'ไม่พบบริษัทนี้');
+  }
+}
 const SpectateParams = z.object({ spectateId: z.uuid() });
 
 // streamMaxMs: ปิดสตรีมเองแล้วให้เบราว์เซอร์ต่อใหม่ (ตรวจเซสชันซ้ำ) ค่าเริ่มต้น 10 นาที
@@ -96,13 +106,7 @@ export function liveRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
   app.get('/realtime', async (req, reply) => {
     if (!bus) throw new HttpError(503, 'realtime_off', 'ยังไม่ได้เปิดระบบ realtime');
     const channel = Channel.parse((req.query as { channel?: string }).channel);
-    const user = await requireUser(auth, req);
-    const [kind, id] = channel.split(':') as ['company' | 'student', string];
-    if (kind === 'student' && id !== user.id) throw new HttpError(403, 'forbidden', 'ฟังช่องของคนอื่นไม่ได้');
-    if (kind === 'company') {
-      const ok = await withUser(pool, user, async (c) => (await c.query('select app.can_read_company($1) ok', [id])).rows[0].ok);
-      if (!ok) throw new HttpError(404, 'not_found', 'ไม่พบบริษัทนี้');
-    }
+    await authorizeChannel(pool, await requireUser(auth, req), channel);
 
     reply.hijack();
     const res = reply.raw;

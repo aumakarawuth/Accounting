@@ -18,7 +18,11 @@ test('กระทบยอดธนาคาร: นำเข้า statement �
   await page.getByLabel('ยอดต้นงวดตามธนาคาร').fill('0');
   await page.getByLabel('ยอดปลายงวดตามธนาคาร').fill('980');
   await page.getByLabel(/^รายการ \(/).fill(`${d(day)},รับโอน e2e,1000.00,TRX-1\n${d(end)},ค่าธรรมเนียม e2e,-20.00,`);
+  // นำเข้าแล้วหน้าโหลดใหม่ (location.reload): ข้อความ "รับโอน e2e" อาจมีอยู่แล้วจากรอบ/จอก่อน ต้องรอโหลดใหม่เสร็จก่อนตรวจ
+  // ไม่อย่างนั้น checkScreen ทำงานระหว่างโหลดหน้า (Execution context was destroyed: พบใน CI)
+  const reloaded = page.waitForEvent('load');
   await page.getByRole('button', { name: 'นำเข้า', exact: true }).click();
+  await reloaded;
   await expect(page.getByRole('cell', { name: /รับโอน e2e/ }).first()).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'เลือก statement' })).toBeVisible();
   await checkScreen(page, info, 'bank-reconciliation');

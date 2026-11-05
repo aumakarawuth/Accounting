@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
 import type pg from 'pg';
 import type { AuthAdapter } from './auth.js';
@@ -32,6 +32,8 @@ export function buildApp(opts: {
   logger?: boolean;
   trustProxy?: boolean | string;
   streamMaxMs?: number;
+  // WebSocket ดูสด (self-host: server.ts ส่ง registerWebSocket จาก ws.ts) Vercel ไม่ส่ง = โค้ด/ไลบรารี WebSocket ไม่ถูก bundle
+  websocket?: (app: FastifyInstance, ctx: { pool: pg.Pool; auth: AuthAdapter; cfg: AuthConfig; bus: RealtimeBus }) => Promise<void>;
 }) {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 256 * 1024, trustProxy: opts.trustProxy ?? 'loopback' });
   const limiter = opts.limiter ?? memoryLimiter();
@@ -95,5 +97,9 @@ export function buildApp(opts: {
     adminRoutes(scope, { pool: opts.pool, auth });
     liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs });
   });
+  if (opts.websocket && opts.bus) {
+    const { websocket, bus } = opts;
+    app.register(async (scope) => websocket(scope, { pool: opts.pool, auth, cfg: opts.cfg, bus }));
+  }
   return app;
 }

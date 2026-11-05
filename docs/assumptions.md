@@ -120,3 +120,9 @@
       Caddy ไม่เชื่อ proxy ใดจนกว่าจะตั้ง `TRUSTED_PROXIES` (เช่นตอนใส่ Cloudflare)
     - superuser `postgres` ใช้เฉพาะ migrate/สร้างผู้ดูแล/backup แอปใช้ `app_web` (∈ `app_rw`) ตั้งรหัสใหม่ทุกครั้งที่ deploy จาก `.env`
     - service backup/ซ้อมกู้คืนต่อฐานผ่านซ็อกเก็ตที่ใช้ร่วมกัน (local trust ของ image ทางการ) ไม่มีรหัสในสคริปต์
+36. **Realtime ฝั่ง self-host (เฟสกลาง: สลับ adapter)** ตัดสินเองระหว่างทำ (แจ้งเปลี่ยนได้ สเปก `docs/staging-spec.md` ข้อ 6):
+    - WebSocket อยู่ใน process ของ API (`/ws`, `apps/api/src/ws.ts`) แทนการแยกเป็น `apps/realtime` ตาม PLAN.md ข้อ 11
+      เพราะใช้การตรวจเซสชัน/สิทธิ์ช่อง/ตัวจำกัดอัตราชุดเดียวกัน แยก process ภายหลังได้ (ใช้ image เดียวกัน)
+    - ยังไม่ใช้ Redis pub/sub (PLAN.md ข้อ 3): Postgres NOTIFY ส่งถึงทุก instance ที่ LISTEN อยู่แล้ว (instance ละ 1 การเชื่อมต่อ)
+      Redis จำเป็นเมื่อมี API หลาย instance เพื่อใช้ตัวจำกัดอัตราร่วมกัน (ทำพร้อมตอนนั้น)
+    - SSE ยังอยู่เป็นทางสำรอง: Vercel (ไม่มี WebSocket) และเครือข่ายโรงเรียนที่ปิด WebSocket (ต่อไม่ได้ครั้งแรก = สลับเป็น SSE ทันที)

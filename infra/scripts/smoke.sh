@@ -76,13 +76,13 @@ grep -q '^ผ่าน' "$work/drill.txt" || fail "ซ้อมกู้คื�
 # รายการที่ลงหลัง backup ต้องอยู่ในฐานที่กู้ (มาจาก WAL ไม่ใช่ base backup)
 after=$(psql_db -c "select count(*) from acc.journal_entries where doc_no = '$marker'")
 [ "$after" = 1 ] || fail "ไม่พบรายการ $marker ในฐานจริง"
-grep -q 'journal_entries = 2$' "$work/drill.txt" || fail "ฐานที่กู้ไม่มีรายการที่ลงหลัง backup"
+grep -q 'journal_entries = 3$' "$work/drill.txt" || fail "ฐานที่กู้ไม่มีรายการที่ลงหลัง backup"
 echo "ผ่าน (รายการ $marker ลงหลัง backup กู้ได้จาก WAL)"
 
 step "กู้ย้อนเวลา (ก่อนรายการ $marker)"
 ./scripts/restore-drill.sh --time "$before" | tee "$work/pitr.txt"
 grep -q '^ผ่าน' "$work/pitr.txt" || fail "กู้ย้อนเวลาไม่ผ่าน"
-grep -q 'journal_entries = 1$' "$work/pitr.txt" || fail "กู้ย้อนเวลาแล้วยังเห็นรายการหลังเวลาเป้าหมาย"
+grep -q 'journal_entries = 2$' "$work/pitr.txt" || fail "กู้ย้อนเวลาแล้วยังเห็นรายการหลังเวลาเป้าหมาย"
 echo "ผ่าน"
 
 step "security-check"

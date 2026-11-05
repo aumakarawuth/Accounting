@@ -70,6 +70,7 @@ jobs:
           ADMIN_DATABASE_URL="$DEV_DB" pnpm --filter @accounting/api -s set-password admin-e2e@example.test 'ผู้ดูแลโรงเรียนทดสอบ'
       - run: pnpm --filter @accounting/api build
       - run: pnpm --filter @accounting/web build
+        env: { NEXT_PUBLIC_REALTIME: ws }   # API รันแบบ server แยก: ดูสดผ่าน WebSocket
       - name: เปิด API และเว็บ
         run: |
           cd apps/api
@@ -82,7 +83,7 @@ jobs:
           for i in $(seq 1 60); do curl -sf http://localhost:3000/login > /dev/null && curl -sf http://127.0.0.1:4000/health > /dev/null && exit 0; sleep 1; done
           echo "เซิร์ฟเวอร์ไม่ขึ้น"; cat ../../api.log ../../web.log; exit 1
       - run: pnpm --filter @accounting/tests e2e
-        env: { E2E_BASE: 'http://localhost:3000', E2E_WEBKIT: '1' }
+        env: { E2E_BASE: 'http://localhost:3000', E2E_WEBKIT: '1', E2E_WS: '1' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -287,6 +287,8 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   ทดสอบทั้งชุดบนเครื่องด้วย localhost: ล็อกอิน ลงรายการ ดูสดผ่าน Caddy ส่งออก PDF/Excel → backup → ลงเพิ่ม → กู้คืนเห็นรายการหลัง backup
   → กู้ย้อนเวลาไม่เห็น · security-check 25/25 · CI job `infra` รัน `infra/scripts/smoke.sh` ทุก PR
   (ใช้เครื่องมือของ Postgres แทน pgBackRest/WAL-G: `docs/assumptions.md` ข้อ 35)
-  ยังค้าง (ต้องมี server/domain/bucket ซึ่งมีค่าใช้จ่าย: ขออนุญาตก่อน): staging จริง, k6 บน server จริง, deploy ผ่าน GitHub Actions → SSH,
-  สลับ adapter Realtime, monitoring
+  ยังค้าง (ต้องมี server/domain/bucket ซึ่งมีค่าใช้จ่าย: ขออนุญาตก่อน): staging จริง, k6 บน server จริง, deploy ผ่าน GitHub Actions → SSH, monitoring
+- **สลับ adapter Realtime** (4 พ.ย. 2569, `docs/staging-spec.md` ข้อ 6): self-host ดูสดผ่าน WebSocket `/api/ws` (การเชื่อมต่อเดียวทุกช่อง
+  ตรวจ Origin/เซสชัน/สิทธิ์ช่องเหมือน SSE) SSE คงไว้เป็นทางสำรองและใช้บน Vercel · ยังไม่ใช้ Redis (`docs/assumptions.md` ข้อ 36)
+  ยังค้าง: adapter Auth (Better Auth/Keycloak) — ตอนนี้ระบบเซสชันของเราเองทำงานได้ทั้งสองที่ ยังไม่มีเหตุให้เปลี่ยน
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)
