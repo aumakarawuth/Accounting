@@ -28,6 +28,7 @@ export default async function EntryPage({ params }: { params: Promise<{ companyI
       {company.can_write && (
         entry.reverses ? <p className="text-sm text-ink2">{th.journal.isReversal}</p>
           : entry.reversedBy ? null
+          : !entry.manual ? <p className="text-sm text-ink2">{th.journal.fromDocument}</p>
           : (
             <div className="flex flex-col gap-3">
               {!company.locked && /^(JV|AJ)-/.test(entry.docNo) && (

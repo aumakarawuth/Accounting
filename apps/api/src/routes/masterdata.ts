@@ -15,7 +15,7 @@ const PROFILE = `name, tax_id as "taxId", branch_no as "branchNo", address, vat_
 const PARTY = `p.code, p.name, p.is_customer as "isCustomer", p.is_vendor as "isVendor", p.tax_id as "taxId",
   p.branch_no as "branchNo", p.address, p.vat_registered as "vatRegistered", p.credit_days as "creditDays",
   p.wht_kind as "whtKind", p.wht_rate::text as "whtRate", p.active, p.version`;
-const ITEM = `i.code, i.name, i.unit, i.is_service as "isService", i.sale_price::text as "salePrice",
+const ITEM = `i.code, i.name, i.unit, i.is_service as "isService", i.track_inventory as "trackInventory", i.sale_price::text as "salePrice",
   i.purchase_price::text as "purchasePrice", sa.code as "salesAccount", pa.code as "purchaseAccount", i.active, i.version`;
 const ITEM_FROM = `acc.items i
   left join acc.chart_of_accounts sa on sa.company_id = i.company_id and sa.id = i.sales_account_id
@@ -146,15 +146,17 @@ export function masterDataRoutes(app: FastifyInstance, pool: pg.Pool, auth: Auth
   app.post('/companies/:companyId/items', async (req, reply) => {
     const { companyId } = CompanyParams.parse(req.params);
     const b = NewItem.parse(req.body);
+    if (b.isService && b.trackInventory) throw new HttpError(400, 'invalid', 'บริการติดตามสต็อกไม่ได้ (เลือกได้เฉพาะสินค้า)');
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
       const sales = await accountId(c, companyId, b.salesAccount, ['revenue'], 'บัญชีขาย');
       const purchase = await accountId(c, companyId, b.purchaseAccount, ['expense', 'asset'], 'บัญชีซื้อ');
       try {
         await c.query(
-          `insert into acc.items (company_id, code, name, unit, is_service, sale_price, purchase_price, sales_account_id, purchase_account_id)
-           values ($1, $2, $3, coalesce($4, ''), coalesce($5, false), $6, $7, $8, $9)`,
-          [companyId, b.code, b.name, b.unit ?? null, b.isService ?? null, b.salePrice ?? null, b.purchasePrice ?? null, sales ?? null, purchase ?? null]);
+          `insert into acc.items (company_id, code, name, unit, is_service, sale_price, purchase_price, sales_account_id, purchase_account_id, track_inventory)
+           values ($1, $2, $3, coalesce($4, ''), coalesce($5, false), $6, $7, $8, $9, coalesce($10, false))`,
+          [companyId, b.code, b.name, b.unit ?? null, b.isService ?? null, b.salePrice ?? null, b.purchasePrice ?? null, sales ?? null, purchase ?? null,
+           b.trackInventory ?? null]);
       } catch (e) {
         if ((e as { code?: string }).code === '23505') throw new HttpError(409, 'duplicate', `มีรหัส ${b.code} อยู่แล้ว`);
         throw e;
@@ -174,7 +176,7 @@ export function masterDataRoutes(app: FastifyInstance, pool: pg.Pool, auth: Auth
         purchaseAccountId: await accountId(c, companyId, b.purchaseAccount, ['expense', 'asset'], 'บัญชีซื้อ') };
       const params: unknown[] = [companyId, code, b.version];
       const sets = setClause({
-        name: 'name', unit: 'unit', isService: 'is_service', salePrice: 'sale_price', purchasePrice: 'purchase_price',
+        name: 'name', unit: 'unit', isService: 'is_service', trackInventory: 'track_inventory', salePrice: 'sale_price', purchasePrice: 'purchase_price',
         salesAccountId: 'sales_account_id', purchaseAccountId: 'purchase_account_id', active: 'active',
       }, fields, params);
       const r = await c.query(

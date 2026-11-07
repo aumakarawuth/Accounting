@@ -4,7 +4,7 @@ import { th } from '@/i18n/th';
 // รวมรายงานทุกตัวของบริษัท (แถบล่างมือถือ "รายงาน" และเมนูข้าง)
 const GROUPS: { title: string; items: [key: string, path: string][] }[] = [
   { title: th.reportsPage.groups.gl, items: [['ledger', '/ledger'], ['trialBalance', '/trial-balance'], ['worksheet', '/worksheet'], ['statements', '/statements']] },
-  { title: th.reportsPage.groups.partner, items: [['receivables', '/sales/receivables'], ['payables', '/purchases/payables']] },
+  { title: th.reportsPage.groups.partner, items: [['receivables', '/sales/receivables'], ['payables', '/purchases/payables'], ['inventory', '/inventory']] },
   { title: th.reportsPage.groups.tax, items: [['vat', '/tax/vat'], ['wht', '/tax/wht']] },
 ];
 

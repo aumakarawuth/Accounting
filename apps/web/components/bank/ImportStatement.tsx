@@ -9,7 +9,10 @@ const input = 'h-11 w-full rounded-doc border border-rule-input bg-paper px-3 te
 export function ImportStatement({ companyId }: { companyId: string }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  // onSubmit ไม่ใช้ <form action>: React 19 ล้างช่องทั้งฟอร์มหลัง action จบ (กรอกผิดแล้วต้องพิมพ์ statement ใหม่ทั้งหมด)
   async function submit(form: FormData) {
+    if (busy) return;
+    if (!navigator.onLine) { setMessage(th.error.offline); return; }
     setBusy(true);
     setMessage('');
     try {
@@ -23,7 +26,8 @@ export function ImportStatement({ companyId }: { companyId: string }) {
       });
       location.reload();
     } catch (e) {
-      setMessage((e as ApiError).message || t.importFailed);
+      const err = e as ApiError;
+      setMessage(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message || t.importFailed);
       setBusy(false);
     }
   }
@@ -33,7 +37,7 @@ export function ImportStatement({ companyId }: { companyId: string }) {
   return (
     <details className="border border-rule-strong bg-paper">
       <summary className="flex min-h-12 cursor-pointer items-center px-4 font-semibold">{t.importTitle}</summary>
-      <form action={submit} className="grid gap-3 p-4 sm:grid-cols-2">
+      <form onSubmit={(e) => { e.preventDefault(); void submit(new FormData(e.currentTarget)); }} className="grid gap-3 p-4 sm:grid-cols-2">
         {field('accountCode', t.accountCode, { placeholder: t.accountHint, inputMode: 'numeric' })}
         <span className="max-sm:hidden" />
         {field('periodStart', t.periodStart, { type: 'date' })}

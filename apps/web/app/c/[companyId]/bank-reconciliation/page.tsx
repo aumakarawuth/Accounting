@@ -1,4 +1,5 @@
 import { Money } from '@/components/Money';
+import { fromCents, toSignedCents } from '@/lib/money';
 import { serverApi } from '@/lib/server-api';
 import { ImportStatement } from '@/components/bank/ImportStatement';
 import { MatchLine } from '@/components/bank/MatchLine';
@@ -37,7 +38,7 @@ export default async function BankReconciliationPage({ params, searchParams }: {
       {s && (
         <section className="grid grid-cols-2 gap-px border border-rule-strong bg-rule sm:grid-cols-3">
           {([
-            [t.bankBalance, s.closing_balance], [t.bookBalance, s.book_balance], [t.difference, String(Number(s.closing_balance) - Number(s.book_balance))],
+            [t.bankBalance, s.closing_balance], [t.bookBalance, s.book_balance], [t.difference, fromCents((toSignedCents(s.closing_balance) ?? 0n) - (toSignedCents(s.book_balance) ?? 0n))],
             [t.unmatchedBank, s.unmatched_bank], [t.unmatchedBook, s.unmatched_book],
           ] as const).map(([label, v]) => (
             <p key={label} className="flex flex-col gap-1 bg-paper p-3 text-sm text-ink2">{label}<span className="text-lg text-ink"><Money value={v} /></span></p>
@@ -61,7 +62,7 @@ export default async function BankReconciliationPage({ params, searchParams }: {
                   <td className={cell}>{l.description}{l.reference && <span className="text-ink2"> ({l.reference})</span>}</td>
                   <td className={`${cell} text-right`}><Money value={l.amount} /></td>
                   <td className={`${cell} text-right`}><Money value={l.matched} /></td>
-                  <td className={cell}>{Number(l.matched) === Number(l.amount) ? '✓' : <MatchLine companyId={companyId} lineId={l.id} amount={l.amount} entries={r.entries} />}</td>
+                  <td className={cell}>{toSignedCents(l.matched) === toSignedCents(l.amount) ? '✓' : <MatchLine companyId={companyId} lineId={l.id} amount={l.amount} entries={r.entries} />}</td>
                 </tr>
               ))}
             </tbody>

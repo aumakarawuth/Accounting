@@ -19,6 +19,21 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     return r.rows[0] as { id: string; doc_no: string };
   }
 
+  // รายการที่ลงจากสมุดรายวันเอง (JV/AJ) เท่านั้นที่แก้/กลับรายการจากสมุดได้
+  // รายการจากเอกสาร/ทะเบียน (IV RE CN PI PV CQ FA FD VC WT IA IM CG และ AJ ของค่าเสื่อม) ต้องยกเลิกที่ตัวเอกสาร
+  // ไม่อย่างนั้นยอดคุม (ลูกหนี้ เจ้าหนี้ เช็ค ค่าเสื่อมสะสม ภาษี สต็อก) ไม่ตรงทะเบียน (docs/full-system-test.md)
+  async function assertManual(c: pg.PoolClient, companyId: string, entryId: string) {
+    const e = (await c.query(
+      `select e.doc_prefix, e.doc_no, exists (select 1 from acc.depreciation_runs r where r.company_id = e.company_id and r.entry_id = e.id) as dep
+         from acc.journal_entries e where e.company_id = $1 and e.id = $2`, [companyId, entryId])).rows[0];
+    if (!e) throw new HttpError(404, 'not_found', 'ไม่พบรายการนี้');
+    if (e.doc_prefix === 'RV') return e; // กลับรายการของการกลับรายการ: ให้ DB ตอบ ACC12
+    if ((e.doc_prefix !== 'JV' && e.doc_prefix !== 'AJ') || e.dep) {
+      throw new HttpError(422, 'ACC15', `รายการ ${e.doc_no} มาจากเอกสารหรือทะเบียน แก้หรือกลับรายการจากสมุดรายวันไม่ได้ ให้ยกเลิกที่ตัวเอกสาร`);
+    }
+    return e as { doc_prefix: string; doc_no: string };
+  }
+
   function idemKey(req: FastifyRequest) {
     return IdempotencyKey.parse(req.headers['idempotency-key']);
   }
@@ -171,11 +186,8 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     const body = PostJournal.parse(req.body);
     const key = idemKey(req);
     const out = await withUser(pool, await user(req), async (c) => {
-      const old = (await c.query('select doc_prefix, doc_no from acc.journal_entries where company_id = $1 and id = $2', [companyId, entryId])).rows[0];
-      if (!old) throw new HttpError(404, 'not_found', 'ไม่พบรายการนี้');
-      if (old.doc_prefix !== 'JV' && old.doc_prefix !== 'AJ') {
-        throw new HttpError(422, 'ACC15', `รายการ ${old.doc_no} มาจากเอกสาร แก้ไขที่ตัวเอกสาร (ยกเลิกแล้วออกใหม่)`);
-      }
+      const old = await assertManual(c, companyId, entryId);
+      if (old.doc_prefix === 'RV') throw new HttpError(409, 'ACC12', `รายการ ${old.doc_no} เป็นรายการกลับรายการ แก้ไขไม่ได้`);
       await c.query('select acc.reverse_journal($1, $2, $3, $4, $5)', [companyId, entryId, body.date, `${key}:rv`, `แก้ไข ${old.doc_no}`]);
       const posted = await c.query('select acc.post_journal($1, $2, $3, $4::jsonb, $5, $6) as id', [
         companyId, body.date, body.description, JSON.stringify(body.lines), key, old.doc_prefix,
@@ -190,6 +202,7 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     const body = Reverse.parse(req.body);
     const key = idemKey(req);
     const out = await withUser(pool, await user(req), async (c) => {
+      await assertManual(c, companyId, entryId); // JV/AJ ที่กลับแล้วส่งซ้ำ (เน็ตหลุด) ยังผ่านด่านนี้ ได้ผลเดิมจาก DB
       const posted = await c.query('select acc.reverse_journal($1, $2, $3, $4, $5) as id', [
         companyId, entryId, body.date, key, body.description ?? null,
       ]);
@@ -205,6 +218,7 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       const e = (await c.query(
         `select e.id, e.doc_no as "docNo", e.entry_date::text as date, e.description, e.total_amount::text as total,
                 e.posted_at as "postedAt", p.closed as "periodClosed",
+                (e.doc_prefix in ('JV', 'AJ') and not exists (select 1 from acc.depreciation_runs r where r.company_id = e.company_id and r.entry_id = e.id)) as manual,
                 case when r.id is null then null else json_build_object('id', r.id, 'docNo', r.doc_no) end as reverses,
                 (select json_build_object('id', x.id, 'docNo', x.doc_no) from acc.journal_entries x
                   where x.company_id = e.company_id and x.reverses_entry_id = e.id) as "reversedBy",

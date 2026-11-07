@@ -4,11 +4,24 @@ import { z } from 'zod';
 import { withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
+import { HttpError } from '../errors.js';
+import { IsoDate, SignedMoney } from '../schemas.js';
+
+const cents = (s: string) => { const neg = s.startsWith('-'); const [i, f = ''] = s.replace('-', '').split('.'); const v = BigInt(i!) * 100n + BigInt((f + '00').slice(0, 2)); return neg ? -v : v; };
 
 const Id = z.uuid();
 const Params = z.object({ companyId: Id });
-const Statement = z.object({ accountCode: z.string().regex(/^11\d+$/), periodStart: z.string().date(), periodEnd: z.string().date(), openingBalance: z.string(), closingBalance: z.string(), lines: z.array(z.object({ date: z.string().date(), description: z.string().min(1).max(300), reference: z.string().max(100).optional(), amount: z.string(), balance: z.string().optional() })).min(1) });
-const Match = z.object({ statementLineId: Id, entryId: Id, amount: z.string() });
+// ข้อความผิดเป็นภาษาไทยทุกช่อง (นักเรียนพิมพ์ statement เองเป็นบรรทัด) · ยอดเงินมีเครื่องหมาย: เงินเข้า + เงินออก −
+const StatementLine = z.object({
+  date: IsoDate, description: z.string().trim().min(1, 'ต้องมีรายละเอียด').max(300, 'รายละเอียดยาวเกิน 300 ตัว'),
+  reference: z.string().trim().max(100, 'เลขอ้างอิงยาวเกิน 100 ตัว').optional(), amount: SignedMoney, balance: SignedMoney.optional(),
+});
+const Statement = z.object({
+  accountCode: z.string().regex(/^11\d+$/, 'บัญชีธนาคารต้องเป็นรหัส 11xx เช่น 1120'), periodStart: IsoDate, periodEnd: IsoDate,
+  openingBalance: SignedMoney, closingBalance: SignedMoney,
+  lines: z.array(StatementLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(500),
+});
+const Match = z.object({ statementLineId: Id, entryId: Id, amount: SignedMoney });
 
 export function bankRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapter) {
   const user = (req: FastifyRequest): Promise<AuthUser> => requireUser(auth, req);
@@ -25,7 +38,20 @@ export function bankRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapte
   });
   app.post('/companies/:companyId/bank-reconciliation/statements', async (req, reply) => {
     const { companyId } = Params.parse(req.params); const b = Statement.parse(req.body);
+    if (b.periodEnd < b.periodStart) throw new HttpError(400, 'invalid', 'วันสิ้นงวดต้องไม่ก่อนวันเริ่มงวด');
+    const outside = b.lines.findIndex((l) => l.date < b.periodStart || l.date > b.periodEnd);
+    if (outside >= 0) throw new HttpError(422, 'invalid', `บรรทัดที่ ${outside + 1}: วันที่อยู่นอกงวดของ statement`);
+    const zero = b.lines.findIndex((l) => cents(l.amount) === 0n);
+    if (zero >= 0) throw new HttpError(422, 'invalid', `บรรทัดที่ ${zero + 1}: จำนวนเงินต้องไม่เป็นศูนย์`);
+    // ยอดต้นงวด + รายการ = ยอดปลายงวด (statement พิมพ์ผิด ผลกระทบยอดจะผิดทั้งหน้า)
+    const sum = b.lines.reduce((t, l) => t + cents(l.amount), cents(b.openingBalance));
+    if (sum !== cents(b.closingBalance)) {
+      const m = (n: bigint) => `${n < 0n ? '-' : ''}${(n < 0n ? -n : n) / 100n}.${((n < 0n ? -n : n) % 100n).toString().padStart(2, '0')}`;
+      throw new HttpError(422, 'invalid', `ยอดต้นงวด + รายการ = ${m(sum)} ไม่เท่ากับยอดปลายงวด ${m(cents(b.closingBalance))}`);
+    }
     const row = await withUser(pool, await user(req), async (c) => { await requireWritable(c, companyId);
+      const acct = await c.query(`select 1 from acc.chart_of_accounts where company_id=$1 and code=$2`, [companyId, b.accountCode]);
+      if (!acct.rowCount) throw new HttpError(422, 'ACC04', `ไม่มีบัญชีรหัส ${b.accountCode} ในผังบัญชี`);
       const s = (await c.query(`insert into acc.bank_statements(company_id,bank_account_id,period_start,period_end,opening_balance,closing_balance,imported_by) select $1,id,$2,$3,$4,$5,$6 from acc.chart_of_accounts where company_id=$1 and code=$7 returning id`, [companyId,b.periodStart,b.periodEnd,b.openingBalance,b.closingBalance,(await user(req)).id,b.accountCode])).rows[0];
       for (const l of b.lines) await c.query(`insert into acc.bank_statement_lines(company_id,statement_id,line_date,description,reference,amount,balance) values($1,$2,$3,$4,$5,$6,$7)`, [companyId,s.id,l.date,l.description,l.reference ?? '',l.amount,l.balance ?? null]); return s;
     }); return reply.code(201).send(row);

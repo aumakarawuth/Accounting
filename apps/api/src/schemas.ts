@@ -2,7 +2,16 @@ import { z } from 'zod';
 
 // เงินเป็นสตริงทศนิยมเสมอ ห้าม number (กัน float ทุกชั้น)
 export const Money = z.string().regex(/^\d{1,16}(\.\d{1,2})?$/, 'จำนวนเงินต้องเป็นตัวเลขทศนิยมไม่เกิน 2 ตำแหน่ง');
-export const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'วันที่ต้องเป็น YYYY-MM-DD');
+// วันที่ต้องมีจริง (2026-02-30 / 2026-13-01 ผ่าน regex แต่ Postgres ปฏิเสธ เคยตอบ 500)
+const realDate = (s: string) => {
+  const [y, m, d] = s.split('-').map(Number);
+  const t = new Date(Date.UTC(y!, m! - 1, d!));
+  t.setUTCFullYear(y!);
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m! - 1 && t.getUTCDate() === d;
+};
+export const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'วันที่ต้องเป็น YYYY-MM-DD').refine(realDate, 'ไม่มีวันที่นี้ในปฏิทิน');
+/** จำนวนเงินมีเครื่องหมาย (รายการเดินบัญชี: ฝาก +, ถอน −) */
+export const SignedMoney = z.string().regex(/^-?\d{1,16}(\.\d{1,2})?$/, 'จำนวนเงินต้องเป็นตัวเลขทศนิยมไม่เกิน 2 ตำแหน่ง');
 export const Uuid = z.uuid();
 
 export const CompanyParams = z.object({ companyId: Uuid });
@@ -127,16 +136,27 @@ const itemFields = {
   name: MasterName,
   unit: z.string().trim().max(20),
   isService: z.boolean(),
+  trackInventory: z.boolean(),
   salePrice: Money.nullable(),
   purchasePrice: Money.nullable(),
   salesAccount: AccountCode.nullable(),
   purchaseAccount: AccountCode.nullable(),
 };
 export const NewItem = z.object({ code: MasterCode, ...itemFields }).partial({
-  unit: true, isService: true, salePrice: true, purchasePrice: true, salesAccount: true, purchaseAccount: true,
+  unit: true, isService: true, trackInventory: true, salePrice: true, purchasePrice: true, salesAccount: true, purchaseAccount: true,
 }).strict();
 export const EditItem = z.object({ version: Version, active: z.boolean(), ...itemFields }).partial().required({ version: true }).strict();
 export const ItemParams = z.object({ companyId: Uuid, code: MasterCode });
+// ปรับสต็อก (เปิดยอด/ผลตรวจนับ): จำนวนมีเครื่องหมาย บวก = รับเข้า ลบ = ตัดออก
+export const InventoryAdjustment = z.object({
+  itemCode: MasterCode,
+  date: IsoDate,
+  quantity: z.string().regex(/^-?\d{1,11}(\.\d{1,3})?$/, 'จำนวนเป็นตัวเลข ทศนิยมไม่เกิน 3 ตำแหน่ง (ตัดออกใส่เครื่องหมายลบ)')
+    .refine((s) => Number(s) !== 0, 'จำนวนต้องไม่เป็นศูนย์'),
+  unitCost: z.string().regex(/^\d{1,12}(\.\d{1,6})?$/, 'ต้นทุนต่อหน่วยเป็นตัวเลข ทศนิยมไม่เกิน 6 ตำแหน่ง').optional(),
+  offsetAccount: z.string().regex(/^[0-9]{3,10}$/, 'เลือกบัญชีคู่'),
+  description: z.string().trim().max(300).optional(),
+}).strict();
 
 // ---- เฟส 2.2 เอกสารขาย (ตรวจรูปแบบที่นี่ กติกาบัญชีตรวจที่ฟังก์ชันใน DB) ----
 const Qty = z.string().regex(/^\d{1,11}(\.\d{1,3})?$/, 'จำนวนเป็นตัวเลข ทศนิยมไม่เกิน 3 ตำแหน่ง');
