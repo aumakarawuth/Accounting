@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { postJson, type ApiError, type PurchaseDocument, type PurchaseFormData, type WhtKind } from '@/lib/api';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
-import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { lineAmount, rateHundredths, vatCalc, type PriceMode } from '@/lib/vat';
 import { purchaseEntry, whtFor } from '@/lib/entry-preview';
 import { DraftBanner, EntryPreview, ItemField, PartyPicker, liveLines } from '@/components/docs/parts';
@@ -250,7 +250,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
             <div className="flex flex-col text-sm">
               <label htmlFor="doc-date">{th.purchases.date}</label>
               <input id="doc-date" className={`${inputCls} font-num`} inputMode="numeric" value={date} aria-describedby="doc-date-n"
-                onChange={(e) => setDate(e.target.value)} aria-invalid={isoDate === null} />
+                onChange={(e) => setDate(maskDate(e.target.value))} aria-invalid={isoDate === null} />
               <span id="doc-date-n" className="pt-1 text-[13px] text-ink2">{th.purchases.dateHint}</span>
             </div>
           </section>

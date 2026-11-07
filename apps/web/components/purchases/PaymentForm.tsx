@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { api, postJson, type ApiError, type ChequeRow, type PurchaseFormData, type PurchaseRow, type WhtKind } from '@/lib/api';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
-import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { rateHundredths } from '@/lib/vat';
 import { whtFor, type EntryLine } from '@/lib/entry-preview';
 import { DraftBanner, EntryPreview, PartyPicker, liveLines } from '@/components/docs/parts';
@@ -206,7 +206,7 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col text-sm">
                 {th.sales.date}
-                <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={isoDate === null} />
+                <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(maskDate(e.target.value))} aria-invalid={isoDate === null} />
               </label>
               <label className="flex flex-col text-sm">
                 {byCheque ? th.cheques.bankAccount : th.purchases.cashAccount}
@@ -231,7 +231,7 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
                   </label>
                   <label className="flex flex-col text-sm">
                     {th.cheques.chequeDate}
-                    <input className={`${inputCls} font-num`} inputMode="numeric" value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} aria-invalid={isoChequeDate === null} />
+                    <input className={`${inputCls} font-num`} inputMode="numeric" value={chequeDate} onChange={(e) => setChequeDate(maskDate(e.target.value))} aria-invalid={isoChequeDate === null} />
                   </label>
                   <p className="col-span-2 text-[13px] text-ink2">{th.cheques.byChequeNote.paid}</p>
                 </>

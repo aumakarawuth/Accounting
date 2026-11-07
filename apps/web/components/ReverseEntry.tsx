@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { api, type ApiError } from '@/lib/api';
-import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { th } from '@/i18n/th';
 
 type Entry = { id: string; docNo: string; date: string; periodClosed: boolean };
@@ -65,7 +65,7 @@ export function ReverseEntry({ companyId, entry, locked }: { companyId: string; 
                 inputMode="numeric"
                 value={date}
                 // เนื้อหาเปลี่ยนต้องใช้คีย์ใหม่ ไม่อย่างนั้น DB ตอบว่าคีย์ถูกใช้กับคำขออื่น (ACC03)
-                onChange={(e) => { setDate(e.target.value); key.current = crypto.randomUUID(); }}
+                onChange={(e) => { setDate(maskDate(e.target.value)); key.current = crypto.randomUUID(); }}
                 aria-invalid={iso === null}
                 aria-describedby={iso === null ? 'reverse-date-error' : undefined}
               />

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { SelectField, TextField } from '@/components/Fields';
 import { postJson, type ApiError, type InventoryItem } from '@/lib/api';
-import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { th } from '@/i18n/th';
 
 const t = th.inventory;
@@ -63,7 +63,7 @@ export function InventoryAdjust({ companyId, items, accounts, initialItem }: {
         <SelectField label={t.item} value={itemCode} onChange={setItemCode}>
           {items.map((i) => <option key={i.code} value={i.code}>{i.code} {i.name}</option>)}
         </SelectField>
-        <TextField label={t.date} value={date} onChange={setDate} inputMode="numeric" mono />
+        <TextField label={t.date} value={date} onChange={(v) => setDate(maskDate(v))} inputMode="numeric" mono />
         <TextField label={t.qty} value={quantity} onChange={setQuantity} inputMode="text" mono />
         {!out && <TextField label={t.unitCost} value={unitCost} onChange={setUnitCost} inputMode="decimal" mono />}
         <SelectField label={t.offset} value={offset} onChange={setOffset}>

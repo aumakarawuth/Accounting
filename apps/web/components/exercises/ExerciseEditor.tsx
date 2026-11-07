@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AccountField } from '@/components/JournalForm';
 import { TextField } from '@/components/Fields';
 import { api, postJson, type Account, type ApiError, type ExerciseSetDetail } from '@/lib/api';
-import { isoToThai, thaiToIso } from '@/lib/date';
+import { isoToThai, thaiToIso, maskDate } from '@/lib/date';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { th } from '@/i18n/th';
 
@@ -122,7 +122,7 @@ export function ExerciseEditor({ set, accounts }: { set: ExerciseSetDetail | nul
               <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_6rem]">
                 <label className="flex flex-col text-sm">{t.date}
                   <input className={`${input} font-num`} inputMode="numeric" placeholder="วว/ดด/ปปปป" value={it.date}
-                    aria-invalid={!thaiToIso(it.date)} onChange={(e) => setItem(it.key, { date: e.target.value })} />
+                    aria-invalid={!thaiToIso(it.date)} onChange={(e) => setItem(it.key, { date: maskDate(e.target.value) })} />
                 </label>
                 <label className="flex flex-col text-sm">{t.narrative}
                   <textarea rows={2} className={`${input} h-auto min-h-11 resize-y py-2`} maxLength={2000} value={it.narrative}

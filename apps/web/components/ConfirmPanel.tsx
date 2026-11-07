@@ -1,4 +1,5 @@
 'use client';
+import { maskDate } from '@/lib/date';
 
 import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
@@ -62,7 +63,7 @@ export function DateInput({ label, value, onChange, invalid }: { label: string; 
   return (
     <label className="flex min-w-0 flex-col text-sm">
       {label}
-      <input className={`${field} font-num`} inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid} />
+      <input className={`${field} font-num`} inputMode="numeric" value={value} onChange={(e) => onChange(maskDate(e.target.value))} aria-invalid={invalid} />
     </label>
   );
 }

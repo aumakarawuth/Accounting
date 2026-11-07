@@ -7,11 +7,12 @@ export function isoToThai(iso: string): string {
   return `${d}/${m}/${Number(y) + BE}`;
 }
 
-/** "15/10/2569" → "2026-10-15"; รูปแบบหรือวันที่ผิด = null */
+/** "15/10/2569" → "2026-10-15"; ปี ค.ศ. (ต่ำกว่า 2400) ก็รับ เช่น "15/10/2026"; รูปแบบหรือวันที่ผิด = null */
 export function thaiToIso(input: string): string | null {
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(input.trim());
   if (!m) return null;
-  const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3]) - BE];
+  const year = Number(m[3]);
+  const [d, mo, y] = [Number(m[1]), Number(m[2]), year < 2400 ? year : year - BE];
   const dt = new Date(Date.UTC(y, mo - 1, d));
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
   return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -50,4 +51,12 @@ export function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** พิมพ์ตัวเลขแล้วใส่ / ให้เอง: "02102026" → "02/10/2026" (ลบได้ตามปกติ เพราะ / ขึ้นเมื่อมีตัวเลขตามมา) */
+export function maskDate(input: string): string {
+  const d = input.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
 }

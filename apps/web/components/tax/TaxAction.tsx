@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { postJson, type ApiError } from '@/lib/api';
-import { isoToThai, thaiToIso } from '@/lib/date';
+import { isoToThai, thaiToIso, maskDate } from '@/lib/date';
 import { th } from '@/i18n/th';
 
 // คำสั่งภาษีที่ต้องยืนยันก่อน (ปิดภาษี ชำระ นำส่ง ยกเลิกการปิด): กดแล้วกางกรอบอธิบาย + ช่องที่ต้องกรอก แล้วจึงยืนยัน
@@ -54,7 +54,7 @@ export function TaxAction({ label, title, explain, path, input, cashAccounts = [
         <div className="grid gap-3 @md:grid-cols-2">
           <label className="flex flex-col text-sm">
             {th.tax.payDate}
-            <input className={`${field} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={isoDate === null} />
+            <input className={`${field} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(maskDate(e.target.value))} aria-invalid={isoDate === null} />
           </label>
           <label className="flex flex-col text-sm">
             {th.tax.cashAccount}
