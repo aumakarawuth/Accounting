@@ -11,14 +11,15 @@ base=https://localhost
 work=$(mktemp -d)
 created_env=0
 if [ ! -f .env ]; then
-  printf 'SITE_ADDRESS=localhost\nPOSTGRES_PASSWORD=%s\nAPP_DB_PASSWORD=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > .env
+  printf 'SITE_ADDRESS=localhost\nPOSTGRES_PASSWORD=%s\nAPP_DB_PASSWORD=%s\nMONITOR_DB_PASSWORD=%s\nGRAFANA_ADMIN_PASSWORD=%s\n' \
+    "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" "$(openssl rand -hex 16)" > .env
   created_env=1
 fi
 cleanup() {
   code=$?
   if [ "$code" != 0 ]; then docker compose ps -a; docker compose logs --tail 60 migrate api web caddy db backup || true; fi
   if [ "${KEEP:-0}" != 1 ]; then
-    docker compose --profile drill down -v --remove-orphans >/dev/null 2>&1 || true
+    docker compose --profile drill --profile monitoring down -v --remove-orphans >/dev/null 2>&1 || true
     [ "$created_env" = 1 ] && rm -f .env
   fi
   rm -rf "$work"
@@ -32,6 +33,8 @@ c() { curl -sS --cacert "$work/ca.crt" -b "$work/jar" -c "$work/jar" "$@"; }
 psql_db() { docker compose exec -T db psql -U postgres -d accounting -XAtq -v ON_ERROR_STOP=1 "$@"; }
 
 step "build + up"
+# monitoring เปิดด้วยเสมอในการทดสอบ (MONITORING=0 = ข้าม)
+[ "${MONITORING:-1}" = 1 ] && export COMPOSE_PROFILES=monitoring
 if [ "${SKIP_BUILD:-0}" = 1 ]; then docker compose up -d --no-build --wait; else docker compose up -d --build --wait; fi
 docker compose ps
 docker compose logs migrate | tail -n 3
@@ -84,6 +87,43 @@ step "กู้ย้อนเวลา (ก่อนรายการ $marker)
 grep -q '^ผ่าน' "$work/pitr.txt" || fail "กู้ย้อนเวลาไม่ผ่าน"
 grep -q 'journal_entries = 2$' "$work/pitr.txt" || fail "กู้ย้อนเวลาแล้วยังเห็นรายการหลังเวลาเป้าหมาย"
 echo "ผ่าน"
+
+if [ "${MONITORING:-1}" = 1 ]; then
+  step "monitoring: Prometheus อ่านได้ทุกตัว + เงื่อนไขเตือน + Grafana + Uptime Kuma"
+  prom() { curl -sS --get "http://127.0.0.1:9090/api/v1/$1" ${2:+--data-urlencode "query=$2"}; }
+  # ทุก target ต้อง up (สำรวจทุก 15 วินาที)
+  for _ in $(seq 1 30); do
+    down=$(prom targets | node -e "const t=JSON.parse(require('fs').readFileSync(0)).data.activeTargets; console.log(t.length ? t.filter(x=>x.health!=='up').map(x=>x.labels.job+':'+x.lastError).join(' | ') : 'none')")
+    [ -z "$down" ] && break; sleep 3
+  done
+  [ -z "$down" ] || fail "target ไม่ up: $down"
+  # ชุดข้อมูลสำคัญต้องมีจริง (API, Caddy, Postgres + pg_stat_statements, เครื่อง, backup/WAL จาก textfile)
+  for q in 'http_requests_total{route="/companies/:companyId/journal",status="201"}' 'realtime_connections' 'caddy_http_requests_total' \
+           'pg_up' 'pg_stat_statements_calls_total' 'node_filesystem_avail_bytes' 'backup_last_success_timestamp_seconds' 'pg_archiver_archived_total'; do
+    n=0
+    for _ in $(seq 1 30); do
+      n=$(prom query "$q" | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).data.result.length)")
+      [ "$n" -gt 0 ] && break; sleep 2
+    done
+    [ "$n" -gt 0 ] || fail "Prometheus ไม่มีข้อมูล $q"
+  done
+  prom query 'http_requests_total' | grep -q '"route":"/companies/[0-9a-f]' && fail "metrics มี id จริงใน route"
+  rules=$(prom rules | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).data.groups.flatMap(g=>g.rules).length)")
+  [ "$rules" -ge 9 ] || fail "เงื่อนไขเตือนโหลดไม่ครบ ($rules)"
+  firing=$(prom alerts | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).data.alerts.filter(a=>a.state==='firing').map(a=>a.labels.alertname).join(','))")
+  [ -z "$firing" ] || fail "มีเตือนค้าง: $firing"
+  gpw=$(sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' .env)
+  curl -sf http://127.0.0.1:3001/api/health >/dev/null || fail "Grafana ไม่ตอบ"
+  curl -sf -u "admin:$gpw" http://127.0.0.1:3001/api/dashboards/uid/accounting-overview | grep -q 'ระบบบัญชี' || fail "ไม่มีแดชบอร์ดที่ provision"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' -u admin:admin http://127.0.0.1:3001/api/dashboards/uid/accounting-overview)" = 401 ] || fail "Grafana เข้าได้ด้วย admin/admin"
+  docker compose run --rm --no-deps -e GF_SECURITY_ADMIN_PASSWORD= grafana >/dev/null 2>&1 && fail "Grafana เริ่มได้โดยไม่ตั้งรหัส"
+  code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3002/)
+  case "$code" in 200|302) ;; *) fail "Uptime Kuma ไม่ตอบ ($code)";; esac
+  # ตัวชี้วัดต้องไม่หลุดออกนอกเครื่อง
+  [ "$(c -s -o /dev/null -w '%{http_code}' "$base/api/metrics")" = 404 ] || fail "/api/metrics เปิดสู่ภายนอก"
+  curl -s -m 3 http://localhost:9180/metrics >/dev/null 2>&1 && fail "พอร์ต metrics ของ Caddy เปิดสู่ภายนอก"
+  echo "ผ่าน"
+fi
 
 step "security-check"
 NODE_EXTRA_CA_CERTS="$work/ca.crt" node "$root/scripts/security-check.mjs" "$base" "$(node -e "console.log(JSON.parse(require('fs').readFileSync('$work/flow.json','utf8')).studentCode)")" \

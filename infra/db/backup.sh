@@ -45,4 +45,17 @@ for d in wal/*/; do
 done
 
 date -u +%Y-%m-%dT%H:%M:%SZ > last-success
+# ตัวชี้วัดให้ node-exporter (textfile collector) → Prometheus เตือนเมื่อ backup เก่ากว่า 26 ชม.
+mkdir -p metrics
+{
+  echo "# HELP backup_last_success_timestamp_seconds เวลาที่ base backup + pg_dump สำเร็จล่าสุด"
+  echo "# TYPE backup_last_success_timestamp_seconds gauge"
+  echo "backup_last_success_timestamp_seconds $(date +%s)"
+  echo "# HELP backup_base_bytes ขนาด base backup ล่าสุด"
+  echo "# TYPE backup_base_bytes gauge"
+  echo "backup_base_bytes $(stat -c %s "base/$ts.tar.gz")"
+  echo "# HELP backup_base_count จำนวน base backup ที่เก็บอยู่"
+  echo "# TYPE backup_base_count gauge"
+  echo "backup_base_count $(ls -1 base/*.tar.gz | wc -l)"
+} > metrics/.backup.prom.tmp && mv metrics/.backup.prom.tmp metrics/backup.prom
 echo "backup $ts: เสร็จ ($(du -sh "base/$ts.tar.gz" | cut -f1) base, $(du -sh "dump/$ts.dump" | cut -f1) dump, WAL $(find wal -type f | wc -l) ไฟล์)"

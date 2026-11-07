@@ -22,9 +22,9 @@ export const MAX_CHANNELS = 20;
 const PING_MS = 25_000;
 const SESSION_CHECK_MS = 60_000;
 
-export async function registerWebSocket(app: FastifyInstance, ctx: { pool: pg.Pool; auth: AuthAdapter; cfg: AuthConfig; bus: RealtimeBus },
+export async function registerWebSocket(app: FastifyInstance, ctx: { pool: pg.Pool; auth: AuthAdapter; cfg: AuthConfig; bus: RealtimeBus; onStream?: (t: 'ws', d: 1 | -1) => void },
   timing: { pingMs?: number; sessionCheckMs?: number } = {}) {
-  const { pool, auth, cfg, bus } = ctx;
+  const { pool, auth, cfg, bus, onStream } = ctx;
   await app.register(websocketPlugin, { options: { maxPayload: 1024 } });
 
   app.get('/ws', {
@@ -41,6 +41,7 @@ export async function registerWebSocket(app: FastifyInstance, ctx: { pool: pg.Po
     const user = (req as { wsUser?: AuthUser }).wsUser!;
     const subs = new Map<string, () => void>();
     const send = (m: unknown) => { if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(m)); };
+    onStream?.('ws', 1);
     let alive = true;
     let queue = Promise.resolve(); // คำสั่ง sub/unsub ทำตามลำดับที่ส่งมา
 
@@ -80,6 +81,7 @@ export async function registerWebSocket(app: FastifyInstance, ctx: { pool: pg.Po
     });
 
     socket.on('close', () => {
+      onStream?.('ws', -1);
       clearInterval(ping);
       clearInterval(recheck);
       for (const unsub of subs.values()) unsub();

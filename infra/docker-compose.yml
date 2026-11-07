@@ -16,6 +16,8 @@ x-api-env: &api-env
   REQUESTS_PER_USER_PER_MINUTE: ${REQUESTS_PER_USER_PER_MINUTE:-600}
   REQUESTS_PER_IP_PER_MINUTE: ${REQUESTS_PER_IP_PER_MINUTE:-60000}
   LOGIN_PER_IP_PER_MINUTE: ${LOGIN_PER_IP_PER_MINUTE:-1200}
+  # ตัวชี้วัด Prometheus พอร์ตแยกในเครือข่ายภายใน (Caddy ไม่ส่งต่อ)
+  METRICS_PORT: "9464"
 
 services:
   db:
@@ -45,6 +47,7 @@ services:
     environment:
       ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/accounting
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD:-}
     depends_on:
       db: { condition: service_healthy }
     networks: [internal]
@@ -157,6 +160,77 @@ services:
       - drill:/drill
     network_mode: none
 
+  # ---- monitoring (docker compose --profile monitoring up -d) docs/self-host.md ข้อ 6 ----
+  # หน้าจอ Grafana/Uptime Kuma/Prometheus เปิดเฉพาะ 127.0.0.1 ของ server: เข้าผ่าน SSH tunnel ไม่เปิดสู่อินเทอร์เน็ต
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d", "--storage.tsdb.path=/prometheus"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    networks: [internal]
+
+  postgres-exporter:
+    profiles: [monitoring]
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    command: ["--collector.stat_statements", "--collector.long_running_transactions"]
+    environment:
+      DATA_SOURCE_URI: db:5432/accounting?sslmode=disable
+      DATA_SOURCE_USER: monitor
+      DATA_SOURCE_PASS: ${MONITOR_DB_PASSWORD:-}   # ไม่ตั้ง = ต่อฐานไม่ได้ (ไม่มี role monitor)
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    networks: [internal]
+
+  # เครื่อง (CPU/RAM/ดิสก์) + ไฟล์ตัวชี้วัด backup/WAL ที่ service backup เขียนไว้
+  node-exporter:
+    profiles: [monitoring]
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    command: ["--path.rootfs=/host", "--collector.textfile.directory=/backups/metrics"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+      - backups:/backups:ro
+    networks: [internal]
+
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana:12.1.1
+    restart: unless-stopped
+    # ไม่ตั้งรหัส = ไม่เริ่ม (ค่าเริ่มต้นของ Grafana คือ admin/admin)
+    entrypoint: ["/bin/sh", "/grafana-start.sh"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: Asia/Bangkok
+    volumes:
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana-start.sh:/grafana-start.sh:ro
+      - grafana:/var/lib/grafana
+    ports: ["127.0.0.1:3001:3000"]
+    networks: [internal]
+
+  # ตรวจจากมุมผู้ใช้ (หน้าเว็บ/API ผ่าน Caddy) + ส่งแจ้งเตือน (LINE/อีเมล/Telegram ตั้งในหน้าเว็บของ Kuma)
+  uptime-kuma:
+    profiles: [monitoring]
+    image: louislam/uptime-kuma:1.23.16
+    restart: unless-stopped
+    volumes:
+      - uptime-kuma:/app/data
+    ports: ["127.0.0.1:3002:3001"]
+    networks: [internal]
+
 volumes:
   pgdata:
   pgrun:
@@ -164,10 +238,15 @@ volumes:
   drill:
   caddy-data:
   caddy-config:
+  prometheus:
+  grafana:
+  uptime-kuma:
 
 networks:
   internal:
     ipam:
       config:
         - subnet: 172.29.0.0/24
+          # แจก IP อัตโนมัติเฉพาะ .128-.255: IP คงที่ของ Caddy (.10 ที่ API เชื่อ X-Forwarded-For) จึงไม่ถูกตัวอื่นแย่งไปก่อน
+          ip_range: 172.29.0.128/25
   egress: {}

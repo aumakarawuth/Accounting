@@ -5,6 +5,8 @@
 		# มี Cloudflare/LB หน้าเว็บ: ใส่ช่วง IP ของมันใน TRUSTED_PROXIES เพื่อให้ X-Forwarded-For เป็น IP ผู้ใช้จริง
 		# ค่าเริ่มต้นไม่เชื่อใคร (ห้ามใช้ private_ranges ถ้าไม่มี proxy: Docker อาจทำให้ทุกคำขอดูเหมือนมาจาก IP ภายใน)
 		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
+		# ตัวชี้วัดคำขอ HTTP ต่อ host/status (Prometheus อ่านที่ :9180 ในเครือข่ายภายใน)
+		metrics
 	}
 }
 
@@ -23,4 +25,9 @@
 		encode zstd gzip
 		reverse_proxy web:3000
 	}
+}
+
+# Prometheus (infra/monitoring) เท่านั้น: พอร์ตนี้ไม่ได้เปิดออกนอกเครื่อง (docker-compose ไม่ publish)
+:9180 {
+	metrics /metrics
 }
