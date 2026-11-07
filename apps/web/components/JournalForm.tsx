@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { api, type Account, type ApiError } from '@/lib/api';
 import { fromCents, formatMoney, toCents } from '@/lib/money';
-import { addDays, addMonths, isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { addDays, addMonths, isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { th } from '@/i18n/th';
 import { clearDraft, setDraft } from '@/lib/presence';
 import { deleteDraft, hasContent, loadDraft, saveDraft } from '@/lib/drafts';
@@ -291,7 +291,7 @@ export function JournalForm({ companyId, accounts, locked = false, adjusting = f
               className="h-10 border-b border-rule-input bg-transparent px-0.5 font-num text-base"
               inputMode="numeric"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => setDate(maskDate(e.target.value))}
               aria-invalid={isoDate === null}
             />
           </label>

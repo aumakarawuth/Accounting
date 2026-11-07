@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { postJson, type ApiError } from '@/lib/api';
-import { isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { th } from '@/i18n/th';
 
 // แถบคำสั่งของเอกสารขาย/ซื้อที่ผ่านรายการแล้ว: ลิงก์ตามชนิดเอกสาร (ลด/เพิ่มหนี้ รับ/จ่ายชำระ) ดูรายการบัญชี พิมพ์
@@ -66,7 +66,7 @@ export function DocumentActions({ companyId, doc, voidPath, links, writable }: {
           </label>
           <label className="flex flex-col text-sm">
             {th.sales.voidDate}
-            <input className="h-11 border-b border-rule-input bg-transparent font-num text-base" inputMode="numeric" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={isoDate === null} />
+            <input className="h-11 border-b border-rule-input bg-transparent font-num text-base" inputMode="numeric" value={date} onChange={(e) => setDate(maskDate(e.target.value))} aria-invalid={isoDate === null} />
           </label>
           {error && <p role="alert" className="neg text-sm">{error}</p>}
           <div className="flex gap-3 max-sm:grid max-sm:grid-cols-2">

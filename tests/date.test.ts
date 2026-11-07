@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addDays, todayIso } from '../apps/web/lib/date';
+import { addDays, maskDate, thaiToIso, todayIso } from '../apps/web/lib/date';
 
 describe('วันที่ตามเวลาไทย', () => {
   it('todayIso ใช้เวลาไทยไม่ว่าเครื่องอยู่เขตเวลาไหน (กัน hydrate ไม่ตรงช่วง 00:00–07:00)', () => {
@@ -12,5 +12,19 @@ describe('วันที่ตามเวลาไทย', () => {
     expect(addDays('2026-12-15', 30)).toBe('2027-01-14');
     expect(addDays('2028-02-28', 1)).toBe('2028-02-29');
     expect(addDays('2026-10-05', 0)).toBe('2026-10-05');
+  });
+});
+
+describe('พิมพ์วันที่แล้วใส่ / ให้เอง', () => {
+  it('ใส่ / ตามจำนวนหลักและตัดส่วนเกิน', () => {
+    expect(maskDate('02')).toBe('02');
+    expect(maskDate('021')).toBe('02/1');
+    expect(maskDate('02102026')).toBe('02/10/2026');
+    expect(maskDate('02/10/25691')).toBe('02/10/2569');
+    expect(maskDate('02/')).toBe('02');
+  });
+  it('รับปี ค.ศ. ด้วย', () => {
+    expect(thaiToIso('02/10/2026')).toBe('2026-10-02');
+    expect(thaiToIso('02/10/2569')).toBe('2026-10-02');
   });
 });

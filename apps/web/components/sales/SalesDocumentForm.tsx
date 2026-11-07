@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { postJson, type ApiError, type SalesDocument, type SalesFormData } from '@/lib/api';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
-import { addDays, isoToThai, thaiToIso, todayIso } from '@/lib/date';
+import { addDays, isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { lineAmount, vatCalc, type PriceMode } from '@/lib/vat';
 import { th } from '@/i18n/th';
 import { DocumentPaper, type Paper } from './DocumentPaper';
@@ -233,7 +233,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
             )}
             <label className="flex flex-col text-sm">
               {th.sales.date}
-              <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={isoDate === null} />
+              <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(maskDate(e.target.value))} aria-invalid={isoDate === null} />
             </label>
           </section>
 
