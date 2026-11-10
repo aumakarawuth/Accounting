@@ -16,10 +16,13 @@ export default async function CompanyLayout({
   params: Promise<{ companyId: string }>;
 }) {
   const { companyId } = await params;
+  // ผู้ใช้กับบริษัทดึงพร้อมกัน (ไม่ต้องรอกันทีละคำขอ) · หน้าลูกที่ใช้ /companies/:id ได้ผลเดียวกันจาก cache ของ serverApi
+  const companyReq = serverApi<Company>(`/companies/${companyId}`);
+  companyReq.catch(() => {}); // requireMe อาจ redirect ก่อน: ไม่ให้ค้างเป็น unhandled rejection
   const me = await requireMe();
   let company: Company;
   try {
-    company = await serverApi<Company>(`/companies/${companyId}`);
+    company = await companyReq;
   } catch (e) {
     if ((e as ApiError).status === 404 || (e as ApiError).status === 400) notFound();
     throw e;

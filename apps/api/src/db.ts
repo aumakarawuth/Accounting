@@ -24,11 +24,9 @@ export async function withUser<T>(
 ): Promise<T> {
   const c = await pool.connect();
   try {
-    await c.query('begin');
-    await c.query(
-      `select set_config('app.user_id', $1, true), set_config('app.client_info', $2, true)`,
-      [user.id, user.clientInfo],
-    );
+    // begin + ตั้งตัวตนในการไปกลับฐานข้อมูลรอบเดียว (simple query หลายคำสั่งรับพารามิเตอร์ไม่ได้ จึง escape ด้วย pg เอง)
+    // ประหยัด 1 รอบต่อคำขอ ซึ่งมีผลเมื่อฐานข้อมูลอยู่คนละเครื่อง (Vercel → Supabase) docs/performance.md
+    await c.query(`begin; select set_config('app.user_id', ${c.escapeLiteral(user.id)}, true), set_config('app.client_info', ${c.escapeLiteral(user.clientInfo)}, true)`);
     const result = await fn(c);
     await c.query('commit');
     return result;

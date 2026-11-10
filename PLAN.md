@@ -296,4 +296,7 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
 - **monitoring** (5 พ.ย. 2569, `docs/self-host.md` ข้อ 6): profile `monitoring` = Prometheus (เงื่อนไขเตือน 9 ข้อ รวม backup เก่า/WAL archive ล้ม)
   + Grafana แดชบอร์ดภาพรวม + Uptime Kuma + postgres-exporter (`pg_stat_statements`) + node-exporter · API มี `/metrics` พอร์ตแยกในเครือข่ายภายใน
   ยังค้าง: Sentry (รอเจ้าของโปรเจกต์ตัดสินเรื่องส่งข้อมูลออกนอกเครื่อง), ตั้งช่องทางแจ้งเตือนจริงบน server (`docs/assumptions.md` ข้อ 37)
+- **ความเร็ว** (10 พ.ย. 2569, `docs/performance.md`): RLS อ่านเปลี่ยนจากเรียก `app.can_read_company` ทุกแถวเป็นชุด id บริษัท
+  (migration `20261110000102` สิทธิ์เท่าเดิม) · `begin` + ตั้งตัวตนรอบเดียว · `serverApi` ไม่เรียกซ้ำในหน้าเดียว
+  บริษัท 3,000 รายการ: `/periods` 153→11 ms, กระดาษทำการ 100→17 ms, หน้าครูตรวจงาน 305→44 ms
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

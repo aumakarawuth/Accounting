@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ApiError, Me } from './api';
@@ -7,7 +8,9 @@ import type { ApiError, Me } from './api';
 const base = process.env.API_URL ?? 'http://127.0.0.1:4000';
 
 // Vercel (EMBED_API=1): เรียก API ในตัว ไม่ออกเน็ตแล้ววนกลับ · ที่อื่น: เรียก API ที่แยกรัน
-async function call(path: string): Promise<{ status: number; body: Record<string, unknown> }> {
+// cache(): ภายในการแสดงหน้าเดียว (layout + page + component) path เดียวกันเรียก API ครั้งเดียว
+// เช่น layout ของบริษัทกับหน้าลูกต่างใช้ /companies/:id และ /auth/me (docs/performance.md) · ข้ามคำขอไม่แชร์กัน
+const call = cache(async function call(path: string): Promise<{ status: number; body: Record<string, unknown> }> {
   const cookie = (await cookies()).toString();
   if (process.env.EMBED_API === '1') {
     const { inject } = await import('@accounting/api/embedded');
@@ -16,7 +19,7 @@ async function call(path: string): Promise<{ status: number; body: Record<string
   }
   const res = await fetch(`${base}${path}`, { cache: 'no-store', headers: { cookie } });
   return { status: res.status, body: await res.json().catch(() => ({ code: 'server', message: 'server' })) };
-}
+});
 
 export async function serverApi<T>(path: string): Promise<T> {
   const { status, body } = await call(path);
