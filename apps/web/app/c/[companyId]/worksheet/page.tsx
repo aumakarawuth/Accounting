@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { MonthNav } from '@/components/MonthNav';
 import { serverApi } from '@/lib/server-api';
 import type { ApiError, Company, Worksheet, WsPair } from '@/lib/api';
-import { isMonth, monthEndLabel, todayIso } from '@/lib/date';
+import { addDays, isMonth, isoToThai, monthEndLabel, todayIso } from '@/lib/date';
 import { formatMoney, isNegative } from '@/lib/money';
 import { th } from '@/i18n/th';
 
@@ -46,6 +46,7 @@ export default async function WorksheetPage({
         </div>
       </div>
 
+      {w.priorYearUnclosed && w.fiscalYear && <p role="note" className="border border-rule-strong bg-band px-4 py-2.5">{th.yearEnd.priorUnclosed(isoToThai(addDays(w.fiscalYear.start, -1)))}</p>}
       {w.refused && <p role="status" className="border border-rule-strong bg-band px-4 py-2.5">{w.refused}</p>}
       {w.format === null ? (
         <p className="border border-rule-strong bg-paper p-4">{t.disabled}</p>

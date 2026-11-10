@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ comp
     const company = await serverApi<Company>(base);
     const ascii = `${report}-${month}`;
     if (report === 'trial-balance') {
-      const tb = await serverApi<TrialBalance>(`${base}/trial-balance?month=${month}`);
+      const tb = await serverApi<TrialBalance>(`${base}/trial-balance?month=${month}${sp.get('stage') === 'after' ? '&stage=after' : ''}`);
       return sendReport(trialBalanceReport(company.name, tb), format, ascii);
     }
     if (report === 'ledger') {

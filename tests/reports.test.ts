@@ -79,7 +79,7 @@ describe('งบทดลองและแยกประเภท', () => {
     const all = (await as(s1, 'GET', `/companies/${co1}/trial-balance?month=2026-10&all=1`)).json();
     expect(all.rows).toHaveLength((await db.query('select count(*)::int n from acc.coa_template')).rows[0].n);
     const empty = (await as(s1, 'GET', `/companies/${co1}/trial-balance?month=2026-08`)).json();
-    expect(empty).toEqual({ month: '2026-08', rows: [], totalDebit: '0.00', totalCredit: '0.00' });
+    expect(empty).toMatchObject({ month: '2026-08', rows: [], totalDebit: '0.00', totalCredit: '0.00' });
   });
 
   it('รายการบัญชีที่เคลื่อนไหวในเดือน: ยอดยกมา/เดบิต/เครดิต/ยอดยกไป หันตามด้านปกติ', async () => {

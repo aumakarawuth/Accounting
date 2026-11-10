@@ -4,23 +4,28 @@ import { MonthNav } from '@/components/MonthNav';
 import { Money } from '@/components/Money';
 import { serverApi } from '@/lib/server-api';
 import type { Company, TrialBalance } from '@/lib/api';
-import { isMonth, monthEndLabel, todayIso } from '@/lib/date';
+import { addDays, isMonth, isoToThai, monthEndLabel, todayIso } from '@/lib/date';
+
+const dayBefore = (iso: string) => isoToThai(addDays(iso, -1));
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { th } from '@/i18n/th';
 
 export default async function TrialBalancePage({
   params, searchParams,
-}: { params: Promise<{ companyId: string }>; searchParams: Promise<{ month?: string; all?: string }> }) {
+}: { params: Promise<{ companyId: string }>; searchParams: Promise<{ month?: string; all?: string; stage?: string }> }) {
   const { companyId } = await params;
   const sp = await searchParams;
   const month = isMonth(sp.month) ? sp.month : todayIso().slice(0, 7);
   const all = sp.all === '1';
+  const stage = sp.stage === 'after' ? 'after' : 'before';
   const [company, tb] = await Promise.all([
     serverApi<Company>(`/companies/${companyId}`),
-    serverApi<TrialBalance>(`/companies/${companyId}/trial-balance?month=${month}${all ? '&all=1' : ''}`),
+    serverApi<TrialBalance>(`/companies/${companyId}/trial-balance?month=${month}${all ? '&all=1' : ''}${stage === 'after' ? '&stage=after' : ''}`),
   ]);
   const base = `/c/${companyId}/trial-balance`;
-  const href = (m: string, a = all) => `${base}?month=${m}${a ? '&all=1' : ''}`;
+  const href = (m: string, a = all, s = stage) => `${base}?month=${m}${a ? '&all=1' : ''}${s === 'after' ? '&stage=after' : ''}`;
+  const tab = 'flex min-h-11 items-center border border-rule-strong px-4 aria-[current=page]:bg-ink aria-[current=page]:text-paper';
+  const closedYear = tb.closingDocNos.length > 0;
   const ledger = (code: string) => `/c/${companyId}/ledger?month=${month}&account=${code}`;
   const diff = (toCents(tb.totalDebit) ?? 0n) - (toCents(tb.totalCredit) ?? 0n);
   const amount = (v: string) => (v === '0.00' ? '' : formatMoney(v));
@@ -34,14 +39,22 @@ export default async function TrialBalancePage({
           <p className="text-sm text-ink2">{th.trialBalance.cumulativeNote}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
-          <MonthNav month={month} href={(m) => href(m)} />
+          {closedYear && (
+            <nav aria-label={th.trialBalance.stageLabel} className="flex">
+              <Link href={href(month, all, 'before')} aria-current={stage === 'before' ? 'page' : undefined} className={tab}>{th.trialBalance.stageBefore}</Link>
+              <Link href={href(month, all, 'after')} aria-current={stage === 'after' ? 'page' : undefined} className={`${tab} border-l-0`}>{th.trialBalance.stageAfter}</Link>
+            </nav>
+          )}
+          <MonthNav month={month} href={(m) => href(m, all, 'before')} />
           <Link href={href(month, !all)} className="flex min-h-11 items-center text-sm underline">
             {all ? th.trialBalance.showActive : th.trialBalance.showAll}
           </Link>
-          <ExportLinks base={`/export/company/${companyId}/trial-balance`} query={`month=${month}`} />
+          <ExportLinks base={`/export/company/${companyId}/trial-balance`} query={`month=${month}${stage === 'after' && closedYear ? '&stage=after' : ''}`} />
         </div>
       </div>
 
+      {tb.priorYearUnclosed && <p role="note" className="border border-rule-strong bg-band px-4 py-2.5">{th.yearEnd.priorUnclosed(dayBefore(tb.fiscalYear.start))}</p>}
+      {closedYear && stage === 'after' && <p className="text-sm text-ink2">{th.trialBalance.afterNote(tb.closingDocNos.join(', '))}</p>}
       {tb.rows.length === 0 ? (
         <p className="text-ink2">{th.trialBalance.empty}</p>
       ) : (
