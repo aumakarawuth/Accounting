@@ -49,6 +49,9 @@ export function StudentImport({
   return (
     <div className="flex flex-col gap-3 border border-rule-strong bg-paper p-4">
       <p className="text-sm text-ink2">{th.import.help}</p>
+      <a href="/templates/student-import-example.csv" download={th.import.exampleFile} className="flex min-h-11 w-fit items-center text-sm underline">
+        {th.import.example}
+      </a>
       <label htmlFor={fileId} className="flex min-h-11 w-fit cursor-pointer items-center rounded-doc border border-ink px-4">
         {th.import.chooseFile}
       </label>

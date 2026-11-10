@@ -61,3 +61,18 @@ describe('คอลัมน์รหัสผ่านเริ่มต้น'
     ]);
   });
 });
+
+describe('ไฟล์ตัวอย่างสำหรับนำเข้า (apps/web/public/templates)', () => {
+  it('นำเข้าได้ทุกแถว: หัวตารางไทย ชื่อ+นามสกุลรวมกัน ช่องรหัสผ่านว่าง = สุ่มให้ มี BOM ให้ Excel เปิดภาษาไทยถูก', async () => {
+    const { readFileSync } = await import('node:fs');
+    const bytes = readFileSync(new URL('../apps/web/public/templates/student-import-example.csv', import.meta.url));
+    expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const { rows, header } = toStudentRows(parseCsv(decodeCsv(bytes)));
+    expect(header).toBe(true);
+    expect(rows.map((r) => [r.studentCode, r.name, r.password, r.problems])).toEqual([
+      ['66001', 'ตัวอย่าง ใจดี', '', []],
+      ['66002', 'สมมุติ รักเรียน', '', []],
+      ['66003', 'ทดลอง ขยันยิ่ง', '', []],
+    ]);
+  });
+});
