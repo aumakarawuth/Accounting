@@ -36,6 +36,7 @@ export function inventoryRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthA
   });
 
   // บัตรสต็อกของสินค้าหนึ่งตัว: ทุกความเคลื่อนไหว เอกสารอ้างอิง และยอดคงเหลือหลังรายการ
+  // มูลค่า/ต้นทุนเป็นค่าหลังคำนวณต้นทุนใหม่ล่าสุด (migration 104) เลขที่รายการ = รายการต้นทุนปัจจุบัน
   app.get('/companies/:companyId/inventory/:code', async (req) => {
     const { companyId, code } = ItemParams.parse(req.params);
     return withUser(pool, await user(req), async (c) => {
@@ -45,11 +46,12 @@ export function inventoryRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthA
       if (!item) throw new HttpError(404, 'not_found', `ไม่พบสินค้ารหัส ${code}`);
       const card = await c.query(
         `select to_char(m.movement_date, 'YYYY-MM-DD') as date, m.kind, m.reference, e.id as "entryId", e.doc_no as "entryDocNo",
-                greatest(m.quantity, 0)::text as "qtyIn", greatest(-m.quantity, 0)::text as "qtyOut", m.unit_cost::text as "unitCost",
-                greatest(m.value, 0)::text as "valueIn", greatest(-m.value, 0)::text as "valueOut",
-                (sum(m.quantity) over w)::text as "balanceQty", (sum(m.value) over w)::numeric(18,2)::text as "balanceValue"
-           from acc.inventory_movements m
-           join acc.journal_entries e on e.company_id = m.company_id and e.id = m.entry_id
+                greatest(m.quantity, 0)::text as "qtyIn", greatest(-m.quantity, 0)::text as "qtyOut", m.eff_unit_cost::text as "unitCost",
+                greatest(m.eff_value, 0)::text as "valueIn", greatest(-m.eff_value, 0)::text as "valueOut",
+                (sum(m.quantity) over w)::text as "balanceQty", (sum(m.eff_value) over w)::numeric(18,2)::text as "balanceValue",
+                m.restated
+           from acc.inventory_movements_effective m
+           join acc.journal_entries e on e.company_id = m.company_id and e.id = m.cur_entry_id
           where m.company_id = $1 and m.item_id = $2
          window w as (order by m.movement_date, m.created_at, m.id rows between unbounded preceding and current row)
           order by m.movement_date, m.created_at, m.id`, [companyId, item.id]);
