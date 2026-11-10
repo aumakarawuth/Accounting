@@ -33,7 +33,9 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
   const input = 'h-12 w-full rounded-doc border bg-paper px-3 text-base max-sm:h-13';
 
   return (
+    // method=post: ถ้ากดส่งก่อนสคริปต์โหลดเสร็จ (เน็ตช้า) เบราว์เซอร์ส่งแบบ GET → รหัสผ่านไปอยู่ใน URL/ประวัติ/log (พบจาก OWASP ZAP)
     <form
+      method="post"
       className="flex w-full flex-col gap-4 px-5 py-6 sm:w-[420px] sm:border sm:border-rule-strong sm:bg-paper sm:px-8 sm:py-7"
       onSubmit={async (e) => {
         e.preventDefault();

@@ -26,6 +26,8 @@ const h = (n) => page.headers.get(n) ?? '';
 const csp = h('content-security-policy');
 check('CSP มี default-src self', csp.includes("default-src 'self'"), csp.slice(0, 80));
 check("CSP frame-ancestors 'none'", csp.includes("frame-ancestors 'none'"));
+const scriptSrc = csp.split(';').find((d) => d.trim().startsWith('script-src')) ?? '';
+check("CSP script-src ไม่มี 'unsafe-inline' (ใช้ nonce)", /'nonce-[^']{16,}'/.test(scriptSrc) && !scriptSrc.includes("'unsafe-inline'"), scriptSrc.slice(0, 80));
 check("CSP object-src 'none'", csp.includes("object-src 'none'"));
 check('X-Frame-Options DENY', h('x-frame-options').toUpperCase() === 'DENY');
 check('X-Content-Type-Options nosniff', h('x-content-type-options') === 'nosniff');

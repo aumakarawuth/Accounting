@@ -6,7 +6,8 @@ export function LoginShell({ children, right }: { children: React.ReactNode; rig
     <div className="flex min-h-dvh flex-col bg-paper sm:bg-ground sm:bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_31px,var(--rule-faint)_31px,var(--rule-faint)_32px)]">
       <header className="flex min-h-[52px] items-center border-b border-rule-strong bg-paper px-5 text-[15px] sm:px-6">
         <span className="font-semibold">{th.app.name}</span>
-        <span className="ml-auto">{right ?? <a href="/privacy" className="text-sm underline">{th.login.privacy}</a>}</span>
+        {/* ลิงก์นโยบายความเป็นส่วนตัวซ่อนตามที่เจ้าของโปรเจกต์ขอ (10 พ.ย. 2569) หน้า /privacy ยังเปิดตรงได้ (PDPA: PLAN.md ข้อ 5) */}
+        {right && <span className="ml-auto">{right}</span>}
       </header>
       <div className="flex flex-1 justify-center sm:items-start sm:pt-24">{children}</div>
     </div>

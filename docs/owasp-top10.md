@@ -51,7 +51,8 @@
 | ตรวจ | ผล | หลักฐาน |
 |---|---|---|
 | Content-Security-Policy | **แก้แล้ว** | `default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'` ฯลฯ · `tests/security.test.ts` |
-| CSP แบบ nonce (เลิก `'unsafe-inline'` ใน script-src) | ต้องทำ | Next ฝังสคริปต์ inline ต้องย้ายไป middleware สร้าง nonce ต่อคำขอ (หน้าเป็น dynamic อยู่แล้ว) |
+| CSP แบบ nonce (เลิก `'unsafe-inline'` ใน script-src) | **แก้แล้ว** (10 พ.ย. 2569) | `apps/web/proxy.ts` สร้าง nonce ใหม่ทุกคำขอ `script-src 'self' 'nonce-…' 'strict-dynamic'` · style-src ยังอนุญาต inline (รับความเสี่ยง: Safari ไม่ใช้ stylesheet ที่ Next ใส่ตอนเปลี่ยนหน้าแม้มี nonce; CSS ที่ถูกแทรกรันโค้ดไม่ได้) · ทุกหน้าเรนเดอร์ตอนมีคำขอ (`app/layout.tsx` `connection()`) · `tests/e2e/csp.spec.ts`: ทุก `<script>` มี nonce ของคำขอ, HTML ที่ถูกแทรกพร้อม `onerror` ไม่ทำงาน, ไม่มี CSP violation ในหน้าปกติ (e2e ทุกหน้าจับ console error อยู่แล้ว) |
+| รหัสผ่านไปอยู่ใน URL ถ้าส่งฟอร์มก่อนสคริปต์โหลด | **แก้แล้ว** (พบจาก OWASP ZAP 10024) | ฟอร์มล็อกอิน/เปลี่ยนรหัส `method="post"` · `tests/e2e/csp.spec.ts` ปิด JavaScript แล้วกดส่ง |
 | คำตอบ API ถูก cache ใน proxy/เบราว์เซอร์ | **แก้แล้ว** | ทุกคำตอบ `Cache-Control: no-store` + `nosniff` (`app.ts` onSend) · ไฟล์ส่งออก `private, no-store` |
 | X-Frame-Options, Referrer-Policy, Permissions-Policy, ปิด `X-Powered-By` | ผ่าน | `next.config.ts` |
 | error 500 ไม่เปิดเผยรายละเอียด | ผ่าน | ตอบ `{code:'server', ref}` log ฝั่งเซิร์ฟเวอร์ (`errors.ts`) |
@@ -98,6 +99,20 @@
 |---|---|---|
 | เซิร์ฟเวอร์ดึง URL ที่ผู้ใช้กำหนด | ผ่าน (ไม่มี) | เว็บเรียก API ที่ `API_URL` คงที่เท่านั้น ไฟล์ส่งออกไม่โหลดทรัพยากรภายนอก |
 | QR รหัสห้องสร้างจาก header Host | **แก้แล้ว** (ลดความเสี่ยง) | ใช้ `WEB_ORIGIN` ก่อนถ้าตั้งไว้ (header ปลอมได้เมื่อ proxy ไม่ล้าง) |
+
+## OWASP ZAP baseline (10 พ.ย. 2569)
+
+`zap-baseline.py` (zaproxy/zap-stable 2.16.1, สแกนแบบ passive + spider 2 นาที) กับเว็บบนเครื่อง (`next start` + API) **FAIL 0 · ผ่าน 54 · เตือน 4**
+
+| เตือน | ผล |
+|---|---|
+| 10024 ข้อมูลสำคัญใน URL (`/login?…&password=`) | **แก้แล้ว**: ZAP ส่งฟอร์มแบบไม่มี JavaScript → GET ฟอร์มรหัสผ่านเป็น `method="post"` (สแกนซ้ำไม่พบแล้ว) |
+| 10202 ฟอร์มไม่มี anti-CSRF token | รับความเสี่ยง: ฟอร์มส่งผ่าน JavaScript ไป API ซึ่งตรวจ `Origin` ทุกคำขอที่เปลี่ยนข้อมูล + cookie `SameSite=Lax` (A01 ด้านบน) การส่งแบบไม่มี JS ไปที่หน้าเว็บไม่ทำอะไร |
+| 10044 redirect มีเนื้อหาใหญ่ (`/` → `/login`) | รับความเสี่ยง: เนื้อหาเป็น redirect มาตรฐานของ Next ไม่มีข้อมูลผู้ใช้ (ไม่ได้ล็อกอิน) |
+| 10027 คำว่า query/select ในไฟล์ JS ของ framework, 10109 เว็บสมัยใหม่ | ข้อมูลเท่านั้น (false positive) |
+
+สแกนซ้ำ: `docker run --rm --network host -v $PWD/zap:/zap/wrk zaproxy/zap-stable:2.16.1 zap-baseline.py -t http://localhost:3000/login -m 2 -r report.html`
+ยังค้าง: สแกนแบบ active/ล็อกอินแล้ว (ZAP full scan หรือผู้เชี่ยวชาญ) กับ staging จริง
 
 ## วิธีทดสอบซ้ำ
 

@@ -280,7 +280,7 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   · โหมดสาธิตตัวอักษรใหญ่ ลงรายการตามเฉลย · ส่งออก PDF/Excel (งบทดลอง แยกประเภท งบการเงิน กระดาษทำการ คะแนน) ฟอนต์ไทยฝังในไฟล์
   · เช็กลิสต์ OWASP Top 10 + แก้ที่พบ (CSP, HSTS, no-store, Referer เสีย = 500) — migration `20261110000100` apply กับ Supabase (accounting-dev) แล้ว 4 พ.ย. 2569 ตรวจโครงสร้างตรงกับฐานที่สร้างจากไฟล์ครบทุกฟังก์ชัน/policy/ตาราง
   (สเปก `docs/phase4-spec.md`, สมมติฐาน `docs/assumptions.md` ข้อ 33–34, `docs/owasp-top10.md`)
-  ยังค้าง: ทดสอบกับผู้ใช้จริง 5–10 คน (`docs/user-test.md` เจ้าของโปรเจกต์ทำ), ZAP/ผู้เชี่ยวชาญกับ staging, CSP แบบ nonce
+  ยังค้าง: ทดสอบกับผู้ใช้จริง 5–10 คน (`docs/user-test.md` เจ้าของโปรเจกต์ทำ), ZAP แบบ active/ผู้เชี่ยวชาญกับ staging
 - ช่วงพัฒนา: Supabase โปรเจกต์ใหม่ (ap-southeast-1) + Vercel `accounting-web` (sin1) ใช้งานอยู่ ขั้นตอนใน `docs/deploy-dev.md`
 - 4 พ.ย. 2569: เฟส 3 (สินค้าคงเหลือ กระทบยอดธนาคาร เช็ค สินทรัพย์ถาวร) เสร็จ · k6 500 คนรันซ้ำผ่าน (`docs/load-test.md`) · เฟส 4 กำลังทำ (branch `claude/phase4-exercises`)
 - **เฟสกลาง ส่วนที่ไม่ต้องมี server** (4 พ.ย. 2569, สเปก `docs/staging-spec.md`, คู่มือ `docs/self-host.md`): `infra/docker-compose.yml`
@@ -298,5 +298,7 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   ยังค้าง: Sentry (รอเจ้าของโปรเจกต์ตัดสินเรื่องส่งข้อมูลออกนอกเครื่อง), ตั้งช่องทางแจ้งเตือนจริงบน server (`docs/assumptions.md` ข้อ 37)
 - **ความเร็ว** (10 พ.ย. 2569, `docs/performance.md`): RLS อ่านเปลี่ยนจากเรียก `app.can_read_company` ทุกแถวเป็นชุด id บริษัท
   (migration `20261110000102` สิทธิ์เท่าเดิม) · `begin` + ตั้งตัวตนรอบเดียว · `serverApi` ไม่เรียกซ้ำในหน้าเดียว
-  บริษัท 3,000 รายการ: `/periods` 153→11 ms, กระดาษทำการ 100→17 ms, หน้าครูตรวจงาน 305→44 ms
+  บริษัท 3,000 รายการ: `/periods` 153→11 ms, กระดาษทำการ 100→17 ms, หน้าครูตรวจงาน 305→44 ms · apply กับ Supabase แล้ว 10 พ.ย. 2569 (สิทธิ์ตรงกับฟังก์ชันเดิมทุกผู้ใช้)
+- **CSP แบบ nonce + OWASP ZAP baseline** (10 พ.ย. 2569, `docs/owasp-top10.md`): `apps/web/proxy.ts` เลิก `'unsafe-inline'` · ZAP FAIL 0
+  พบและแก้: ฟอร์มรหัสผ่านไม่มี `method=post` (ส่งก่อนสคริปต์โหลด = รหัสผ่านอยู่ใน URL) · ยังค้าง: ZAP แบบ active กับ staging จริง
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

@@ -4,7 +4,6 @@ import { RetryButton } from '@/components/RetryButton';
 import { th } from '@/i18n/th';
 
 export const metadata: Metadata = { title: th.pwa.offlineTitle };
-export const dynamic = 'force-static';
 
 // หน้าที่ service worker แสดงเมื่อเปิดหน้าใหม่ตอนออฟไลน์ (เก็บไว้ในเครื่องตอนติดตั้ง)
 export default function OfflinePage() {
