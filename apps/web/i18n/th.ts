@@ -745,7 +745,6 @@ export const th = {
     invalidEmail: 'รูปแบบอีเมลไม่ถูกต้อง',
     signingIn: 'กำลังเข้าใช้งาน',
     logout: 'ออกจากระบบ',
-    privacy: 'นโยบายความเป็นส่วนตัว',
     school: (name: string) => `โรงเรียน${name}`,
   },
 

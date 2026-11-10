@@ -134,10 +134,11 @@ test('ปิดงวด: นักเรียนปิดงวดเก่า
   await tctx.close();
 });
 
-test('นโยบายความเป็นส่วนตัว เปิดได้โดยไม่ต้องล็อกอิน', async ({ page }, info) => {
+test('นโยบายความเป็นส่วนตัว เปิดได้โดยไม่ต้องล็อกอิน (ไม่มีลิงก์ในหน้าล็อกอินแล้ว เปิดจาก URL ตรง)', async ({ page }, info) => {
   const errors = watchErrors(page);
   await page.goto('/login');
-  await page.getByRole('link', { name: 'นโยบายความเป็นส่วนตัว' }).click();
+  await expect(page.getByRole('link', { name: 'นโยบายความเป็นส่วนตัว' })).toHaveCount(0);
+  await page.goto('/privacy');
   await expect(page.getByRole('heading', { name: 'นโยบายความเป็นส่วนตัว' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'ข้อมูลที่เก็บ' })).toBeVisible();
   await expect(page.getByText(/ไม่เก็บเลขบัตรประชาชน/)).toBeVisible();
