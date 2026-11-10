@@ -72,6 +72,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
       {card && (
         <section className="flex flex-col gap-2" aria-label={t.card(card.item.code, card.item.name)}>
           <h2 className="text-[17px] font-semibold">{t.card(card.item.code, card.item.name)}</h2>
+          {card.card.some((m) => m.restated) && <p className="text-[14px] text-ink2">{t.restatedNote}</p>}
           {card.card.length === 0 ? <p className="text-ink2">{t.cardEmpty}</p> : (
             <div className="overflow-x-auto border border-rule-strong bg-paper">
               <table className="w-full min-w-[640px] text-sm">
@@ -87,6 +88,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                       <td className={cell}>
                         <Link href={`/c/${companyId}/journal/${m.entryId}`} className="font-num underline">{m.entryDocNo}</Link>
                         {m.reference && <span className="text-ink2"> {m.reference}</span>}
+                        {m.restated && <span className="text-ink2"> · {t.restated}</span>}
                       </td>
                       <td className={`${cell} text-right font-num`}>{Number(m.qtyIn) ? qty(m.qtyIn) : ''}</td>
                       <td className={`${cell} text-right font-num`}>{Number(m.qtyOut) ? qty(m.qtyOut) : ''}</td>

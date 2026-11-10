@@ -366,3 +366,202 @@ describe('กรณีขอบของการคำนวณ', () => {
     expect([d.base, d.vat, d.total]).toEqual(['280.35', '19.62', '299.97']); // 299.97 × 7/107 = 19.624
   });
 });
+
+describe('ต้นทุนถัวเฉลี่ยตามลำดับวันที่ (แบบ Express): ลงย้อนวันที่ / ยกเลิก → คำนวณใหม่', () => {
+  async function setup() {
+    const school = await newSchool();
+    const teacher = await newUser(school, 'teacher');
+    owner = await newUser(school, 'student');
+    const c = await newCompany(owner, await newClassroom(school, teacher, [owner]));
+    const prof = await ok('GET', `/companies/${c}/profile`);
+    await ok('PATCH', `/companies/${c}/profile`, { version: prof.version, taxId: taxId(9001), vatRegistered: true });
+    await ok('POST', `/companies/${c}/parties`, { code: 'C1', name: 'ลูกค้า', isCustomer: true, isVendor: false, taxId: taxId(9101), vatRegistered: true });
+    await ok('POST', `/companies/${c}/parties`, { code: 'V1', name: 'ผู้ขาย', isCustomer: false, isVendor: true, taxId: juristicTaxId(9201), vatRegistered: true });
+    await ok('POST', `/companies/${c}/items`, { code: 'X', name: 'สินค้า X', isService: false, trackInventory: true });
+    return c;
+  }
+  let n = 0;
+  const buy = (c: string, date: string, qty: string, price: string) =>
+    ok('POST', `/companies/${c}/purchases/invoice`, { date, partyCode: 'V1', vendorDocNo: `B-${++n}`, lines: [{ itemCode: 'X', qty, unitPrice: price }] });
+  const sell = (c: string, date: string, qty: string) =>
+    as('POST', `/companies/${c}/sales/invoice`, { date, partyCode: 'C1', lines: [{ itemCode: 'X', qty, unitPrice: '500' }] });
+  const bal = async (c: string) => (await db.query(`select quantity::text q, value::text v from acc.inventory_balance($1, (select id from acc.items where company_id = $1 and code = 'X'))`, [c])).rows[0];
+  /** ต้นทุนขายของใบขาย ณ ตอนนี้ (รายการต้นทุนปัจจุบัน) */
+  const cogsOf = async (docId: string) => {
+    const r = await db.query(`select distinct x.cur_entry_id from acc.inventory_movements_effective x
+      join acc.inventory_document_posts p on p.company_id = x.company_id and p.entry_id = x.entry_id where p.source_id = $1`, [docId]);
+    return lines(r.rows[0].cur_entry_id);
+  };
+  /** 1310 ในงบทดลอง = มูลค่าตามบัตรสต็อก */
+  const glMatches = async (c: string) => expect((await tbNet(c, '2026-10'))['1310'] ?? '0.00').toBe(Number((await bal(c)).v).toFixed(2));
+
+  it('ขายลงวันที่ระหว่างการซื้อสองครั้ง (บันทึกทีหลัง): ใช้ถัวเฉลี่ย ณ วันที่ขาย ไม่ใช่ล่าสุด', async () => {
+    const c = await setup();
+    await buy(c, '2026-10-01', '10', '100');
+    await buy(c, '2026-10-20', '10', '200');
+    const iv = (await sell(c, '2026-10-10', '5')).json();
+    expect(await invEntry('sales_cogs', iv.id)).toEqual({ 1310: ['0.00', '500.00'], 5130: ['500.00', '0.00'] }); // เดิมคิด 750
+    expect(await bal(c)).toEqual({ q: '15.000', v: '2500.00' });
+    await glMatches(c);
+  });
+
+  it('ขายก่อนวันที่ของเข้า / ทำให้รายการหลังจากนั้นสต็อกติดลบ → ปฏิเสธ', async () => {
+    const c = await setup();
+    await buy(c, '2026-10-20', '10', '100');
+    const early = await sell(c, '2026-10-05', '10');
+    expect([early.statusCode, early.json().message]).toEqual([422, expect.stringContaining('ณ วันที่ 05/10/2569')]);
+    const later = (await sell(c, '2026-10-25', '8')).json();
+    expect(later.id).toBeTruthy();
+    // ณ 22 ต.ค. มี 10 ขายได้ 5 แต่ทำให้ใบวันที่ 25 (8 ชิ้น) ขาด
+    const mid = await sell(c, '2026-10-22', '5');
+    expect([mid.statusCode, mid.json().message]).toEqual([422, expect.stringContaining('ไม่พอตัดออก')]);
+    expect(await bal(c)).toEqual({ q: '2.000', v: '200.00' });
+  });
+
+  it('ซื้อลงย้อนวันที่ก่อนใบขาย: กลับรายการต้นทุนเดิม (RV) ลงใหม่ (CG) วันที่เดิม · ตรวจคำตอบไม่นับคู่ที่กลับ', async () => {
+    const c = await setup();
+    await buy(c, '2026-10-01', '10', '100');
+    const iv = (await sell(c, '2026-10-15', '5')).json();
+    expect(await cogsOf(iv.id)).toEqual({ 1310: ['0.00', '500.00'], 5130: ['500.00', '0.00'] });
+    await buy(c, '2026-10-05', '10', '200'); // ถัวเฉลี่ย ณ 15 ต.ค. = 3,000 / 20 = 150
+    expect(await cogsOf(iv.id)).toEqual({ 1310: ['0.00', '750.00'], 5130: ['750.00', '0.00'] });
+    const rs = (await db.query(`select r.entry_id, o.doc_no old_no, v.doc_no rv_no, v.entry_date::text rv_date, v.reverses_entry_id = r.entry_id linked,
+        n.doc_no new_no, n.entry_date::text new_date, n.description from acc.inventory_restatements r
+        join acc.journal_entries o on o.company_id = r.company_id and o.id = r.entry_id
+        join acc.journal_entries v on v.company_id = r.company_id and v.id = r.reversal_entry_id
+        join acc.journal_entries n on n.company_id = r.company_id and n.id = r.new_entry_id where r.company_id = $1`, [c])).rows;
+    expect(rs).toHaveLength(1);
+    expect(rs[0]).toMatchObject({ rv_date: '2026-10-15', new_date: '2026-10-15', linked: true });
+    expect(rs[0].old_no).toMatch(/^CG-/);
+    expect(rs[0].rv_no).toMatch(/^RV-/);
+    expect(rs[0].new_no).toMatch(/^CG-/);
+    expect(rs[0].description).toContain('ลงย้อนวันที่');
+    expect((await tbNet(c, '2026-10'))['5130']).toBe('750.00');
+    expect(await bal(c)).toEqual({ q: '15.000', v: '2250.00' });
+    await glMatches(c);
+    // ตรวจคำตอบ: รายการที่ถูกกลับและการกลับรายการไม่ถูกนับ เหลือ CG ใหม่ 750
+    const keys = (await db.query(`select app.company_entry_keys($1) k`, [c])).rows[0].k as { doc: string; key: string[] }[];
+    expect(keys.filter((k) => k.doc.startsWith('CG-')).map((k) => k.key)).toEqual([['1310|C|750.00', '5130|D|750.00']]);
+    // บัตรสต็อกแสดงค่าหลังคำนวณใหม่ เรียงตามวันที่
+    const card = (await ok('GET', `/companies/${c}/inventory/X`)).card as { date: string; valueOut: string; balanceValue: string; entryDocNo: string; restated: boolean }[];
+    expect(card.map((r) => [r.date, r.valueOut, r.balanceValue])).toEqual([
+      ['2026-10-01', '0', '1000.00'], ['2026-10-05', '0', '3000.00'], ['2026-10-15', '750.00', '2250.00']]);
+    expect(card[2]).toMatchObject({ entryDocNo: rs[0].new_no, restated: true });
+    // ยกเลิกใบขายที่คำนวณใหม่แล้ว: กลับ CG ปัจจุบัน (750) สต็อกกลับครบ
+    await ok('POST', `/companies/${c}/sales/documents/${iv.id}/void`, { date: '2026-10-16', reason: 'ทดสอบ' });
+    expect((await tbNet(c, '2026-10'))['5130']).toBeUndefined();
+    expect(await bal(c)).toEqual({ q: '20.000', v: '3000.00' });
+    await glMatches(c);
+  });
+
+  it('ยกเลิกใบซื้อที่อยู่ก่อนใบขาย: คิดใหม่เหมือนไม่เคยซื้อ · ยกเลิกแล้วทำให้สต็อกติดลบไม่ได้', async () => {
+    const c = await setup();
+    await buy(c, '2026-10-01', '10', '100');
+    const p2 = await buy(c, '2026-10-05', '10', '200');
+    const iv = (await sell(c, '2026-10-10', '10')).json();
+    expect(await cogsOf(iv.id)).toEqual({ 1310: ['0.00', '1500.00'], 5130: ['1500.00', '0.00'] });
+    await ok('POST', `/companies/${c}/purchases/documents/${p2.id}/void`, { date: '2026-10-12', reason: 'บันทึกผิด' });
+    expect(await cogsOf(iv.id)).toEqual({ 1310: ['0.00', '1000.00'], 5130: ['1000.00', '0.00'] });
+    expect(await bal(c)).toEqual({ q: '0.000', v: '0.00' });
+    await glMatches(c);
+    // ซื้อชุดแรกถูกขายไปหมดแล้ว: ยกเลิกแล้ววันที่ 10 ต.ค. จะขายของที่ไม่มี → ไม่ได้
+    const p1 = (await db.query(`select id from acc.purchase_documents where company_id = $1 and vendor_doc_no = $2`, [c, `B-${n - 1}`])).rows[0];
+    const r = await as('POST', `/companies/${c}/purchases/documents/${p1.id}/void`, { date: '2026-10-12', reason: 'ทดสอบ' });
+    expect(r.statusCode).toBeGreaterThanOrEqual(400);
+    expect(r.statusCode).toBeLessThan(500);
+    expect(await cogsOf(iv.id)).toEqual({ 1310: ['0.00', '1000.00'], 5130: ['1000.00', '0.00'] });
+  });
+
+  it('รับคืนจากลูกค้าตามต้นทุนใบขายที่คำนวณใหม่', async () => {
+    const c = await setup();
+    await buy(c, '2026-10-01', '10', '100');
+    const iv = (await sell(c, '2026-10-10', '4')).json();
+    const cn = await ok('POST', `/companies/${c}/sales/credit-note`, { date: '2026-10-12', refDocumentId: iv.id, reason: 'คืน', lines: [{ itemCode: 'X', qty: '2', unitPrice: '500' }] });
+    expect(await cogsOf(cn.id)).toEqual({ 1310: ['200.00', '0.00'], 5130: ['0.00', '200.00'] });
+    await buy(c, '2026-10-05', '10', '130'); // ถัวเฉลี่ย ณ 10 ต.ค. = 2,300 / 20 = 115
+    expect(await cogsOf(iv.id)).toEqual({ 1310: ['0.00', '460.00'], 5130: ['460.00', '0.00'] });
+    expect(await cogsOf(cn.id)).toEqual({ 1310: ['230.00', '0.00'], 5130: ['0.00', '230.00'] });
+    expect((await tbNet(c, '2026-10'))['5130']).toBe('230.00');
+    expect(await bal(c)).toEqual({ q: '18.000', v: '2070.00' });
+    await glMatches(c);
+  });
+
+  it('สุ่ม 80 เอกสาร (ซื้อ/ขาย/รับคืน/ยกเลิก วันที่สุ่ม): ต้นทุนทุกใบตรงโมเดลถัวเฉลี่ยตามวันที่ที่คิดแยก · ไม่มีวันไหนติดลบ · 1310 = บัตรสต็อก', async () => {
+    const c = await setup();
+    let seed = 20261110;
+    const rnd = (k: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return Math.floor(seed / 65536) % k; };
+    type Doc = { id: string; kind: 'buy' | 'sell' | 'ret'; date: string; seq: number; qty: bigint; cents?: bigint; ref?: string; voided?: boolean };
+    const docs: Doc[] = [];
+    let seq = 0;
+    for (let i = 0; i < 80; i++) {
+      const date = `2026-10-${String(1 + rnd(28)).padStart(2, '0')}`;
+      const op = rnd(10);
+      if (op < 4) {
+        const qty = 1 + rnd(20), price = 1000 + rnd(9000); // 10.00–99.99
+        const d = await buy(c, date, String(qty), (price / 100).toFixed(2));
+        docs.push({ id: d.id, kind: 'buy', date, seq: seq++, qty: BigInt(qty), cents: BigInt(qty * price) });
+      } else if (op < 8) {
+        const qty = 1 + rnd(8);
+        const r = await sell(c, date, String(qty));
+        if (r.statusCode === 201) docs.push({ id: r.json().id, kind: 'sell', date, seq: seq++, qty: BigInt(qty) });
+        else expect(r.json().code).toBe('ACC15');
+      } else if (op < 9) {
+        const sales = docs.filter((d) => d.kind === 'sell' && !d.voided && !docs.some((x) => x.ref === d.id));
+        if (!sales.length) continue;
+        const s0 = sales[rnd(sales.length)];
+        const r = await as('POST', `/companies/${c}/sales/credit-note`, { date: s0.date > date ? s0.date : date, refDocumentId: s0.id, reason: 'คืน',
+          lines: [{ itemCode: 'X', qty: '1', unitPrice: '500' }] });
+        if (r.statusCode === 201) docs.push({ id: r.json().id, kind: 'ret', date: s0.date > date ? s0.date : date, seq: seq++, qty: 1n, ref: s0.id });
+        else expect(r.json().code).toBe('ACC15');
+      } else {
+        const live = docs.filter((d) => !d.voided && d.kind !== 'ret' && !docs.some((x) => x.ref === d.id && !x.voided));
+        if (!live.length) continue;
+        const d = live[rnd(live.length)];
+        const url = d.kind === 'buy' ? `/companies/${c}/purchases/documents/${d.id}/void` : `/companies/${c}/sales/documents/${d.id}/void`;
+        const r = await as('POST', url, { date: '2026-10-28', reason: 'สุ่ม' });
+        if (r.statusCode === 200) d.voided = true;
+        else expect(r.statusCode).toBeLessThan(500);
+      }
+    }
+    // โมเดล: เรียงตามวันที่ แล้วลำดับที่บันทึก (รายการยกเลิกไม่นับ) หน่วยสตางค์ ต้นทุนต่อหน่วย 6 ตำแหน่ง ปัดครึ่งขึ้น
+    const div = (a: bigint, b: bigint) => (2n * a + b) / (2n * b); // a, b > 0
+    const live = docs.filter((d) => !d.voided).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.seq - b.seq));
+    let Q = 0n, V = 0n;
+    const unit = new Map<string, bigint>(); // ต้นทุนต่อหน่วย × 10^6 บาท = สตางค์ × 10^4
+    const cost = new Map<string, bigint>();
+    for (const d of live) {
+      if (d.kind === 'buy') { Q += d.qty; V += d.cents!; continue; }
+      if (d.kind === 'sell') {
+        expect(Q >= d.qty, `สต็อก ณ ${d.date} ต้องพอ`).toBe(true);
+        const u = div(V * 10000n, Q);
+        const cst = d.qty === Q ? V : div(d.qty * u, 10000n);
+        unit.set(d.id, u); cost.set(d.id, cst); Q -= d.qty; V -= cst;
+      } else {
+        const cst = div(d.qty * unit.get(d.ref!)!, 10000n);
+        cost.set(d.id, cst); Q += d.qty; V += cst;
+      }
+      expect(Q >= 0n).toBe(true);
+    }
+    const money = (x: bigint) => `${x / 100n}.${String(x % 100n).padStart(2, '0')}`;
+    for (const d of live.filter((x) => x.kind !== 'buy')) {
+      const l = await cogsOf(d.id);
+      expect(d.kind === 'sell' ? l['5130'][0] : l['5130'][1], `${d.kind} ${d.date}`).toBe(money(cost.get(d.id)!));
+    }
+    expect(await bal(c)).toEqual({ q: `${Q}.000`, v: money(V) });
+    await glMatches(c);
+    expect(live.filter((d) => d.kind === 'sell').length).toBeGreaterThan(5);
+    const stat = (await db.query(`select (select count(*)::int from acc.inventory_restatements where company_id = $1) restated`, [c])).rows[0];
+    expect(stat.restated).toBeGreaterThan(5); // มีการคำนวณใหม่จริงหลายครั้ง
+    expect(docs.filter((d) => d.voided).length).toBeGreaterThan(2);
+    expect(docs.filter((d) => d.kind === 'ret').length).toBeGreaterThan(2);
+  });
+
+  it('ขายหรือตัดสต็อกจนหมด: ไม่เหลือมูลค่าค้างแม้จำนวนมาก', async () => {
+    const c = await setup();
+    await buy(c, '2026-10-02', '30000', '0.33');
+    await ok('POST', `/companies/${c}/inventory/adjustments`, { itemCode: 'X', date: '2026-10-02', quantity: '1', unitCost: '100', offsetAccount: '3110' });
+    const iv = (await sell(c, '2026-10-05', '30001')).json(); // 30,001 ชิ้น 10,000.00 → ต้นทุน 10,000.00 (เดิม 9,999.99 ค้าง 0.01)
+    expect(await invEntry('sales_cogs', iv.id)).toEqual({ 1310: ['0.00', '10000.00'], 5130: ['10000.00', '0.00'] });
+    expect(await bal(c)).toEqual({ q: '0.000', v: '0.00' });
+  });
+});

@@ -105,6 +105,7 @@ export type InventoryOverview = {
 export type StockCardRow = {
   date: string; kind: string; reference: string; entryId: string; entryDocNo: string; qtyIn: string; qtyOut: string; unitCost: string;
   valueIn: string; valueOut: string; balanceQty: string; balanceValue: string;
+  restated: boolean;
 };
 export type StockCard = { item: { code: string; name: string; unit: string; trackInventory: boolean }; card: StockCardRow[] };
 export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note';
