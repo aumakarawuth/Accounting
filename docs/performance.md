@@ -60,6 +60,11 @@ API (เวลาที่ API ใช้ต่อคำขอ เฉลี่ย
 - advisor ของ Supabase เรื่อง foreign key ไม่มี index (62 ตัว ส่วนใหญ่คอลัมน์ `created_by`/รายการที่ไม่ได้ค้น): ยังไม่จำเป็นที่ขนาดข้อมูลนี้
 - cold start ของ API บน Vercel ~0.2 วินาที (โหลดโค้ด + เชื่อมฐานข้อมูลครั้งแรก) เกิดเมื่อไม่มีคนใช้สักพัก
 
+## หมายเหตุหลังเปิด CSP แบบ nonce (10 พ.ย. 2569)
+
+ทุกหน้าเรนเดอร์ตอนมีคำขอ (`app/layout.tsx` เรียก `connection()`) เพราะ nonce ต้องใหม่ทุกคำขอ เดิมหน้าล็อกอิน/นโยบายเป็นหน้า static ที่ CDN cache ได้
+วัดในเครื่อง TTFB หน้าล็อกอินจาก ~3 ms (static) เป็น ~6 ms (มัธยฐาน 5 ครั้ง) แลกกับการเลิก `'unsafe-inline'` (`docs/owasp-top10.md`)
+
 ## วัดซ้ำ
 
 `scripts/perf/seed.mjs` (สร้างบริษัท 3,000 รายการผ่าน API + `acc.post_journal`) แล้ว `scripts/perf/measure.cjs` (Playwright) ใช้กับเครื่องนักพัฒนาเท่านั้น

@@ -32,10 +32,16 @@ describe('API', () => {
 });
 
 describe('เว็บ', () => {
-  it('next.config ตั้ง CSP (frame-ancestors none, object-src none) และ HSTS ทุกหน้า', () => {
+  it('CSP จาก proxy.ts: nonce ไม่มี unsafe-inline/unsafe-eval ใน production และ next.config ยังตั้ง HSTS ทุกหน้า', async () => {
+    const { csp } = await import('../apps/web/proxy');
+    const prod = csp('abcdefghijklmnopqrstuvwx', false);
+    for (const d of ["default-src 'self'", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'",
+      "script-src 'self' 'nonce-abcdefghijklmnopqrstuvwx' 'strict-dynamic'", "style-src 'self' 'nonce-abcdefghijklmnopqrstuvwx'"]) expect(prod).toContain(d);
+    expect(prod).not.toContain('unsafe-inline');
+    expect(prod).not.toContain('unsafe-eval');
+    expect(csp('n', true)).toContain("'unsafe-eval'"); // next dev เท่านั้น
     const cfg = readFileSync(new URL('../apps/web/next.config.ts', import.meta.url), 'utf8');
-    for (const d of ["default-src 'self'", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'"]) expect(cfg).toContain(d);
-    expect(cfg).toContain("key: 'Content-Security-Policy'");
     expect(cfg).toContain("key: 'Strict-Transport-Security'");
+    expect(cfg).not.toContain("'unsafe-inline'");
   });
 });

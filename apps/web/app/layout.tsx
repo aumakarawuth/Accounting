@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { connection } from 'next/server';
 import '@fontsource/ibm-plex-sans-thai-looped/400.css';
 import '@fontsource/ibm-plex-sans-thai-looped/500.css';
 import '@fontsource/ibm-plex-sans-thai-looped/600.css';
@@ -17,7 +18,9 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#FAFBF7' };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// ทุกหน้าเรนเดอร์ตอนมีคำขอ: CSP แบบ nonce (proxy.ts) ใส่ nonce ได้เฉพาะหน้าที่สร้างตอนมีคำขอ
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  await connection();
   return (
     <html lang="th">
       <body>

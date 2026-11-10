@@ -5,23 +5,7 @@ const api = process.env.API_URL ?? 'http://127.0.0.1:4000';
 
 const embedded = process.env.EMBED_API === '1'; // Vercel: API ฝังใน pages/api (apps/api/src/embedded.ts)
 
-// CSP (OWASP A05): โหลดได้จาก origin ตัวเองเท่านั้น ห้ามฝังหน้าในกรอบของเว็บอื่น ห้าม <object>/<base> ภายนอก ฟอร์มส่งได้เฉพาะ origin นี้
-// script ยังต้อง 'unsafe-inline' เพราะ Next ฝังสคริปต์เริ่มหน้าแบบ inline (เปลี่ยนเป็น nonce ได้เมื่อย้ายไป middleware: docs/owasp-top10.md)
-// ตอน next dev ต้องมี 'unsafe-eval' (HMR) เฉพาะเครื่องนักพัฒนา
-const CSP = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "worker-src 'self'",
-  "manifest-src 'self'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join('; ');
+// CSP อยู่ที่ proxy.ts (nonce ต่อคำขอ) · header ความปลอดภัยอื่นด้านล่างใช้กับทุก path
 
 const config: NextConfig = {
   output: 'standalone',
@@ -59,7 +43,6 @@ const config: NextConfig = {
     }, {
       source: '/:path*',
       headers: [
-        { key: 'Content-Security-Policy', value: CSP },
         { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'X-Frame-Options', value: 'DENY' },
