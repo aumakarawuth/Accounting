@@ -36,12 +36,12 @@ describe('เว็บ', () => {
     const { csp } = await import('../apps/web/proxy');
     const prod = csp('abcdefghijklmnopqrstuvwx', false);
     for (const d of ["default-src 'self'", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'",
-      "script-src 'self' 'nonce-abcdefghijklmnopqrstuvwx' 'strict-dynamic'", "style-src 'self' 'nonce-abcdefghijklmnopqrstuvwx'"]) expect(prod).toContain(d);
-    expect(prod).not.toContain('unsafe-inline');
+      "script-src 'self' 'nonce-abcdefghijklmnopqrstuvwx' 'strict-dynamic'"]) expect(prod).toContain(d);
+    // สคริปต์ห้าม inline (style อนุญาต inline เพราะ Safari: proxy.ts)
+    expect(prod.split(';').find((x) => x.trim().startsWith('script-src'))).not.toContain('unsafe-inline');
     expect(prod).not.toContain('unsafe-eval');
     expect(csp('n', true)).toContain("'unsafe-eval'"); // next dev เท่านั้น
     const cfg = readFileSync(new URL('../apps/web/next.config.ts', import.meta.url), 'utf8');
     expect(cfg).toContain("key: 'Strict-Transport-Security'");
-    expect(cfg).not.toContain("'unsafe-inline'");
   });
 });

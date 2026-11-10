@@ -51,7 +51,7 @@
 | ตรวจ | ผล | หลักฐาน |
 |---|---|---|
 | Content-Security-Policy | **แก้แล้ว** | `default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'` ฯลฯ · `tests/security.test.ts` |
-| CSP แบบ nonce (เลิก `'unsafe-inline'` ใน script-src และ style-src) | **แก้แล้ว** (10 พ.ย. 2569) | `apps/web/proxy.ts` สร้าง nonce ใหม่ทุกคำขอ `script-src 'self' 'nonce-…' 'strict-dynamic'` · ทุกหน้าเรนเดอร์ตอนมีคำขอ (`app/layout.tsx` `connection()`) · `tests/e2e/csp.spec.ts`: ทุก `<script>` มี nonce ของคำขอ, HTML ที่ถูกแทรกพร้อม `onerror` ไม่ทำงาน, ไม่มี CSP violation ในหน้าปกติ (e2e ทุกหน้าจับ console error อยู่แล้ว) |
+| CSP แบบ nonce (เลิก `'unsafe-inline'` ใน script-src) | **แก้แล้ว** (10 พ.ย. 2569) | `apps/web/proxy.ts` สร้าง nonce ใหม่ทุกคำขอ `script-src 'self' 'nonce-…' 'strict-dynamic'` · style-src ยังอนุญาต inline (รับความเสี่ยง: Safari ไม่ใช้ stylesheet ที่ Next ใส่ตอนเปลี่ยนหน้าแม้มี nonce; CSS ที่ถูกแทรกรันโค้ดไม่ได้) · ทุกหน้าเรนเดอร์ตอนมีคำขอ (`app/layout.tsx` `connection()`) · `tests/e2e/csp.spec.ts`: ทุก `<script>` มี nonce ของคำขอ, HTML ที่ถูกแทรกพร้อม `onerror` ไม่ทำงาน, ไม่มี CSP violation ในหน้าปกติ (e2e ทุกหน้าจับ console error อยู่แล้ว) |
 | รหัสผ่านไปอยู่ใน URL ถ้าส่งฟอร์มก่อนสคริปต์โหลด | **แก้แล้ว** (พบจาก OWASP ZAP 10024) | ฟอร์มล็อกอิน/เปลี่ยนรหัส `method="post"` · `tests/e2e/csp.spec.ts` ปิด JavaScript แล้วกดส่ง |
 | คำตอบ API ถูก cache ใน proxy/เบราว์เซอร์ | **แก้แล้ว** | ทุกคำตอบ `Cache-Control: no-store` + `nosniff` (`app.ts` onSend) · ไฟล์ส่งออก `private, no-store` |
 | X-Frame-Options, Referrer-Policy, Permissions-Policy, ปิด `X-Powered-By` | ผ่าน | `next.config.ts` |

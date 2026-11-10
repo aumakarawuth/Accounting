@@ -8,7 +8,9 @@ export function csp(nonce: string, dev = process.env.NODE_ENV !== 'production') 
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ''}`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    // style: Safari ไม่ยอมใช้ stylesheet ที่ Next ใส่ตอนเปลี่ยนหน้าแม้มี nonce (พบใน e2e iPhone/iPad Safari)
+    // จึงอนุญาต inline style ส่วนสคริปต์ยังต้องมี nonce — CSS ที่ถูกแทรกรันโค้ดไม่ได้ ความเสี่ยงต่ำกว่าสคริปต์มาก
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'",
