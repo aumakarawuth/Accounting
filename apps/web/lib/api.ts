@@ -133,7 +133,7 @@ export type InventoryOverview = {
 };
 export type Warehouse = { code: string; name: string; isMain: boolean; active: boolean };
 export type InventoryTransfer = {
-  id: string; docNo: string; date: string; from: string; fromName: string; to: string; toName: string; description: string;
+  id: string; entryId: string; docNo: string; date: string; from: string; fromName: string; to: string; toName: string; description: string;
   cancelReason: string | null; cancelled: boolean; lines: { itemCode: string; name: string; unit: string; qty: string }[];
 };
 export type StockCardRow = {
@@ -415,4 +415,24 @@ export type OpenReceiptLine = {
 export type OpenPurchaseDeposit = {
   id: string; docNo: string; vendorDocNo: string; date: string; partyCode: string; partyName: string; total: string; vat: string;
   remaining: string; remainingVat: string; orderDocNo: string | null; orderId: string | null;
+};
+
+// ---- เฟส 5 โมดูล 9 เงินสดย่อย + โอนเงินระหว่างบัญชี ----
+type CashCompany = { name: string; canWrite: boolean; locked: boolean };
+export type CashTransferRow = {
+  id: string; entryId: string; docNo: string; date: string; from: string; fromName: string; to: string; toName: string; amount: string; fee: string;
+  feeAccount: string | null; description: string; voided: boolean; voidReason: string | null; voidDocNo: string | null;
+};
+export type CashTransferPage = { company: CashCompany; transfers: CashTransferRow[]; cashAccounts: CodeName[]; expenseAccounts: CodeName[] };
+export type PettyVoucherStatus = 'pending' | 'reimbursed' | 'cancelled';
+export type PettyVoucher = {
+  id: string; docNo: string; date: string; payee: string; description: string; account: string; accountName: string; amount: string;
+  receiptNo: string | null; cancelReason: string | null; status: PettyVoucherStatus;
+};
+export type PettyCashPage = {
+  company: CashCompany; fund: string; pending: string; onHand: string; custodian: string | null;
+  funds: { id: string; docNo: string; date: string; fund: string; change: string; cashAccount: string; custodian: string }[];
+  vouchers: PettyVoucher[];
+  reimbursements: { id: string; docNo: string; date: string; cashAccount: string; total: string; voided: boolean; voidReason: string | null; vouchers: string[] }[];
+  cashAccounts: CodeName[]; expenseAccounts: CodeName[];
 };
