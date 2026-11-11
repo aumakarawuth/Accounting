@@ -129,6 +129,12 @@ export type InventoryItem = { code: string; name: string; unit: string; active: 
 export type InventoryOverview = {
   company: { name: string; canWrite: boolean; locked: boolean; inventoryMethod: CostMethod };
   items: InventoryItem[]; totalValue: string; glBalance: string; accounts: { code: string; name: string }[];
+  warehouses: Warehouse[]; stock: { itemCode: string; warehouse: string; qty: string }[];
+};
+export type Warehouse = { code: string; name: string; isMain: boolean; active: boolean };
+export type InventoryTransfer = {
+  id: string; docNo: string; date: string; from: string; fromName: string; to: string; toName: string; description: string;
+  cancelReason: string | null; cancelled: boolean; lines: { itemCode: string; name: string; unit: string; qty: string }[];
 };
 export type StockCardRow = {
   date: string; kind: string; reference: string; entryId: string; entryDocNo: string; qtyIn: string; qtyOut: string; unitCost: string;
@@ -145,6 +151,7 @@ export type SalesFormData = {
   customers: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string }[];
   items: { code: string; name: string; unit: string; isService: boolean; trackInventory: boolean; salePrice: string | null; salesAccount: string | null }[];
   revenueAccounts: { code: string; name: string }[];
+  warehouses: { code: string; name: string }[];
   cashAccounts: { code: string; name: string }[];
 };
 export type SalesRow = {
@@ -161,6 +168,7 @@ export type SalesDocument = SalesRow & {
   lines: { lineNo: number; description: string; qty: string; unit: string; unitPrice: string; amount: string; accountCode: string; accountName: string }[];
   settles: { id: string; docNo: string; amount: string; vatTransfer: string }[];
   settledBy: { id: string; kind: SalesKindSql; docNo: string; date: string; amount: string; voided: boolean }[];
+  warehouse?: string | null;
   notes: { id: string; kind: SalesKindSql; docNo: string; total: string; voided: boolean }[];
 };
 export type AgingBucket = 'current' | 'd30' | 'd60' | 'd90' | 'over90';
@@ -173,6 +181,7 @@ export type PurchaseFormData = {
   expenseAccounts: { code: string; name: string }[];
   cashAccounts: { code: string; name: string }[];
   systemAccounts: { code: string; name: string }[];
+  warehouses: { code: string; name: string }[];
 };
 export type PurchaseRow = {
   id: string; kind: PurchaseKindSql; docNo: string; date: string; vendorDocNo: string | null; partyCode: string; partyName: string;
@@ -192,6 +201,7 @@ export type PurchaseDocument = PurchaseRow & {
   partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
   companyName: string; companyTaxId: string | null; companyBranchNo: string; companyAddress: string;
   cashAccount: string | null; cashAccountName: string | null; entryId: string; entryDocNo: string; voidDocNo: string | null; refDocNo: string | null;
+  warehouse: string | null;
   refKind: PurchaseKindSql | null; depositRemaining: string | null; order: { id: string; docNo: string } | null;
   lines: {
     lineNo: number; itemCode: string | null; description: string; qty: string; unit: string; unitPrice: string; amount: string;

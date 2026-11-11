@@ -41,6 +41,7 @@ export function OrderReceiptForm({ companyId, mode, form, order }: {
   const [discount, setDiscount] = useState('');
   const [lines, setLines] = useState<Line[]>(() => (order ? fromOrder(order) : []).concat(order ? [] : [blank()]));
   const [picked, setPicked] = useState(order?.id ?? ''); // ใบสั่งซื้อที่อ้าง (ใบรับสินค้า)
+  const [warehouse, setWarehouse] = useState(''); // '' = คลังหลัก
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [key] = useState(() => crypto.randomUUID());
@@ -117,7 +118,7 @@ export function OrderReceiptForm({ companyId, mode, form, order }: {
     setBusy(true);
     setError(null);
     const body = isReceipt ? {
-      date: iso, partyCode, vendorDocNo: vendorDocNo.trim(), ...(picked ? { orderId: picked } : {}),
+      date: iso, partyCode, vendorDocNo: vendorDocNo.trim(), ...(picked ? { orderId: picked } : {}), ...(warehouse ? { warehouse } : {}),
       lines: lines.filter((l) => calc.amounts.has(l.key)).map((l) => ({
         itemCode: l.itemCode, qty: l.qty.trim(), unitPrice: fromCents(toCents(l.unitPrice)!), ...(picked && l.orderLineNo ? { orderLineNo: l.orderLineNo } : {}),
       })),
@@ -155,6 +156,14 @@ export function OrderReceiptForm({ companyId, mode, form, order }: {
             <select className={field} value={picked} disabled={Boolean(order)} onChange={(e) => void pickOrder(e.target.value)}>
               <option value="">{th.goodsReceipts.orderNone}</option>
               {(order ? [order] : orders).map((o) => <option key={o.id} value={o.id}>{o.docNo} · {formatMoney(o.total)}</option>)}
+            </select>
+          </label>
+        )}
+        {isReceipt && form.warehouses.length > 1 && (
+          <label className="flex flex-col text-sm">
+            {th.inventory.warehouse}
+            <select className={field} value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
+              {form.warehouses.map((w, i) => <option key={w.code} value={i === 0 ? '' : w.code}>{w.code} {w.name}</option>)}
             </select>
           </label>
         )}

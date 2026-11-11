@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { querySequence, withUser } from '../db.js';
+import { querySequence, useWarehouse, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
@@ -44,6 +44,7 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
         company: company.rows[0], customers: customers.rows, items: items.rows,
         revenueAccounts: accounts.rows.filter((a) => a.type === 'revenue').map(({ code, name }) => ({ code, name })),
         cashAccounts: accounts.rows.filter((a) => a.type === 'asset').map(({ code, name }) => ({ code, name })),
+        warehouses: (await c.query(`select code, name from acc.warehouses where company_id = $1 and active order by is_main desc, code`, [companyId])).rows,
       };
     });
   });
@@ -68,6 +69,7 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
+      await useWarehouse(c, companyId, b.warehouse);
       // ขายเชื่อผ่านฟังก์ชันต่อยอด (อ้างใบสั่งขาย + หักมัดจำในธุรกรรมเดียว) ใบอื่นเหมือนเดิม
       const id = kind === 'invoice'
         ? (await c.query('select acc.post_sales_invoice_ext($1, $2::jsonb, $3) id', [companyId, JSON.stringify(payload), key])).rows[0].id
@@ -120,7 +122,8 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
         `select ${DOC}, d.party_tax_id as "partyTaxId", d.party_branch_no as "partyBranchNo", d.party_address as "partyAddress",
                 d.seller_name as "sellerName", d.seller_tax_id as "sellerTaxId", d.seller_branch_no as "sellerBranchNo",
                 d.seller_address as "sellerAddress", ca.code as "cashAccount", e.id as "entryId", e.doc_no as "entryDocNo",
-                ve.doc_no as "voidDocNo", r.doc_no as "refDocNo", (d.total - s.amount)::text as open
+                ve.doc_no as "voidDocNo", (select w.code || ' ' || w.name from acc.warehouses w where w.company_id = d.company_id and w.id = d.warehouse_id and not w.is_main) as warehouse,
+                r.doc_no as "refDocNo", (d.total - s.amount)::text as open
            from acc.documents d
            join acc.journal_entries e on e.company_id = d.company_id and e.id = d.entry_id
            left join acc.journal_entries ve on ve.company_id = d.company_id and ve.id = d.void_entry_id

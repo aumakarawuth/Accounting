@@ -58,6 +58,7 @@ export default async function SalesDocumentPage({ params }: { params: Promise<{ 
       <DocumentActions companyId={companyId} doc={d} writable={company.can_write && !company.locked}
         voidPath={`/companies/${companyId}/sales/documents/${d.id}/void`} links={links} />
       <div className="max-w-4xl"><DocumentPaper p={paper} /></div>
+      {d.warehouse && <p className="print:hidden">{th.inventory.warehouse} {d.warehouse}</p>}
       {d.open !== null && (d.kind === 'sales_invoice' || d.kind === 'debit_note') && !d.voidedAt && (
         <p className="print:hidden">{Number(d.open) > 0 ? <>{th.sales.open} <Money value={d.open} /></> : th.sales.paid}</p>
       )}

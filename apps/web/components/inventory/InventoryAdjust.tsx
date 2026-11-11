@@ -13,8 +13,9 @@ const QTY = /^-?\d{1,11}(\.\d{1,3})?$/;
 const COST = /^\d{1,12}(\.\d{1,6})?$/;
 
 // ปรับสต็อก: คีย์ idempotency คงเดิมจนสำเร็จ (กดซ้ำ/เน็ตหลุดแล้วส่งใหม่ไม่เกิดรายการซ้ำ)
-export function InventoryAdjust({ companyId, items, accounts, initialItem }: {
+export function InventoryAdjust({ companyId, items, accounts, initialItem, warehouses }: {
   companyId: string; items: InventoryItem[]; accounts: { code: string; name: string }[]; initialItem?: string;
+  warehouses: { code: string; name: string }[];
 }) {
   const router = useRouter();
   const [itemCode, setItemCode] = useState(initialItem ?? items[0]?.code ?? '');
@@ -23,6 +24,7 @@ export function InventoryAdjust({ companyId, items, accounts, initialItem }: {
   const [unitCost, setUnitCost] = useState('');
   const [offset, setOffset] = useState('');
   const [description, setDescription] = useState('');
+  const [warehouse, setWarehouse] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const key = useRef(crypto.randomUUID());
@@ -39,7 +41,7 @@ export function InventoryAdjust({ companyId, items, accounts, initialItem }: {
     try {
       const r = await postJson<{ docNo: string }>(`/companies/${companyId}/inventory/adjustments`, {
         itemCode, date: iso, quantity: quantity.trim(), ...(out ? {} : { unitCost: unitCost.trim() }), offsetAccount: offset,
-        ...(description.trim() ? { description: description.trim() } : {}),
+        ...(description.trim() ? { description: description.trim() } : {}), ...(warehouse ? { warehouse } : {}),
       }, { 'idempotency-key': key.current });
       key.current = crypto.randomUUID();
       setQuantity(''); setUnitCost(''); setDescription('');
@@ -71,6 +73,11 @@ export function InventoryAdjust({ companyId, items, accounts, initialItem }: {
           {accounts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}
         </SelectField>
         <TextField label={t.description} value={description} onChange={setDescription} maxLength={300} />
+        {warehouses.length > 1 && (
+          <SelectField label={t.warehouse} value={warehouse} onChange={setWarehouse}>
+            {warehouses.map((w, i) => <option key={w.code} value={i === 0 ? '' : w.code}>{w.code} {w.name}</option>)}
+          </SelectField>
+        )}
       </div>
       <p className="text-[13px] text-ink2">{t.offsetHint}</p>
       {msg && <p role={msg.ok ? 'status' : 'alert'} className={msg.ok ? 'text-[15px]' : 'neg text-[15px]'}>{msg.text}</p>}

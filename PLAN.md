@@ -334,5 +334,8 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   FIFO คำนวณใหม่ตามลำดับวันที่เมื่อลงย้อนวันที่/ยกเลิก บัตรสต็อกแสดงชั้นต้นทุนคงเหลือ
   (`docs/assumptions.md` ข้อ 46, เทสต์ `tests/fifo-costing.test.ts` + สุ่ม 80 เอกสารใน `tests/accounting-audit.test.ts` + e2e `tests/e2e/fifo.spec.ts`)
   · migration `20261111000110` (โมดูล 6) merge แล้ว ยังไม่ apply กับ Supabase
-  ยังค้าง: โมดูล 8–10
+  · **โมดูล 8 หลายคลัง + โอนย้าย** (11 พ.ย. 2569, migration `20261111000112` ยังไม่ apply กับ Supabase): จำนวนแยกคลัง ต้นทุนรวมทั้งบริษัท
+  เอกสารซื้อ/ขาย/ปรับสต็อกเลือกคลัง โอนย้าย (TR) ไม่ลงบัญชี (`docs/assumptions.md` ข้อ 47, เทสต์ `tests/warehouses.test.ts` + e2e `tests/e2e/warehouses.spec.ts`)
+  · migration `20261111000111` (โมดูล 7) merge แล้ว ยังไม่ apply กับ Supabase
+  ยังค้าง: โมดูล 9–10
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

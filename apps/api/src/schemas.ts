@@ -164,6 +164,7 @@ export const InventoryAdjustment = z.object({
   unitCost: z.string().regex(/^\d{1,12}(\.\d{1,6})?$/, 'ต้นทุนต่อหน่วยเป็นตัวเลข ทศนิยมไม่เกิน 6 ตำแหน่ง').optional(),
   offsetAccount: z.string().regex(/^[0-9]{3,10}$/, 'เลือกบัญชีคู่'),
   description: z.string().trim().max(300).optional(),
+  warehouse: MasterCode.optional(),
 }).strict();
 
 // ---- เฟส 2.2 เอกสารขาย (ตรวจรูปแบบที่นี่ กติกาบัญชีตรวจที่ฟังก์ชันใน DB) ----
@@ -196,6 +197,7 @@ export const NewSalesDocument = z.object({
   lines: z.array(SalesLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
   orderId: Uuid.optional(),
   deposits: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).max(20).optional(),
+  warehouse: MasterCode.optional(),   // คลังที่ส่งของ (ไม่ระบุ = คลังหลัก)
 }).strict();
 // ตัดยอดหนึ่งใบ: เงินที่รับ/จ่าย + ส่วนลดเงินสด (ไม่บังคับ) ตัดหนี้รวมกัน
 const Settle = z.object({ documentId: Uuid, amount: Money, discount: Money.optional() }).strict();
@@ -236,6 +238,7 @@ export const NewPurchaseDocument = z.object({
   refDocumentId: Uuid.optional(),
   reason: z.string().trim().max(300).optional(),
   orderId: Uuid.optional(),       // อ้างใบสั่งซื้อ (บรรทัดระบุ orderLineNo)
+  warehouse: MasterCode.optional(), // คลังที่รับของ (ไม่ระบุ = คลังหลัก)
   deposits: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).max(20).optional(),
   lines: z.array(SalesLine.extend({
     receiptId: Uuid.optional(),   // บันทึกซื้อจากใบรับสินค้า: ใบรับสินค้าและบรรทัด
@@ -429,7 +432,7 @@ export const PurchaseOrderParams = z.object({ companyId: Uuid, orderId: Uuid });
 export const NewGoodsReceipt = z.object({
   date: IsoDate, partyCode: MasterCode,
   vendorDocNo: z.string().trim().min(1, 'ต้องใส่เลขที่ใบส่งของของผู้ขาย').max(40),
-  orderId: Uuid.optional(), description: z.string().trim().max(300).optional(),
+  orderId: Uuid.optional(), description: z.string().trim().max(300).optional(), warehouse: MasterCode.optional(),
   lines: z.array(z.object({
     itemCode: MasterCode, description: z.string().trim().max(200).optional(), qty: Qty, unitPrice: Money,
     orderLineNo: z.number().int().min(1).max(200).optional(),
@@ -441,3 +444,14 @@ export const NewPurchaseDeposit = z.object({
   amount: Money, priceMode: z.enum(['exclusive', 'inclusive']).optional(), isService: z.boolean().optional(),
   cashAccount: AccountCode.optional(), orderId: Uuid.optional(), description: z.string().trim().max(300).optional(),
 }).strict();
+
+// ---- เฟส 5 โมดูล 8: หลายคลัง + โอนย้าย ----
+export const NewWarehouse = z.object({ code: MasterCode, name: z.string().trim().min(1, 'ต้องมีชื่อคลัง').max(100) }).strict();
+export const EditWarehouse = z.object({ name: z.string().trim().min(1).max(100).optional(), active: z.boolean().optional() }).strict();
+export const WarehouseParams = z.object({ companyId: Uuid, code: MasterCode });
+export const NewTransfer = z.object({
+  date: IsoDate, from: MasterCode, to: MasterCode, description: z.string().trim().max(300).optional(),
+  lines: z.array(z.object({ itemCode: MasterCode, qty: Qty }).strict()).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+}).strict();
+export const TransferParams = z.object({ companyId: Uuid, transferId: Uuid });
+

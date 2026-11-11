@@ -70,6 +70,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc, fromOrder, receipt
   const [whtRate, setWhtRate] = useState<string | null>(null);
   const [discount, setDiscount] = useState('');
   const [description, setDescription] = useState('');
+  const [warehouse, setWarehouse] = useState(''); // '' = คลังหลัก
   const [reason, setReason] = useState('');
   const [lines, setLines] = useState<Line[]>(() => {
     const ls = orderLines();
@@ -269,6 +270,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc, fromOrder, receipt
           ...(l.receipt ? { receiptId: l.receipt.id, receiptLineNo: l.receipt.lineNo } : {}),
         })),
         ...(fromOrder ? { orderId: fromOrder.id } : {}),
+        ...(warehouse && buying ? { warehouse } : {}),
         ...(picked.length ? { deposits: picked.map((d) => ({ documentId: d.id, amount: fromCents(toCents(d.amount)!) })) } : {}),
       };
       const r = await postJson<{ id: string }>(`/companies/${companyId}/purchases/${kind}`, body, { 'idempotency-key': idemKey });
@@ -281,7 +283,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc, fromOrder, receipt
     }
     // accountOf อ่านจาก lines/isService ที่อยู่ใน deps แล้ว
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canPost, isoDate, vendorDocNo, isNote, target, reason, partyCode, isService, mode, priceMode, calc, description, kind, creditDays, days, cashAccount, wKind, wRate, lines, companyId, router, draft, idemKey, fromOrder, picked]);
+  }, [canPost, isoDate, vendorDocNo, isNote, target, reason, partyCode, isService, mode, priceMode, calc, description, kind, creditDays, days, cashAccount, wKind, wRate, lines, companyId, router, draft, idemKey, fromOrder, picked, warehouse, buying]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -353,6 +355,14 @@ export function PurchaseForm({ companyId, kind, form, refDoc, fromOrder, receipt
                 onChange={(e) => setVendorDocNo(e.target.value)} aria-invalid={!vendorDocNo.trim()} />
               <span id="vendor-doc-n" className="pt-1 text-[13px] text-ink2">{th.purchases.vendorDocNoHint}</span>
             </div>
+            {buying && form.warehouses.length > 1 && (
+              <label className="flex flex-col text-sm">
+                {th.inventory.warehouse}
+                <select className={inputCls} value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
+                  {form.warehouses.map((w, i) => <option key={w.code} value={i === 0 ? '' : w.code}>{w.code} {w.name}</option>)}
+                </select>
+              </label>
+            )}
             <div className="flex flex-col text-sm">
               <label htmlFor="doc-date">{th.purchases.date}</label>
               <input id="doc-date" className={`${inputCls} font-num`} inputMode="numeric" value={date} aria-describedby="doc-date-n"

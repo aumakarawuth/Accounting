@@ -25,6 +25,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
   }
   const same = r.totalValue === r.glBalance;
   const editable = r.company.canWrite && !r.company.locked;
+  const multi = r.warehouses.length > 1; // แสดงยอดแยกคลังเมื่อมีมากกว่าคลังหลัก
 
   return (
     <div className="flex max-w-5xl flex-col gap-5 p-4 sm:p-6">
@@ -54,7 +55,9 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                   <td className={`${cell} font-num`}>
                     <Link href={`?item=${it.code}`} className="flex min-h-11 items-center underline" aria-label={`${t.viewCard} ${it.code}`}>{it.code}</Link>
                   </td>
-                  <td className={cell}>{it.name}</td>
+                  <td className={cell}>{it.name}
+                    {multi && <div className="text-[13px] text-ink2">{r.stock.filter((x) => x.itemCode === it.code).map((x) => `${x.warehouse} ${qty(x.qty)}`).join(' · ')}</div>}
+                  </td>
                   <td className={`${cell} max-sm:hidden`}>{it.method === 'fifo' ? 'FIFO' : t.methods.average}</td>
                   <td className={`${cell} text-right font-num whitespace-nowrap`}>{qty(it.quantity)} {it.unit}</td>
                   <td className={`${cell} text-right font-num max-sm:hidden`}>{Number(it.unitCost).toFixed(2)}</td>
@@ -133,7 +136,8 @@ export default async function InventoryPage({ params, searchParams }: { params: 
       )}
 
       {editable && r.items.length > 0 && (
-        <InventoryAdjust companyId={companyId} items={r.items.filter((i) => i.active)} accounts={r.accounts} initialItem={card?.item.code} />
+        <InventoryAdjust companyId={companyId} items={r.items.filter((i) => i.active)} accounts={r.accounts} initialItem={card?.item.code}
+          warehouses={r.warehouses.filter((w) => w.active)} />
       )}
     </div>
   );
