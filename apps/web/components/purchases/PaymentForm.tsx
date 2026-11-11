@@ -29,6 +29,7 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
   const [partyCode, setPartyCode] = useState(form.vendors.some((v) => v.code === initialParty) ? initialParty! : '');
   const [open, setOpen] = useState<(PurchaseRow & { undue: bigint })[] | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [discounts, setDiscounts] = useState<Record<string, string>>({}); // documentId → ส่วนลดเงินสดที่ได้รับ
   const [date, setDate] = useState(isoToThai(todayIso()));
   const [cashAccount, setCashAccount] = useState(form.cashAccounts[0]?.code ?? '1110');
   const [whtKind, setWhtKind] = useState<WhtKind | '' | null>(null); // null = ตามที่ตั้งไว้ที่ผู้ขาย
@@ -48,9 +49,10 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
   useEffect(() => {
     if (!partyCode) return;
     let alive = true;
-    void api<PurchaseRow[]>(`/companies/${companyId}/purchases?party=${encodeURIComponent(partyCode)}&kind=purchase_invoice`).then((rows) => {
+    void api<PurchaseRow[]>(`/companies/${companyId}/purchases?party=${encodeURIComponent(partyCode)}`).then((rows) => {
       if (!alive) return;
-      const items = rows.filter((r) => r.open !== null && Number(r.open) > 0).reverse().map((r) => ({ ...r, undue: toCents(r.undueVat ?? '0') ?? 0n }));
+      // ใบซื้อเชื่อและใบเพิ่มหนี้ที่ยังค้าง
+      const items = rows.filter((r) => (r.kind === 'purchase_invoice' || r.kind === 'purchase_debit_note') && r.open !== null && Number(r.open) > 0).reverse().map((r) => ({ ...r, undue: toCents(r.undueVat ?? '0') ?? 0n }));
       setOpen(items);
       const pre = items.find((r) => r.id === initialDoc);
       // ยอดที่กู้จากร่างเก็บไว้เฉพาะใบที่ยังค้าง ไม่มีก็เลือกใบที่ส่งมาจากหน้าเอกสาร
@@ -67,20 +69,33 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
   const wRateOk = !wKind || (RATE.test(wRate) && Number(wRate) > 0 && Number(wRate) <= 15);
 
   const calc = useMemo(() => {
-    let total = 0n, vat = 0n, bad: string | null = null;
+    let total = 0n, vat = 0n, disc = 0n, dvat = 0n, gross = 0n, bad: string | null = null;
     const parts: { amount: bigint; base: bigint; total: bigint }[] = [];
     for (const r of open ?? []) {
       if (!(r.id in amounts)) continue;
       const a = toCents(amounts[r.id]!);
+      const d = (discounts[r.id] ?? '').trim() ? toCents(discounts[r.id]!) : 0n;
       const max = toCents(r.open!)!;
-      if (a === null || a <= 0n || a > max) { bad ??= th.purchases.payInvalid(r.docNo); continue; }
-      total += a;
-      if (r.undue > 0n) vat += a === max ? r.undue : divRound(a * r.undue, max);
-      parts.push({ amount: a, base: toCents(r.base)!, total: toCents(r.total)! });
+      if (a === null || d === null || a <= 0n || d < 0n || a + d > max) { bad ??= th.purchases.payInvalid(r.docNo); continue; }
+      const settle = a + d;
+      total += a; disc += d; gross += settle;
+      // ภาษีซื้อบริการ (สูตรเดียวกับ acc.post_payment): ส่วนที่จ่ายเงินถึงกำหนด ส่วนลดล้างออก
+      if (r.undue > 0n) {
+        const tr = settle === max ? r.undue : divRound(settle * r.undue, max);
+        const dv = divRound(d * r.undue, max);
+        vat += tr - dv; dvat += dv;
+      }
+      parts.push({ amount: a, base: toCents(r.base)!, total: toCents(r.total)! }); // ฐานหัก ณ ที่จ่ายจากเงินที่จ่ายจริง
     }
     const wht = wKind && wRateOk ? whtFor(parts, rateHundredths(wRate)) : { base: 0n, amount: 0n };
-    return { total, vat, bad, wht };
-  }, [open, amounts, wKind, wRate, wRateOk]);
+    return { total, vat, disc, dvat, gross, bad, wht };
+  }, [open, amounts, discounts, wKind, wRate, wRateOk]);
+  // ใส่ส่วนลดตอนยอดจ่ายยังเต็มยอดค้าง: ลดยอดจ่ายให้เท่าส่วนที่เหลือ
+  const setDiscount = (r: { id: string; open: string | null }, v: string) => {
+    const max = toCents(r.open!)!, prev = toCents(discounts[r.id] || '0') ?? 0n, next = toCents(v || '0');
+    setDiscounts((x) => ({ ...x, [r.id]: v }));
+    if (next !== null && next >= 0n && next < max && toCents(amounts[r.id] ?? '') === max - prev) setAmounts((x) => ({ ...x, [r.id]: fromCents(max - next) }));
+  };
 
   const isoChequeDate = thaiToIso(chequeDate);
   const draftIso = thaiToIso(date);
@@ -89,11 +104,12 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
     : !/^[0-9A-Za-z-]{1,20}$/.test(chequeNo) ? th.cheques.invalid.chequeNo
     : chequeBank.trim() === '' ? th.cheques.invalid.bank : isoChequeDate === null ? th.cheques.invalid.date : null;
   const entry: EntryLine[] = [
-    { code: '2110', debit: calc.total, credit: 0n },
+    { code: '2110', debit: calc.gross, credit: 0n },
     ...(calc.vat > 0n ? [{ code: '1410', debit: calc.vat, credit: 0n }] : []),
     { code: payCode, debit: 0n, credit: calc.total - calc.wht.amount },
     ...(calc.wht.amount > 0n ? [{ code: '2230', debit: 0n, credit: calc.wht.amount }] : []),
-    ...(calc.vat > 0n ? [{ code: '1411', debit: 0n, credit: calc.vat }] : []),
+    ...(calc.vat + calc.dvat > 0n ? [{ code: '1411', debit: 0n, credit: calc.vat + calc.dvat }] : []),
+    ...(calc.disc - calc.dvat > 0n ? [{ code: '5120', debit: 0n, credit: calc.disc - calc.dvat }] : []),
   ];
 
   const isoDate = thaiToIso(date);
@@ -105,18 +121,18 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
   const canPost = writable && !busy && !blocked;
 
   // ร่างในเครื่อง + ครูดูสด
-  const draft = useDocDraft(writable ? 'payment' : null, companyId, { partyCode, amounts, date, cashAccount, whtKind, whtRate, idemKey, byCheque, chequeNo, chequeBank, chequeDate }, {
+  const draft = useDocDraft(writable ? 'payment' : null, companyId, { partyCode, amounts, discounts, date, cashAccount, whtKind, whtRate, idemKey, byCheque, chequeNo, chequeBank, chequeDate }, {
     isEmpty: (d) => !d.partyCode,
     restore: (d) => {
       if (initialParty && d.partyCode !== initialParty) return false; // เปิดจากหน้าเอกสารของผู้ขายรายอื่น: ไม่ทับด้วยร่างเก่า
-      setPartyCode(d.partyCode); setAmounts(d.amounts); setDate(d.date); setCashAccount(d.cashAccount);
+      setPartyCode(d.partyCode); setAmounts(d.amounts); setDiscounts(d.discounts ?? {}); setDate(d.date); setCashAccount(d.cashAccount);
       setWhtKind(d.whtKind); setWhtRate(d.whtRate); setIdemKey(d.idemKey);
       setByCheque(d.byCheque ?? false); setChequeNo(d.chequeNo ?? ''); setChequeBank(d.chequeBank ?? ''); if (d.chequeDate) setChequeDate(d.chequeDate);
     },
     live: calc.total > 0n ? { title: th.purchases.paymentTitle, date: isoDate ?? date, description: vendor?.name ?? '', lines: liveLines(entry) } : null,
   });
   const discardDraft = () => {
-    setPartyCode(''); setOpen(null); setAmounts({}); setWhtKind(null); setWhtRate(null);
+    setPartyCode(''); setOpen(null); setAmounts({}); setDiscounts({}); setWhtKind(null); setWhtRate(null);
     setIdemKey(crypto.randomUUID());
     draft.discard();
   };
@@ -130,7 +146,10 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
     try {
       const payment = {
         partyCode, ...(wKind ? { whtKind: wKind, whtRate: wRate } : {}),
-        allocations: open.filter((x) => x.id in amounts).map((x) => ({ documentId: x.id, amount: fromCents(toCents(amounts[x.id]!)!) })),
+        allocations: open.filter((x) => x.id in amounts).map((x) => ({
+          documentId: x.id, amount: fromCents(toCents(amounts[x.id]!)!),
+          ...((discounts[x.id] ?? '').trim() && toCents(discounts[x.id]!)! > 0n ? { discount: fromCents(toCents(discounts[x.id]!)!) } : {}),
+        })),
       };
       const id = byCheque
         ? (await postJson<ChequeRow>(`/companies/${companyId}/cheques`, {
@@ -168,13 +187,14 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
             <h2 className={h2}>{th.purchases.vendor}</h2>
             <PartyPicker parties={form.vendors} selected={vendor} label={th.purchases.vendor} hint={th.purchases.vendorSearch} none={th.purchases.vendorNone}
               extra={(v) => (v.whtKind ? th.parties.whtKinds[v.whtKind] ?? null : null)}
-              onPick={(v) => { setOpen(null); setAmounts({}); setPartyCode(v.code); setWhtKind(null); setWhtRate(null); }}
-              onClear={() => { setPartyCode(''); setOpen(null); setAmounts({}); }} />
+              onPick={(v) => { setOpen(null); setAmounts({}); setDiscounts({}); setPartyCode(v.code); setWhtKind(null); setWhtRate(null); }}
+              onClear={() => { setPartyCode(''); setOpen(null); setAmounts({}); setDiscounts({}); }} />
           </section>
 
           {vendor && (
             <section className="flex flex-col gap-3" aria-label={th.purchases.openItems}>
               <h2 className={h2}>{th.purchases.openItems}</h2>
+              <p className="text-sm text-ink2">{th.purchases.cashDiscountNote}</p>
               {open === null ? <p className="text-ink2">…</p> : open.length === 0 ? <p className="text-ink2">{th.purchases.noOpenItems}</p> : (
                 <ul className="flex flex-col border-t border-rule">
                   {open.map((r) => {
@@ -194,6 +214,13 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
                         <input inputMode="decimal" aria-label={`${th.purchases.payAmount} ${r.docNo}`} disabled={!on}
                           className={`${inputCls} num disabled:text-ink2`} value={on ? amounts[r.id] : ''}
                           onChange={(e) => setAmounts((a) => ({ ...a, [r.id]: e.target.value }))} />
+                        {on && (
+                          <label className="col-span-3 grid grid-cols-[minmax(0,1fr)_minmax(0,9rem)] items-center gap-x-3 pl-8 text-sm text-ink2">
+                            {th.sales.cashDiscount(r.docNo)}
+                            <input inputMode="decimal" className={`${inputCls} num text-ink`} value={discounts[r.id] ?? ''} placeholder="0.00"
+                              onChange={(e) => setDiscount(r, e.target.value)} />
+                          </label>
+                        )}
                       </li>
                     );
                   })}
@@ -251,6 +278,8 @@ export function PaymentForm({ companyId, form, initialParty, initialDoc }: {
               )}
             </div>
             <dl className="grid grid-cols-[minmax(0,1fr)_auto] text-[15px]">
+              {calc.disc > 0n && <><dt className="py-1">{th.sales.settledTotal}</dt><dd className="num py-1">{money(calc.gross)}</dd>
+                <dt className="py-1">{th.sales.cashDiscountTotal}</dt><dd className="num py-1">{money(calc.disc)}</dd></>}
               <dt className="py-1">{th.purchases.paymentTotal}</dt><dd className="num py-1">{money(calc.total)}</dd>
               {calc.wht.amount > 0n && (
                 <>

@@ -83,7 +83,7 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     const key = idemKey(req);
     const payload = {
       date: b.date, party_code: b.partyCode, cash_account: b.cashAccount, wht_amount: b.whtAmount, description: b.description,
-      allocations: b.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount })),
+      allocations: b.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount, discount: a.discount })),
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
@@ -134,10 +134,10 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
                         a.code as "accountCode", a.name as "accountName"
                    from acc.document_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
                   where l.company_id = $1 and l.document_id = $2 order by l.line_no`, [companyId, documentId]),
-        () => c.query(`select t.id, t.doc_no as "docNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
+        () => c.query(`select t.id, t.doc_no as "docNo", a.amount::text, a.vat_transfer::text as "vatTransfer", a.discount::text
                    from acc.allocations a join acc.documents t on t.company_id = a.company_id and t.id = a.target_id
                   where a.company_id = $1 and a.source_id = $2 order by a.id`, [companyId, documentId]),
-        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, s.voided_at is not null as voided
+        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, a.discount::text, s.voided_at is not null as voided
                    from acc.allocations a join acc.documents s on s.company_id = a.company_id and s.id = a.source_id
                   where a.company_id = $1 and a.target_id = $2 order by s.doc_date, s.doc_no`, [companyId, documentId]),
         () => c.query(`select x.id, x.kind, x.doc_no as "docNo", x.total::text, x.voided_at is not null as voided

@@ -326,5 +326,9 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   → ซื้อเชื่อจากใบรับสินค้า (ล้าง 2130) · ใบเพิ่มหนี้จากผู้ขาย (จ่ายชำระได้) · จ่ายเงินมัดจำ (ภาษีซื้อตอนจ่าย) หักตอนซื้อเชื่อ
   (`docs/assumptions.md` ข้อ 44, เทสต์ `tests/purchase-documents-flow.test.ts` + e2e `tests/e2e/purchase-flow.spec.ts`)
   · migration `20261111000108` (โมดูล 4) merge แล้ว ยังไม่ apply กับ Supabase
-  ยังค้าง: โมดูล 6–10
+  · **โมดูล 6 ส่วนลดเงินสด** (11 พ.ย. 2569, migration `20261111000110` ยังไม่ apply กับ Supabase): ส่วนลดรายใบในรับชำระ (4210) / จ่ายชำระ (5120)
+  สินค้าไม่ลดภาษี บริการล้างภาษียังไม่ถึงกำหนดของส่วนลด (`docs/assumptions.md` ข้อ 45, เทสต์ `tests/cash-discounts.test.ts` + e2e `tests/e2e/cash-discount.spec.ts`)
+  · ฟอร์มจ่ายชำระแสดงใบเพิ่มหนี้จากผู้ขายที่ค้างด้วย (โมดูล 5 ลืมไว้)
+  · migration `20261111000109` (โมดูล 5) merge แล้ว ยังไม่ apply กับ Supabase
+  ยังค้าง: โมดูล 7–10
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

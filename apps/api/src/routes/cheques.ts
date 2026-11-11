@@ -55,11 +55,11 @@ export function chequeRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdap
       counter_account: b.counterAccount,
       receipt: b.receipt && {
         party_code: b.receipt.partyCode, wht_amount: b.receipt.whtAmount,
-        allocations: b.receipt.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount })),
+        allocations: b.receipt.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount, discount: a.discount })),
       },
       payment: b.payment && {
         party_code: b.payment.partyCode, wht_kind: b.payment.whtKind, wht_rate: b.payment.whtRate,
-        allocations: b.payment.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount })),
+        allocations: b.payment.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount, discount: a.discount })),
       },
     };
     const row = await withUser(pool, await user(req), async (c) => {
