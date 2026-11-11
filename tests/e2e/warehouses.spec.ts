@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
-import { checkScreen, freshStudentHome, watchErrors } from './helpers';
+import { checkScreen, freshStudentHome, isPhone, watchErrors } from './helpers';
 
 // หลายคลัง (docs/phase5-spec.md ข้อ 8): เพิ่มคลัง → ซื้อเข้าคลังที่เลือก → โอนย้าย → ยอดแยกคลัง
 
@@ -39,11 +39,11 @@ test('เพิ่มคลัง ซื้อเข้าคลังที่�
   await page.getByRole('button', { name: /V1/ }).click();
   await page.getByLabel('เลขที่ใบกำกับ/ใบเสร็จของผู้ขาย').fill(`INV-${randomUUID().slice(0, 6)}`);
   await page.getByRole('combobox', { name: 'คลัง', exact: true }).selectOption('BKK');
-  if (info.project.name.startsWith('phone')) await page.getByRole('button', { name: 'ถัดไป: รายการ' }).click();
+  if (isPhone(info)) await page.getByRole('button', { name: 'ถัดไป: รายการ' }).click();
   await page.getByRole('combobox', { name: 'รายละเอียด 1' }).fill('P');
   await page.getByRole('option', { name: /ไส้กรองน้ำ/ }).click();
   await page.getByLabel(/^จำนวน/).first().fill('10');
-  if (info.project.name.startsWith('phone')) {
+  if (isPhone(info)) {
     await page.getByRole('button', { name: 'ถัดไป: ตรวจยอดและภาษี' }).click();
     await page.getByRole('button', { name: 'ถัดไป: บันทึก' }).click();
   }
