@@ -49,6 +49,7 @@ export function studentNav(companyId: string): Group[] {
       { label: n.parties, href: c('/parties') },
       { label: n.items, href: c('/items') },
       { label: n.companyProfile, href: c('/settings') },
+      { label: n.opening, href: c('/opening') },
     ] },
     { title: n.group.other, items: [
       { label: n.reports, href: c('/reports') },

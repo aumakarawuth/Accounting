@@ -352,3 +352,26 @@ export const AssignmentActionBody = z.object({
   companyId: Uuid.optional(),
 }).strict();
 
+
+// ---- เฟส 5 โมดูล 3: ยอดยกมาพร้อมรายตัว ----
+const OpenRef = z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9/-]{0,19}$/, 'เลขที่ใบเดิมเป็นตัวอักษรอังกฤษ ตัวเลข / และ - ไม่เกิน 20 ตัว');
+const OpenItem = z.object({
+  partyCode: MasterCode, ref: OpenRef, date: IsoDate, dueDate: IsoDate.optional(), amount: Money, undueVat: Money.optional(),
+}).strict();
+export const OpeningBalances = z.object({
+  date: IsoDate,
+  accounts: z.array(z.object({ code: AccountCode, debit: Money.optional(), credit: Money.optional() }).strict()).max(200).default([]),
+  receivables: z.array(OpenItem).max(300).default([]),
+  payables: z.array(OpenItem).max(300).default([]),
+  assets: z.array(z.object({
+    code: MasterCode, name: z.string().trim().min(1).max(160), acquiredDate: IsoDate, depStart: IsoDate.optional(),
+    cost: Money, salvage: Money.optional(), lifeMonths: z.number().int().min(1).max(1200),
+    assetAccount: AccountCode, accumAccount: AccountCode, expenseAccount: AccountCode.optional(), accumulated: Money,
+  }).strict()).max(200).default([]),
+  inventory: z.array(z.object({
+    itemCode: MasterCode,
+    qty: z.string().regex(/^\d{1,11}(\.\d{1,3})?$/, 'จำนวนเป็นตัวเลข ทศนิยมไม่เกิน 3 ตำแหน่ง'),
+    unitCost: z.string().regex(/^\d{1,12}(\.\d{1,6})?$/, 'ต้นทุนต่อหน่วยเป็นตัวเลข ทศนิยมไม่เกิน 6 ตำแหน่ง'),
+  }).strict()).max(500).default([]),
+}).strict();
+export const VoidOpening = z.object({ reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
