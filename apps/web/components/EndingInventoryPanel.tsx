@@ -38,8 +38,10 @@ export function EndingInventoryPanel({ companyId, months, writable }: { companyI
   }
 
   return (
-    <section aria-labelledby="ending-inventory" className="flex flex-col gap-3 border border-rule-strong bg-paper p-4">
-      <h2 id="ending-inventory" className="font-doc text-[18px] font-bold">{t.endingTitle}</h2>
+    // พับไว้เป็นค่าเริ่มต้น: ใช้เฉพาะบริษัทระบบสิ้นงวด หน้าปิดงวดบนมือถือจึงไม่ยาวเกิน
+    <details className="group border border-rule-strong bg-paper" open={Boolean(done)}>
+      <summary className="flex min-h-11 cursor-pointer items-center px-4 font-doc text-[18px] font-bold">{t.endingTitle}</summary>
+      <section aria-label={t.endingTitle} className="flex flex-col gap-3 px-4 pb-4">
       {info?.perpetual ? <p className="text-[15px]">{t.endingPerpetual}</p> : (
         <>
           <p className="text-[15px]">{t.endingNote}</p>
@@ -73,6 +75,7 @@ export function EndingInventoryPanel({ companyId, months, writable }: { companyI
       )}
       {action.error && <p role="alert" className="neg text-[15px]">{action.error}</p>}
       {done && <p role="status" className="text-[15px]">{done}</p>}
-    </section>
+      </section>
+    </details>
   );
 }

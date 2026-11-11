@@ -57,7 +57,11 @@ export async function checkScreen(page: Page, info: TestInfo, name: string) {
   }, { touch: info.project.use.hasTouch === true, width });
   // tests/e2e-results/screens/<จอ>/<ชื่อ>.png (CI อัปโหลดเป็น artifact)
   const file = path.resolve(info.config.rootDir, '..', 'e2e-results', 'screens', info.project.name, `${name}.png`);
-  await page.screenshot({ path: file, fullPage: true });
+  // WebKit ถ่ายภาพได้ไม่เกิน 32,767 พิกเซลต่อด้าน (หน้ายาว × ความละเอียดจอ 3 เท่าของ iPhone) → เก็บภาพเฉพาะส่วนบนที่ถ่ายได้
+  // การตรวจด้านบน (เลื่อนแนวนอน ขนาดช่อง/ปุ่ม) ยังตรวจทั้งหน้า
+  const { height, dpr } = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, dpr: window.devicePixelRatio }));
+  const maxCss = Math.floor(32000 / dpr);
+  await page.screenshot({ path: file, fullPage: true, ...(height > maxCss ? { clip: { x: 0, y: 0, width, height: maxCss } } : {}) });
   expect(r.overflow, `${name}: เลื่อนแนวนอนเกินจอ ${r.overflow}px`).toBeLessThanOrEqual(1);
   expect(r.smallInputs, `${name}: ช่องกรอกเล็กกว่า 16px`).toEqual([]);
   expect(r.smallButtons, `${name}: ปุ่มเตี้ยกว่า 44px บนจอสัมผัส`).toEqual([]);

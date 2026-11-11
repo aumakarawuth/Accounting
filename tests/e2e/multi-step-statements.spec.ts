@@ -21,6 +21,7 @@ test('ระบบสิ้นงวด: ตรวจนับปลายเด
   }
 
   await page.goto(`${home}/closing`);
+  await page.getByText('สินค้าคงเหลือปลายงวด (ระบบสิ้นงวด)', { exact: true }).click(); // พับไว้เป็นค่าเริ่มต้น
   const panel = page.getByRole('region', { name: 'สินค้าคงเหลือปลายงวด (ระบบสิ้นงวด)' });
   await panel.getByLabel('สิ้นเดือน').selectOption('2025-02');
   await expect(panel.getByText('ยอดบัญชี 1310 ณ 28 ก.พ. 2568: 15,000.00')).toBeVisible();
