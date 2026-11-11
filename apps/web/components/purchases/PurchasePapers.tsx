@@ -66,7 +66,7 @@ export function RecordPaper({ doc }: { doc: PurchaseDocument }) {
         </div>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border border-rule-input px-3 py-2 @2xl:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
           <dt className="text-ink2">{th.sales.docNo}</dt><dd className="font-num">{doc.docNo}</dd>
-          <dt className="text-ink2">{doc.kind === 'purchase_credit_note' ? th.purchases.vendorCnNo : th.purchases.vendorDocNo}</dt><dd className="font-num">{doc.vendorDocNo}</dd>
+          {doc.vendorDocNo && <><dt className="text-ink2">{th.purchases.vendorDocLabel[doc.kind] ?? th.purchases.vendorDocNo}</dt><dd className="font-num">{doc.vendorDocNo}</dd></>}
           <dt className="text-ink2">{th.purchases.date}</dt><dd className="font-num">{isoToThai(doc.date)}</dd>
           {doc.dueDate && <><dt className="text-ink2">{th.sales.dueDate}</dt><dd className="font-num">{isoToThai(doc.dueDate)}</dd></>}
           {doc.refDocNo && <><dt className="text-ink2">{th.sales.ref}</dt><dd className="font-num">{doc.refDocNo}</dd></>}

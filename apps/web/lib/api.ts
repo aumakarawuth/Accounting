@@ -158,7 +158,8 @@ export type SalesDocument = SalesRow & {
   notes: { id: string; kind: SalesKindSql; docNo: string; total: string; voided: boolean }[];
 };
 export type AgingBucket = 'current' | 'd30' | 'd60' | 'd90' | 'over90';
-export type PurchaseKindSql = 'purchase_invoice' | 'cash_purchase' | 'purchase_credit_note' | 'payment';
+export type PurchaseKindSql = 'purchase_invoice' | 'cash_purchase' | 'purchase_credit_note' | 'payment'
+  | 'goods_receipt' | 'purchase_debit_note' | 'deposit' | 'deposit_applied';
 export type PurchaseFormData = {
   company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };
   vendors: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string; whtKind: WhtKind | null; whtRate: string | null }[];
@@ -185,7 +186,13 @@ export type PurchaseDocument = PurchaseRow & {
   partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
   companyName: string; companyTaxId: string | null; companyBranchNo: string; companyAddress: string;
   cashAccount: string | null; cashAccountName: string | null; entryId: string; entryDocNo: string; voidDocNo: string | null; refDocNo: string | null;
-  lines: { lineNo: number; description: string; qty: string; unit: string; unitPrice: string; amount: string; accountCode: string; accountName: string }[];
+  refKind: PurchaseKindSql | null; depositRemaining: string | null; order: { id: string; docNo: string } | null;
+  lines: {
+    lineNo: number; itemCode: string | null; description: string; qty: string; unit: string; unitPrice: string; amount: string;
+    accountCode: string; accountName: string; invoiced: string;
+  }[];
+  /** ใบรับสินค้า ↔ ใบซื้อ ที่จับคู่กัน (docNo = เอกสารอีกฝั่ง) */
+  matches: { id: string; docNo: string; invoiceLineNo: number; receiptLineNo: number; qty: string; amount: string; voided: boolean }[];
   settles: { id: string; docNo: string; vendorDocNo: string | null; amount: string; vatTransfer: string }[];
   settledBy: { id: string; kind: PurchaseKindSql; docNo: string; date: string; amount: string; voided: boolean }[];
   notes: { id: string; kind: PurchaseKindSql; docNo: string; total: string; voided: boolean }[];
@@ -369,4 +376,27 @@ export type BillingNoteDetail = BillingNoteRow & {
   partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
   sellerName: string; sellerTaxId: string | null; sellerBranchNo: string; sellerAddress: string;
   items: { id: string; docNo: string; date: string; dueDate: string; amount: string; open: string }[];
+};
+
+// ---- เฟส 5 โมดูล 5: ใบสั่งซื้อ ใบรับสินค้า เงินมัดจำจ่าย ----
+export type PurchaseOrderStatus = 'open' | 'partial' | 'closed' | 'cancelled';
+export type PurchaseOrderRow = {
+  id: string; docNo: string; date: string; untilDate: string | null; partyCode: string; partyName: string; isService: boolean;
+  priceMode: 'exclusive' | 'inclusive' | 'none'; vatRate: string; gross: string; discount: string; base: string; vat: string; total: string;
+  description: string; cancelReason: string | null; status: PurchaseOrderStatus;
+};
+export type PurchaseOrderDetail = PurchaseOrderRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
+  buyerName: string; buyerTaxId: string | null; buyerBranchNo: string; buyerAddress: string;
+  lines: { lineNo: number; itemCode: string | null; isService: boolean | null; description: string; qty: string; unit: string; unitPrice: string; amount: string; received: string }[];
+  documents: { id: string; kind: PurchaseKindSql; docNo: string; date: string; total: string; voided: boolean }[];
+  deposits: { id: string; docNo: string; date: string; total: string; voided: boolean; remaining: string }[];
+};
+export type OpenReceiptLine = {
+  receiptId: string; docNo: string; vendorDocNo: string; date: string; partyCode: string; lineNo: number; itemCode: string;
+  description: string; unit: string; qty: string; unitPrice: string; amount: string; account: string; remaining: string; remainingAmount: string;
+};
+export type OpenPurchaseDeposit = {
+  id: string; docNo: string; vendorDocNo: string; date: string; partyCode: string; partyName: string; total: string; vat: string;
+  remaining: string; remainingVat: string; orderDocNo: string | null; orderId: string | null;
 };

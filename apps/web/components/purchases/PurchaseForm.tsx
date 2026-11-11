@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
-import { postJson, type ApiError, type PurchaseDocument, type PurchaseFormData, type WhtKind } from '@/lib/api';
+import {
+  api, postJson, type ApiError, type OpenPurchaseDeposit, type OpenReceiptLine, type PurchaseDocument, type PurchaseFormData,
+  type PurchaseOrderDetail, type WhtKind,
+} from '@/lib/api';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { lineAmount, rateHundredths, vatCalc, type PriceMode } from '@/lib/vat';
@@ -14,8 +17,13 @@ import { th } from '@/i18n/th';
 
 // ฟอร์มบันทึกเอกสารซื้อ (ซื้อเชื่อ ซื้อสด ใบลดหนี้จากผู้ขาย) โครงเดียวกับฟอร์มขาย
 // มือถือ: 4 ขั้น · iPad/คอม: ฟอร์มซ้าย รายการบัญชีที่จะเกิดอยู่ขวา (เราไม่ได้ออกใบเอง จึงแสดงการลงบัญชีแทนกระดาษ)
-export type PurchaseFormKind = 'invoice' | 'cash-purchase' | 'credit-note';
-type Line = { key: number; itemCode: string; description: string; qty: string; unit: string; unitPrice: string; account: string | null };
+export type PurchaseFormKind = 'invoice' | 'cash-purchase' | 'credit-note' | 'debit-note';
+type Receipt = { id: string; lineNo: number; docNo: string; left: string; qty: string; amount: string; leftAmount: string; account: string };
+type Line = {
+  key: number; itemCode: string; description: string; qty: string; unit: string; unitPrice: string; account: string | null;
+  orderLineNo?: number; receipt?: Receipt;
+};
+type DepositPick = { id: string; docNo: string; remaining: string; remainingVat: string; total: string; vat: string; amount: string; on: boolean };
 
 let seq = 0;
 const blank = (): Line => ({ key: ++seq, itemCode: '', description: '', qty: '1', unit: '', unitPrice: '', account: null });
@@ -23,13 +31,27 @@ const QTY = /^\d{1,11}(\.\d{1,3})?$/;
 const RATE = /^\d{1,2}(\.\d{1,2})?$/;
 const money = (c: bigint) => formatMoney(fromCents(c));
 const STANDARD: Record<string, string> = { transport: '1', advertising: '2', service: '3', professional: '3', rent: '5' };
-const KIND_SQL = { invoice: 'purchase_invoice', 'cash-purchase': 'cash_purchase', 'credit-note': 'purchase_credit_note' } as const;
+const KIND_SQL = {
+  invoice: 'purchase_invoice', 'cash-purchase': 'cash_purchase', 'credit-note': 'purchase_credit_note', 'debit-note': 'purchase_debit_note',
+} as const;
+const receiptKey = (r: { id: string; lineNo: number }) => `${r.id}:${r.lineNo}`;
+const receiptLine = (r: OpenReceiptLine): Line => ({
+  ...blank(), itemCode: r.itemCode, description: r.description, qty: String(Number(r.remaining)), unit: r.unit, unitPrice: r.unitPrice,
+  receipt: { id: r.receiptId, lineNo: r.lineNo, docNo: r.docNo, left: r.remaining, qty: r.qty, amount: r.amount, leftAmount: r.remainingAmount, account: r.account },
+});
 
-export function PurchaseForm({ companyId, kind, form, refDoc }: {
+// fromOrder: ซื้อจากใบสั่งซื้อ (ดึงรายการที่ยังไม่ได้รับ) · receiptId: เปิดจากหน้าใบรับสินค้า (ติ๊กบรรทัดของใบนั้นให้)
+export function PurchaseForm({ companyId, kind, form, refDoc, fromOrder, receiptId, initialParty }: {
   companyId: string; kind: PurchaseFormKind; form: PurchaseFormData; refDoc?: PurchaseDocument | null;
+  fromOrder?: PurchaseOrderDetail | null; receiptId?: string | null; initialParty?: string;
 }) {
   const router = useRouter();
-  const isNote = kind === 'credit-note';
+  const isNote = kind === 'credit-note' || kind === 'debit-note';
+  const orderLines = (): Line[] => (fromOrder?.lines ?? []).flatMap((l) => {
+    const left = Math.round((Number(l.qty) - Number(l.received)) * 1000) / 1000;
+    return left > 0 ? [{ ...blank(), itemCode: l.itemCode ?? '', description: l.description, qty: String(left), unit: l.unit,
+      unitPrice: l.unitPrice, orderLineNo: l.lineNo }] : [];
+  });
   const co = form.company;
   const writable = co.canWrite && !co.locked;
   const itemsByCode = useMemo(() => new Map(form.items.map((i) => [i.code, i])), [form.items]);
@@ -38,10 +60,10 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
   const [step, setStep] = useState(0);
   const [entryOpen, setEntryOpen] = useState(false); // มือถือ: ดูรายการบัญชีแทนฟอร์ม
   const [date, setDate] = useState(isoToThai(todayIso()));
-  const [partyCode, setPartyCode] = useState('');
+  const [partyCode, setPartyCode] = useState(fromOrder?.partyCode ?? initialParty ?? '');
   const [vendorDocNo, setVendorDocNo] = useState('');
-  const [service, setService] = useState<boolean | null>(null);
-  const [priceMode, setPriceMode] = useState<'exclusive' | 'inclusive'>('exclusive');
+  const [service, setService] = useState<boolean | null>(fromOrder ? fromOrder.isService : null);
+  const [priceMode, setPriceMode] = useState<'exclusive' | 'inclusive'>(fromOrder?.priceMode === 'inclusive' ? 'inclusive' : 'exclusive');
   const [creditDays, setCreditDays] = useState<string | null>(null);
   const [cashAccount, setCashAccount] = useState(form.cashAccounts[0]?.code ?? '1110');
   const [whtKind, setWhtKind] = useState<WhtKind | '' | null>(null); // null = ตามที่ตั้งไว้ที่ผู้ขาย
@@ -49,13 +71,55 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
   const [discount, setDiscount] = useState('');
   const [description, setDescription] = useState('');
   const [reason, setReason] = useState('');
-  const [lines, setLines] = useState<Line[]>(() => [blank()]);
+  const [lines, setLines] = useState<Line[]>(() => {
+    const ls = orderLines();
+    return ls.length ? ls : [blank()];
+  });
+  // ใบรับสินค้าที่รอใบแจ้งหนี้ / เงินมัดจำคงเหลือ ของผู้ขายที่เลือก (ผูกกับรหัสผู้ขาย ผู้ขายอื่นไม่แสดง)
+  const [receiptState, setReceiptState] = useState<{ party: string; rows: OpenReceiptLine[] }>({ party: '', rows: [] });
+  const [depositState, setDepositState] = useState<{ party: string; rows: DepositPick[] }>({ party: '', rows: [] });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID()); // คีย์เดิมจนบันทึกสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
 
   const target = isNote ? refDoc! : null;
   const vendor = isNote ? null : form.vendors.find((v) => v.code === partyCode) ?? null;
+  const buying = kind === 'invoice' || kind === 'cash-purchase';
+  useEffect(() => {
+    if (!buying || !partyCode || fromOrder) return;
+    let live = true;
+    api<OpenReceiptLine[]>(`/companies/${companyId}/goods-receipts/open?party=${encodeURIComponent(partyCode)}`).then((rows) => {
+      if (!live) return;
+      setReceiptState({ party: partyCode, rows });
+      // เปิดจากหน้าใบรับสินค้า: ดึงทุกบรรทัดของใบนั้นมาให้ (ครั้งแรกเท่านั้น)
+      const mine = rows.filter((r) => r.receiptId === receiptId);
+      if (mine.length) {
+        setLines((ls) => (ls.some((l) => l.receipt) ? ls : mine.map((r) => receiptLine(r))));
+        setService(false);
+      }
+    }, () => {});
+    return () => { live = false; };
+  }, [buying, partyCode, companyId, fromOrder, receiptId]);
+  useEffect(() => {
+    if (kind !== 'invoice' || !partyCode) return;
+    let live = true;
+    api<OpenPurchaseDeposit[]>(`/companies/${companyId}/purchase-deposits?party=${encodeURIComponent(partyCode)}`).then(
+      (rows) => { if (live) setDepositState({ party: partyCode, rows: rows.map((d) => ({ id: d.id, docNo: d.docNo, remaining: d.remaining, remainingVat: d.remainingVat, total: d.total, vat: d.vat, amount: d.remaining, on: false })) }); },
+      () => {});
+    return () => { live = false; };
+  }, [kind, partyCode, companyId]);
+  const openReceipts = useMemo(() => (receiptState.party === partyCode ? receiptState.rows : []), [receiptState, partyCode]);
+  const deposits = useMemo(() => (kind === 'invoice' && depositState.party === partyCode ? depositState.rows : []), [kind, depositState, partyCode]);
+  const setDeposits = (fn: (rows: DepositPick[]) => DepositPick[]) => setDepositState((st) => ({ ...st, rows: fn(st.rows) }));
+  const pickedReceipts = new Set(lines.flatMap((l) => (l.receipt ? [receiptKey(l.receipt)] : [])));
+  const toggleReceipt = (r: OpenReceiptLine, on: boolean) => setLines((ls) => {
+    if (!on) {
+      const rest = ls.filter((l) => !(l.receipt && receiptKey(l.receipt) === receiptKey({ id: r.receiptId, lineNo: r.lineNo })));
+      return rest.length ? rest : [blank()];
+    }
+    const filled = ls.filter((l) => l.receipt || l.description.trim() || l.unitPrice.trim() || l.itemCode);
+    return [...filled, receiptLine(r)];
+  });
   const update = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const addLine = useCallback(() => setLines((ls) => [...ls, blank()]), []);
 
@@ -66,7 +130,8 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
   const isService = target ? target.isService : service ?? firstItem?.isService ?? false;
   const defaultAccount = (l: Line) => {
     const it = itemsByCode.get(l.itemCode);
-    if (isNote) return isService ? target!.lines[0]?.accountCode ?? '5260' : '5140';
+    if (isNote && isService) return target!.lines[0]?.accountCode ?? '5260';
+    if (kind === 'credit-note') return '5140';
     return it?.purchaseAccount ?? (isService ? '5260' : '5110');
   };
   const accountOf = (l: Line) => l.account ?? defaultAccount(l);
@@ -84,6 +149,8 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
         problems.set(l.key, th.sales.lineInvalid(i + 1));
       } else if (it && it.isService !== isService) {
         problems.set(l.key, th.sales.lineMixed(i + 1));
+      } else if (l.receipt && Number(l.qty) > Number(l.receipt.left)) {
+        problems.set(l.key, th.purchases.receiptQtyOver(i + 1, String(Number(l.receipt.left))));
       }
       if (amt !== null) { gross += amt; amounts.set(l.key, amt); }
       filled++;
@@ -106,10 +173,39 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
     base: calc.base, vat: calc.vat, total: calc.total, service: isService, claimable, cashAccount, wht: wht.amount,
   });
 
+  const picked = useMemo(() => deposits.filter((d) => d.on), [deposits]);
+  const depTotal = useMemo(() => picked.reduce((a, d) => a + (toCents(d.amount) ?? 0n), 0n), [picked]);
+  const depBad = picked.some((d) => { const c = toCents(d.amount); return c === null || c <= 0n || c > (toCents(d.remaining) ?? 0n); }) || depTotal > calc.total;
+  // รายการที่ระบบลงต่อท้ายใบซื้อ: ล้างสินค้ารับ (GM) และหักมัดจำ (VA) ตามสูตรเดียวกับ DB
+  const milli = (q: string) => BigInt(Math.round(Number(q) * 1000));
+  const receiptPart = (l: Line) => {
+    const r = l.receipt!;
+    if (milli(l.qty) === milli(r.left)) return toCents(r.leftAmount) ?? 0n;
+    const all = toCents(r.amount) ?? 0n, q = milli(l.qty), rq = milli(r.qty);
+    return (2n * all * q + rq) / (2n * rq);
+  };
+  const matched = lines.filter((l) => l.receipt && calc.amounts.has(l.key));
+  const gm = matched.reduce((a, l) => a + receiptPart(l), 0n);
+  const extra: typeof entry = [];
+  if (gm > 0n) {
+    extra.push({ code: '2130', debit: gm, credit: 0n });
+    const byAcc = new Map<string, bigint>();
+    for (const l of matched) byAcc.set(l.receipt!.account, (byAcc.get(l.receipt!.account) ?? 0n) + receiptPart(l));
+    for (const [code, v] of byAcc) extra.push({ code, debit: 0n, credit: v });
+  }
+  for (const d of picked) {
+    const amt = toCents(d.amount) ?? 0n, tot = toCents(d.total) ?? 1n, vat0 = toCents(d.vat) ?? 0n;
+    if (amt <= 0n) continue;
+    const v = amt === toCents(d.remaining) ? toCents(d.remainingVat) ?? 0n : (2n * vat0 * amt + tot) / (2n * tot);
+    extra.push({ code: '2110', debit: amt, credit: 0n }, { code: '1520', debit: 0n, credit: amt - v });
+    if (v > 0n) extra.push({ code: isService && claimable ? '1411' : '1410', debit: 0n, credit: v });
+  }
+  const fullEntry = [...entry, ...extra];
+
   const isoDate = thaiToIso(date);
   const days = creditDays === null ? vendor?.creditDays ?? 0 : Number(creditDays);
   const daysBad = (creditDays !== null && !/^\d{1,3}$/.test(creditDays)) || days > 365;
-  const overOpen = isNote && calc.total > (toCents(target!.open ?? '0') ?? 0n);
+  const overOpen = kind === 'credit-note' && calc.total > (toCents(target!.open ?? '0') ?? 0n);
 
   const stepProblem = [
     isoDate === null ? th.sales.dateInvalid
@@ -120,6 +216,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
     calc.discBad ? th.sales.discountInvalid
       : daysBad ? th.sales.creditDaysInvalid
       : overOpen ? th.purchases.overOpen(formatMoney(target!.open ?? '0'))
+      : depBad ? th.purchases.depositInvalid
       : wKind && !vendor?.taxId ? th.purchases.whtNeedsTaxId
       : !wRateOk ? th.purchases.whtRateInvalid
       : wKind && wht.amount === 0n ? th.purchases.whtTooSmall : null,
@@ -128,7 +225,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
   const canPost = writable && !busy && !blocked;
 
   // ร่างในเครื่อง + ครูดูสด (รายการบัญชีเดียวกับตัวอย่างข้างฟอร์ม)
-  const draft = useDocDraft(writable ? `purchases:${kind}${refDoc ? `:${refDoc.id}` : ''}` : null, companyId, {
+  const draft = useDocDraft(writable && !receiptId ? `purchases:${kind}${refDoc ? `:${refDoc.id}` : ''}${fromOrder ? `:${fromOrder.id}` : ''}` : null, companyId, {
     date, partyCode, vendorDocNo, service, priceMode, creditDays, cashAccount, whtKind, whtRate, discount, description, reason,
     lines: lines.map(({ key: _key, ...l }) => l), idemKey,
   }, {
@@ -141,7 +238,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
       setLines(d.lines.length ? d.lines.map((l) => ({ ...l, key: ++seq })) : [blank()]);
       setIdemKey(d.idemKey);
     },
-    live: calc.amounts.size > 0 ? { title: th.purchases.formTitle[kind], date: isoDate ?? date, description: target?.partyName ?? vendor?.name ?? '', lines: liveLines(entry) } : null,
+    live: calc.amounts.size > 0 ? { title: th.purchases.formTitle[kind], date: isoDate ?? date, description: target?.partyName ?? vendor?.name ?? '', lines: liveLines(fullEntry) } : null,
   });
   const discardDraft = () => {
     setPartyCode(''); setVendorDocNo(''); setService(null); setCreditDays(null); setWhtKind(null); setWhtRate(null);
@@ -168,7 +265,11 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
           ...(l.itemCode ? { itemCode: l.itemCode } : {}),
           description: l.description.trim(), qty: l.qty.trim(), unitPrice: fromCents(toCents(l.unitPrice)!), accountCode: accountOf(l),
           ...(l.unit.trim() ? { unit: l.unit.trim() } : {}),
+          ...(l.orderLineNo ? { orderLineNo: l.orderLineNo } : {}),
+          ...(l.receipt ? { receiptId: l.receipt.id, receiptLineNo: l.receipt.lineNo } : {}),
         })),
+        ...(fromOrder ? { orderId: fromOrder.id } : {}),
+        ...(picked.length ? { deposits: picked.map((d) => ({ documentId: d.id, amount: fromCents(toCents(d.amount)!) })) } : {}),
       };
       const r = await postJson<{ id: string }>(`/companies/${companyId}/purchases/${kind}`, body, { 'idempotency-key': idemKey });
       draft.finish();
@@ -180,7 +281,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
     }
     // accountOf อ่านจาก lines/isService ที่อยู่ใน deps แล้ว
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canPost, isoDate, vendorDocNo, isNote, target, reason, partyCode, isService, mode, priceMode, calc, description, kind, creditDays, days, cashAccount, wKind, wRate, lines, companyId, router, draft, idemKey]);
+  }, [canPost, isoDate, vendorDocNo, isNote, target, reason, partyCode, isService, mode, priceMode, calc, description, kind, creditDays, days, cashAccount, wKind, wRate, lines, companyId, router, draft, idemKey, fromOrder, picked]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -201,7 +302,7 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
     <div className="flex flex-col gap-2">
       <h2 className="font-doc text-[17px] font-bold">{th.purchases.entryPreview}</h2>
       <p className="text-sm text-ink2">{th.purchases.entryNote}</p>
-      <EntryPreview lines={entry} names={names} />
+      <EntryPreview lines={fullEntry} names={names} />
     </div>
   );
 
@@ -235,14 +336,19 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
                   <input className={inputCls} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} aria-invalid={!reason.trim()} />
                 </label>
               </>
+            ) : fromOrder ? (
+              <p className="border border-rule-input px-3 py-2">
+                {th.purchases.fromOrder(fromOrder.docNo)}
+                <br /><span className="text-ink2">{fromOrder.partyCode} {fromOrder.partyName}</span>
+              </p>
             ) : (
               <PartyPicker parties={form.vendors} selected={vendor} label={th.purchases.vendor} hint={th.purchases.vendorSearch} none={th.purchases.vendorNone}
                 extra={(v) => (v.vatRegistered ? null : th.purchases.vendorNoVat)}
-                onPick={(v) => { setPartyCode(v.code); setCreditDays(null); setWhtKind(null); setWhtRate(null); }}
-                onClear={() => setPartyCode('')} />
+                onPick={(v) => { setPartyCode(v.code); setCreditDays(null); setWhtKind(null); setWhtRate(null); setLines((ls) => ls.filter((l) => !l.receipt).concat(ls.every((l) => l.receipt) ? [blank()] : [])); }}
+                onClear={() => { setPartyCode(''); setLines((ls) => (ls.some((l) => l.receipt) ? [blank()] : ls)); }} />
             )}
             <div className="flex flex-col text-sm">
-              <label htmlFor="vendor-doc">{isNote ? th.purchases.vendorCnNo : th.purchases.vendorDocNo}</label>
+              <label htmlFor="vendor-doc">{th.purchases.vendorDocLabel[KIND_SQL[kind]] ?? th.purchases.vendorDocNo}</label>
               <input id="vendor-doc" className={`${inputCls} font-num`} value={vendorDocNo} maxLength={40} aria-describedby="vendor-doc-n"
                 onChange={(e) => setVendorDocNo(e.target.value)} aria-invalid={!vendorDocNo.trim()} />
               <span id="vendor-doc-n" className="pt-1 text-[13px] text-ink2">{th.purchases.vendorDocNoHint}</span>
@@ -270,12 +376,27 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
               </fieldset>
             )}
             {kind === 'invoice' && isService && claimable && mode !== 'none' && <p className="text-sm text-ink2">{th.purchases.serviceNote}</p>}
+            {kind === 'debit-note' && <p className="text-sm text-ink2">{th.purchases.debitNoteNote}</p>}
+            {buying && vendor && !fromOrder && (
+              <fieldset className="flex flex-col gap-1 border border-rule px-3 py-2 text-sm">
+                <legend className="px-1 font-medium">{th.purchases.fromReceipts}</legend>
+                <p className="text-ink2">{th.purchases.fromReceiptsNote}</p>
+                {openReceipts.length === 0 ? <p className="text-ink2">{th.purchases.receiptsNone}</p> : openReceipts.map((r) => (
+                  <label key={receiptKey({ id: r.receiptId, lineNo: r.lineNo })} className="flex min-h-11 items-center gap-2 text-base">
+                    <input type="checkbox" className="size-5 accent-ink" checked={pickedReceipts.has(receiptKey({ id: r.receiptId, lineNo: r.lineNo }))}
+                      onChange={(e) => toggleReceipt(r, e.target.checked)} />
+                    {th.purchases.receiptLine(r.docNo, r.description, `${Number(r.remaining)} ${r.unit}`)}
+                  </label>
+                ))}
+              </fieldset>
+            )}
             <ol className="flex flex-col gap-3">
               {lines.map((l, i) => {
                 const amt = calc.amounts.get(l.key);
                 const problem = calc.problems.get(l.key);
                 return (
                   <li key={l.key} className="flex flex-col gap-2 border border-rule px-3 pt-1 pb-3">
+                    {l.receipt && <p className="pt-1 text-[13px] text-ink2">{th.purchases.fromReceipt(l.receipt.docNo, l.receipt.lineNo)} · {th.purchases.receiptPriceNote}</p>}
                     <ItemField items={form.items} value={l.description} picked={Boolean(l.itemCode)} label={`${th.sales.description} ${i + 1}`} price={(it) => it.purchasePrice}
                       onText={(text) => update(l.key, { description: text, itemCode: l.itemCode && itemsByCode.get(l.itemCode)?.name === text ? l.itemCode : '' })}
                       onPick={(it) => update(l.key, { itemCode: it.code, description: it.name, unit: it.unit, unitPrice: it.purchasePrice ?? l.unitPrice, account: null })} />
@@ -363,6 +484,27 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
                 </>
               )}
             </div>
+            {kind === 'invoice' && partyCode && (
+              <fieldset className="flex flex-col gap-2 text-sm">
+                <legend className="font-medium">{th.purchases.deposits}</legend>
+                {deposits.length === 0 ? <p className="text-ink2">{th.purchases.depositsNone}</p> : deposits.map((d) => (
+                  <div key={d.id} className="flex flex-col gap-1 border border-rule px-3 py-2">
+                    <label className="flex min-h-11 items-center gap-2 text-base">
+                      <input type="checkbox" className="size-5 accent-ink" checked={d.on}
+                        onChange={(e) => setDeposits((ds) => ds.map((x) => (x.id === d.id ? { ...x, on: e.target.checked } : x)))} />
+                      {th.purchases.depositLabel(d.docNo, formatMoney(d.remaining))}
+                    </label>
+                    {d.on && (
+                      <label className="flex flex-col text-sm">
+                        {th.purchases.depositAmount(d.docNo)}
+                        <input inputMode="decimal" className={`${inputCls} num`} value={d.amount}
+                          onChange={(e) => setDeposits((ds) => ds.map((x) => (x.id === d.id ? { ...x, amount: e.target.value } : x)))} />
+                      </label>
+                    )}
+                  </div>
+                ))}
+              </fieldset>
+            )}
             <label className="flex flex-col text-sm">
               {th.sales.note}
               <input className={inputCls} value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} />
@@ -374,6 +516,8 @@ export function PurchaseForm({ companyId, kind, form, refDoc }: {
               {mode !== 'none' && <><dt className="py-1">{th.sales.vat(String(Number(rate)))}</dt><dd className="num py-1">{money(calc.vat)}</dd></>}
               <dt className="border-t border-ink py-1 font-semibold">{th.sales.total}</dt>
               <dd className="num border-t border-ink py-1 font-semibold">{money(calc.total)}</dd>
+              {depTotal > 0n && <><dt className="py-1">{th.purchases.lessDeposit}</dt><dd className="num py-1">{money(depTotal)}</dd>
+                <dt className="py-1 font-semibold">{th.purchases.netDue}</dt><dd className="num py-1 font-semibold">{money(calc.total - depTotal)}</dd></>}
               {wht.amount > 0n && (
                 <>
                   <dt className="py-1">{th.purchases.whtAmount}</dt>

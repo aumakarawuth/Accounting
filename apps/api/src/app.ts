@@ -19,6 +19,7 @@ import { chequeRoutes } from './routes/cheques.js';
 import { assetRoutes } from './routes/assets.js';
 import { openingRoutes } from './routes/opening.js';
 import { salesFlowRoutes } from './routes/salesFlow.js';
+import { purchaseFlowRoutes } from './routes/purchaseFlow.js';
 import { inventoryRoutes } from './routes/inventory.js';
 import { exerciseRoutes } from './routes/exercises.js';
 import type { RealtimeBus } from './realtime.js';
@@ -101,6 +102,7 @@ export function buildApp(opts: {
     assetRoutes(scope, opts.pool, auth);
     openingRoutes(scope, opts.pool, auth);
     salesFlowRoutes(scope, opts.pool, auth);
+    purchaseFlowRoutes(scope, opts.pool, auth);
     inventoryRoutes(scope, opts.pool, auth);
     exerciseRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });

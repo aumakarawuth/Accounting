@@ -45,7 +45,7 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         // ชื่อบัญชีที่ระบบลงให้เอง (ภาษีซื้อ เจ้าหนี้ หัก ณ ที่จ่าย) ใช้แสดงตัวอย่างรายการบัญชี ไม่มีในผังใช้ชื่อแม่แบบ
         () => c.query(`select t.code, coalesce(a.name, t.name) as name from acc.coa_template t
                    left join acc.chart_of_accounts a on a.company_id = $1 and a.code = t.code
-                  where t.code in ('1410', '1411', '2110', '2120', '2121', '2230', '5140') order by t.code`, [companyId]),
+                  where t.code in ('1410', '1411', '1520', '2110', '2120', '2121', '2130', '2230', '5140') order by t.code`, [companyId]),
       ] as const);
       return {
         company: company.rows[0], vendors: vendors.rows, items: items.rows,
@@ -59,19 +59,28 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
   app.post('/companies/:companyId/purchases/:kind', async (req, reply) => {
     const { companyId, kind } = PurchaseKindParams.parse(req.params);
     const b = NewPurchaseDocument.parse(req.body);
-    if (kind === 'credit-note' ? !b.refDocumentId : !b.partyCode) {
-      throw new HttpError(400, 'invalid', kind === 'credit-note' ? 'ต้องเลือกใบซื้อเชื่อที่อ้างถึง' : 'ต้องเลือกผู้ขาย');
+    const note = kind === 'credit-note' || kind === 'debit-note';
+    if (note ? !b.refDocumentId : !b.partyCode) {
+      throw new HttpError(400, 'invalid', note ? 'ต้องเลือกใบซื้อเชื่อที่อ้างถึง' : 'ต้องเลือกผู้ขาย');
+    }
+    if (note && (b.orderId || b.deposits?.length || b.lines.some((l) => l.receiptId || l.orderLineNo))) {
+      throw new HttpError(400, 'invalid', 'ใบลด/เพิ่มหนี้อ้างใบสั่งซื้อ ใบรับสินค้า หรือหักมัดจำไม่ได้');
     }
     const key = idemKey(req);
     const payload = {
       date: b.date, party_code: b.partyCode, vendor_doc_no: b.vendorDocNo, is_service: b.isService, price_mode: b.priceMode,
       discount: b.discount, description: b.description, credit_days: b.creditDays, cash_account: b.cashAccount,
-      wht_kind: b.whtKind, wht_rate: b.whtRate, ref_document_id: b.refDocumentId, reason: b.reason,
-      lines: b.lines.map((l) => ({ item_code: l.itemCode, description: l.description, qty: l.qty, unit: l.unit, unit_price: l.unitPrice, account_code: l.accountCode })),
+      wht_kind: b.whtKind, wht_rate: b.whtRate, ref_document_id: b.refDocumentId, reason: b.reason, order_id: b.orderId,
+      deposits: b.deposits?.map((d) => ({ document_id: d.documentId, amount: d.amount })),
+      lines: b.lines.map((l) => ({
+        item_code: l.itemCode, description: l.description, qty: l.qty, unit: l.unit, unit_price: l.unitPrice, account_code: l.accountCode,
+        order_line_no: l.orderLineNo, receipt_id: l.receiptId, receipt_line_no: l.receiptLineNo,
+      })),
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
-      const id = (await c.query('select acc.post_purchase_document($1, $2, $3::jsonb, $4) id', [companyId, PURCHASE_KIND_SQL[kind], JSON.stringify(payload), key])).rows[0].id;
+      const fn = note ? 'acc.post_purchase_document' : 'acc.post_purchase_ext';
+      const id = (await c.query(`select ${fn}($1, $2, $3::jsonb, $4) id`, [companyId, PURCHASE_KIND_SQL[kind], JSON.stringify(payload), key])).rows[0].id;
       return { id, docNo: await docNo(c, companyId, id) };
     });
     return reply.code(201).send(row);
@@ -99,8 +108,8 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const r = await c.query(
-        `select ${DOC}, case when d.kind = 'purchase_invoice' and d.voided_at is null then (d.total - s.amount)::text end as open,
-                case when d.kind = 'purchase_invoice' and d.voided_at is null and d.is_service and d.vat_claimable
+        `select ${DOC}, case when d.kind in ('purchase_invoice', 'purchase_debit_note') and d.voided_at is null then (d.total - s.amount)::text end as open,
+                case when d.kind in ('purchase_invoice', 'purchase_debit_note') and d.voided_at is null and d.is_service and d.vat_claimable
                      then (d.vat - s.vat)::text else '0.00' end as "undueVat"
            from acc.purchase_documents d cross join lateral acc.purchase_settled(d.company_id, d.id) s
           where d.company_id = $1 and ($2::text is null or d.kind = $2) and ($3::text is null or d.party_code = $3)
@@ -120,7 +129,11 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         `select ${DOC}, d.party_tax_id as "partyTaxId", d.party_branch_no as "partyBranchNo", d.party_address as "partyAddress",
                 co.name as "companyName", co.tax_id as "companyTaxId", co.branch_no as "companyBranchNo", co.address as "companyAddress",
                 ca.code as "cashAccount", ca.name as "cashAccountName", e.id as "entryId", e.doc_no as "entryDocNo",
-                ve.doc_no as "voidDocNo", r.doc_no as "refDocNo", (d.total - s.amount)::text as open
+                ve.doc_no as "voidDocNo", r.doc_no as "refDocNo", r.kind as "refKind", (d.total - s.amount)::text as open,
+                case when d.kind = 'deposit' then (select amount::text from acc.purchase_deposit_remaining(d.company_id, d.id)) end as "depositRemaining",
+                (select json_build_object('id', o.id, 'docNo', o.doc_no) from acc.purchase_orders o
+                  where o.company_id = d.company_id and o.id = coalesce(d.purchase_order_id,
+                    (select x.order_id from acc.purchase_order_receipts x where x.company_id = d.company_id and x.document_id = d.id limit 1))) as "order"
            from acc.purchase_documents d
            join acc.companies co on co.id = d.company_id
            join acc.journal_entries e on e.company_id = d.company_id and e.id = d.entry_id
@@ -130,10 +143,12 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
            cross join lateral acc.purchase_settled(d.company_id, d.id) s
           where d.company_id = $1 and d.id = $2`, [companyId, documentId])).rows[0];
       if (!d) throw new HttpError(404, 'not_found', 'ไม่พบเอกสารนี้');
-      const [lines, settles, settledBy, notes, cert] = await querySequence([
-        () => c.query(`select l.line_no as "lineNo", l.description, l.qty::text, l.unit, l.unit_price::text as "unitPrice", l.amount::text,
-                        a.code as "accountCode", a.name as "accountName"
+      const [lines, settles, settledBy, notes, cert, matches] = await querySequence([
+        () => c.query(`select l.line_no as "lineNo", i.code as "itemCode", l.description, l.qty::text, l.unit, l.unit_price::text as "unitPrice",
+                        l.amount::text, a.code as "accountCode", a.name as "accountName",
+                        (select qty::text from acc.receipt_line_invoiced(l.company_id, l.document_id, l.line_no)) as invoiced
                    from acc.purchase_document_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+                   left join acc.items i on i.company_id = l.company_id and i.id = l.item_id
                   where l.company_id = $1 and l.document_id = $2 order by l.line_no`, [companyId, documentId]),
         () => c.query(`select t.id, t.doc_no as "docNo", t.vendor_doc_no as "vendorDocNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
                    from acc.purchase_allocations a join acc.purchase_documents t on t.company_id = a.company_id and t.id = a.target_id
@@ -149,11 +164,21 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
                         w.payee_address as "payeeAddress", w.wht_kind as "whtKind", w.wht_rate::text as "whtRate", w.base::text,
                         w.amount::text, w.voided_at is not null as voided
                    from acc.wht_certificates w where w.company_id = $1 and w.document_id = $2`, [companyId, documentId]),
+        // จับคู่ใบรับสินค้า ↔ ใบซื้อ (มองจากฝั่งใดก็ได้)
+        () => c.query(`select case when m.invoice_id = $2 then g.id else v.id end as id,
+                        case when m.invoice_id = $2 then g.doc_no else v.doc_no end as "docNo",
+                        m.invoice_line_no as "invoiceLineNo", m.receipt_line_no as "receiptLineNo", m.qty::text, m.amount::text,
+                        v.voided_at is not null as voided
+                   from acc.purchase_receipt_matches m
+                   join acc.purchase_documents g on g.company_id = m.company_id and g.id = m.receipt_id
+                   join acc.purchase_documents v on v.company_id = m.company_id and v.id = m.invoice_id
+                  where m.company_id = $1 and (m.invoice_id = $2 or m.receipt_id = $2) order by 2, 3`, [companyId, documentId]),
       ] as const);
       await c.query('select app.log_company_view($1)', [companyId]);
       return {
-        ...d, open: d.kind === 'purchase_invoice' && !d.voidedAt ? d.open : null,
+        ...d, open: ['purchase_invoice', 'purchase_debit_note'].includes(d.kind) && !d.voidedAt ? d.open : null,
         lines: lines.rows, settles: settles.rows, settledBy: settledBy.rows, notes: notes.rows, certificate: cert.rows[0] ?? null,
+        matches: matches.rows,
       };
     });
   });
