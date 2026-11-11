@@ -33,8 +33,11 @@ const minus = (a: string, b: string) => fromCents((toCents(a) ?? 0n) - (toCents(
 
 export function DocumentPaper({ p, className = '' }: { p: Paper; className?: string }) {
   const paid = p.kind === 'cash_sale' || p.kind === 'receipt' || p.kind === 'deposit';
-  const rows: [string, string, boolean?][] = [[p.kind === 'receipt' ? th.sales.receiptTotal : th.sales.subtotal, p.gross]];
-  if (Number(p.discount) > 0) rows.push([th.sales.discount, p.discount], [th.sales.afterDiscount, minus(p.gross, p.discount)]);
+  const receipt = p.kind === 'receipt';
+  // ใบเสร็จ: ยอดตัดหนี้ − ส่วนลดเงินสด = เงินที่รับ
+  const rows: [string, string, boolean?][] = [[receipt ? (Number(p.discount) > 0 ? th.sales.settledTotal : th.sales.receiptTotal) : th.sales.subtotal, p.gross]];
+  if (Number(p.discount) > 0) rows.push(receipt ? [th.sales.cashDiscountTotal, p.discount] : [th.sales.discount, p.discount],
+    [receipt ? th.sales.receiptTotal : th.sales.afterDiscount, minus(p.gross, p.discount)]);
   if (p.priceMode === 'inclusive' && p.kind !== 'receipt') rows.push([th.sales.base, p.base]);
   if (p.priceMode !== 'none' || Number(p.vat) > 0) rows.push([th.sales.vat(String(Number(p.vatRate))), p.vat]);
   rows.push([th.sales.total, p.total, true]);

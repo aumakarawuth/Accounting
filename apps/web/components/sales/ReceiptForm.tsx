@@ -27,6 +27,7 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
   const [partyCode, setPartyCode] = useState(form.customers.some((c) => c.code === initialParty) ? initialParty! : '');
   const [open, setOpen] = useState<SalesRow[] | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({}); // documentId → ยอดรับ (ไม่มี key = ไม่เลือก)
+  const [discounts, setDiscounts] = useState<Record<string, string>>({}); // documentId → ส่วนลดเงินสด (ว่าง = ไม่มี)
   const [date, setDate] = useState(isoToThai(todayIso()));
   const [cashAccount, setCashAccount] = useState(form.cashAccounts[0]?.code ?? '1110');
   const [whtRate, setWhtRate] = useState(''); // '' = ไม่หัก
@@ -60,21 +61,34 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
   }, [companyId, partyCode, initialDoc]);
 
   const calc = useMemo(() => {
-    let total = 0n, base = 0n, vat = 0n, bad: string | null = null;
+    let total = 0n, base = 0n, vat = 0n, disc = 0n, dvat = 0n, gross = 0n, bad: string | null = null;
     for (const r of open ?? []) {
       if (!(r.id in amounts)) continue;
       const a = toCents(amounts[r.id]!);
+      const d = (discounts[r.id] ?? '').trim() ? toCents(discounts[r.id]!) : 0n;
       const max = toCents(r.open!)!;
-      if (a === null || a <= 0n || a > max) { bad ??= th.sales.receiveInvalid(r.docNo); continue; }
-      total += a;
+      if (a === null || d === null || a <= 0n || d < 0n || a + d > max) { bad ??= th.sales.receiveInvalid(r.docNo); continue; }
+      const settle = a + d;
+      total += a; disc += d; gross += settle;
       base += divRound(a * toCents(r.base)!, toCents(r.total)!); // ส่วนของมูลค่าก่อน VAT ในยอดที่รับ
-      const undue = toCents(r.undueVat ?? '0') ?? 0n; // ภาษีขายบริการที่ถึงกำหนดด้วยการรับนี้ (สูตรเดียวกับ acc.post_receipt)
-      if (undue > 0n) vat += a === max ? undue : divRound(a * undue, max);
+      // ภาษีขายบริการ (สูตรเดียวกับ acc.post_receipt): ส่วนที่ตัด แบ่งเป็นส่วนที่รับเงิน (ถึงกำหนด) กับส่วนลด (ล้างออก)
+      const undue = toCents(r.undueVat ?? '0') ?? 0n;
+      if (undue > 0n) {
+        const tr = settle === max ? undue : divRound(settle * undue, max);
+        const dv = divRound(d * undue, max);
+        vat += tr - dv; dvat += dv;
+      }
     }
     const suggested = whtRate ? divRound(base * rateHundredths(whtRate), 10000n) : 0n;
     const wht = whtAmount === null ? suggested : toCents(whtAmount);
-    return { total, base, vat, bad, suggested, wht };
-  }, [open, amounts, whtRate, whtAmount]);
+    return { total, base, vat, disc, dvat, gross, bad, suggested, wht };
+  }, [open, amounts, discounts, whtRate, whtAmount]);
+  // ใส่ส่วนลดตอนยอดรับยังเต็มยอดค้าง: ลดยอดรับให้เท่าส่วนที่เหลือ
+  const setDiscount = (r: { id: string; open: string | null }, v: string) => {
+    const max = toCents(r.open!)!, prev = toCents(discounts[r.id] || '0') ?? 0n, next = toCents(v || '0');
+    setDiscounts((x) => ({ ...x, [r.id]: v }));
+    if (next !== null && next >= 0n && next < max && toCents(amounts[r.id] ?? '') === max - prev) setAmounts((x) => ({ ...x, [r.id]: fromCents(max - next) }));
+  };
 
   const isoDate = thaiToIso(date);
   const isoChequeDate = thaiToIso(chequeDate);
@@ -91,22 +105,23 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
   const entry: EntryLine[] = [
     { code: receiveCode, debit: calc.total - w, credit: 0n },
     ...(w > 0n ? [{ code: '1420', debit: w, credit: 0n }] : []),
-    ...(calc.vat > 0n ? [{ code: '2211', debit: calc.vat, credit: 0n }] : []),
-    { code: '1210', debit: 0n, credit: calc.total },
+    ...(calc.disc - calc.dvat > 0n ? [{ code: '4210', debit: calc.disc - calc.dvat, credit: 0n }] : []),
+    ...(calc.vat + calc.dvat > 0n ? [{ code: '2211', debit: calc.vat + calc.dvat, credit: 0n }] : []),
+    { code: '1210', debit: 0n, credit: calc.gross },
     ...(calc.vat > 0n ? [{ code: '2210', debit: 0n, credit: calc.vat }] : []),
   ];
-  const draft = useDocDraft(writable ? 'receipt' : null, companyId, { partyCode, amounts, date, cashAccount, whtRate, whtAmount, idemKey, byCheque, chequeNo, chequeBank, chequeDate }, {
+  const draft = useDocDraft(writable ? 'receipt' : null, companyId, { partyCode, amounts, discounts, date, cashAccount, whtRate, whtAmount, idemKey, byCheque, chequeNo, chequeBank, chequeDate }, {
     isEmpty: (d) => !d.partyCode,
     restore: (d) => {
       if (initialParty && d.partyCode !== initialParty) return false; // เปิดจากหน้าเอกสารของลูกค้ารายอื่น: ไม่ทับด้วยร่างเก่า
-      setPartyCode(d.partyCode); setAmounts(d.amounts); setDate(d.date); setCashAccount(d.cashAccount);
+      setPartyCode(d.partyCode); setAmounts(d.amounts); setDiscounts(d.discounts ?? {}); setDate(d.date); setCashAccount(d.cashAccount);
       setWhtRate(d.whtRate); setWhtAmount(d.whtAmount); setIdemKey(d.idemKey);
       setByCheque(d.byCheque ?? false); setChequeNo(d.chequeNo ?? ''); setChequeBank(d.chequeBank ?? ''); if (d.chequeDate) setChequeDate(d.chequeDate);
     },
     live: calc.total > 0n ? { title: th.sales.receiptTitle, date: isoDate ?? date, description: party?.name ?? '', lines: liveLines(entry) } : null,
   });
   const discardDraft = () => {
-    setPartyCode(''); setOpen(null); setAmounts({}); setWhtRate(''); setWhtAmount(null);
+    setPartyCode(''); setOpen(null); setAmounts({}); setDiscounts({}); setWhtRate(''); setWhtAmount(null);
     setIdemKey(crypto.randomUUID());
     draft.discard();
   };
@@ -119,7 +134,10 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
     try {
       const receipt = {
         partyCode, ...(calc.wht! > 0n ? { whtAmount: fromCents(calc.wht!) } : {}),
-        allocations: open.filter((x) => x.id in amounts).map((x) => ({ documentId: x.id, amount: fromCents(toCents(amounts[x.id]!)!) })),
+        allocations: open.filter((x) => x.id in amounts).map((x) => ({
+          documentId: x.id, amount: fromCents(toCents(amounts[x.id]!)!),
+          ...((discounts[x.id] ?? '').trim() && toCents(discounts[x.id]!)! > 0n ? { discount: fromCents(toCents(discounts[x.id]!)!) } : {}),
+        })),
       };
       const id = byCheque
         ? (await postJson<ChequeRow>(`/companies/${companyId}/cheques`, {
@@ -133,7 +151,7 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
       setError(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message);
       setBusy(false);
     }
-  }, [canPost, isoDate, open, companyId, partyCode, cashAccount, calc.wht, amounts, router, draft, idemKey, byCheque, chequeNo, chequeBank, isoChequeDate]);
+  }, [canPost, isoDate, open, companyId, partyCode, cashAccount, calc.wht, amounts, discounts, router, draft, idemKey, byCheque, chequeNo, chequeBank, isoChequeDate]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'F9') { e.preventDefault(); void submit(); } };
@@ -155,12 +173,13 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
         <section className="flex flex-col gap-4" aria-label={th.sales.customer}>
           <h2 className={h2}>{th.sales.customer}</h2>
           <PartyPicker parties={form.customers} selected={party} label={th.sales.customer} hint={th.sales.customerSearch} none={th.sales.customerNone}
-            onPick={(c) => { setOpen(null); setAmounts({}); setPartyCode(c.code); }} onClear={() => { setPartyCode(''); setOpen(null); setAmounts({}); }} />
+            onPick={(c) => { setOpen(null); setAmounts({}); setDiscounts({}); setPartyCode(c.code); }} onClear={() => { setPartyCode(''); setOpen(null); setAmounts({}); setDiscounts({}); }} />
         </section>
 
         {party && (
           <section className="flex flex-col gap-3" aria-label={th.sales.openItems}>
             <h2 className={h2}>{th.sales.openItems}</h2>
+            <p className="text-sm text-ink2">{th.sales.cashDiscountNote}</p>
             {open === null ? <p className="text-ink2">…</p> : open.length === 0 ? <p className="text-ink2">{th.sales.noOpenItems}</p> : (
               <ul className="flex flex-col border-t border-rule">
                 {open.map((r) => {
@@ -179,6 +198,13 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
                       <input inputMode="decimal" aria-label={`${th.sales.receiveAmount} ${r.docNo}`} disabled={!on}
                         className={`${inputCls} num disabled:text-ink2`} value={on ? amounts[r.id] : ''}
                         onChange={(e) => setAmounts((a) => ({ ...a, [r.id]: e.target.value }))} />
+                    {on && (
+                        <label className="col-span-3 grid grid-cols-[minmax(0,1fr)_minmax(0,9rem)] items-center gap-x-3 pl-8 text-sm text-ink2">
+                          {th.sales.cashDiscount(r.docNo)}
+                          <input inputMode="decimal" className={`${inputCls} num text-ink`} value={discounts[r.id] ?? ''} placeholder="0.00"
+                            onChange={(e) => setDiscount(r, e.target.value)} />
+                        </label>
+                      )}
                     </li>
                   );
                 })}
@@ -238,6 +264,8 @@ export function ReceiptForm({ companyId, form, initialParty, initialDoc }: {
             </div>
           </div>
           <dl className="grid grid-cols-[minmax(0,1fr)_auto] text-[15px]">
+            {calc.disc > 0n && <><dt className="py-1">{th.sales.settledTotal}</dt><dd className="num py-1">{money(calc.gross)}</dd>
+              <dt className="py-1">{th.sales.cashDiscountTotal}</dt><dd className="num py-1">{money(calc.disc)}</dd></>}
             <dt className="py-1">{th.sales.receiptTotal}</dt><dd className="num py-1">{money(calc.total)}</dd>
             <dt className="py-1">{th.sales.whtByCustomer}</dt><dd className="num py-1">{money(calc.wht ?? 0n)}</dd>
             <dt className="border-t border-ink py-1 font-semibold">{th.sales.netReceived}</dt>

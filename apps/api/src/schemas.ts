@@ -195,13 +195,15 @@ export const NewSalesDocument = z.object({
   orderId: Uuid.optional(),
   deposits: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).max(20).optional(),
 }).strict();
+// ตัดยอดหนึ่งใบ: เงินที่รับ/จ่าย + ส่วนลดเงินสด (ไม่บังคับ) ตัดหนี้รวมกัน
+const Settle = z.object({ documentId: Uuid, amount: Money, discount: Money.optional() }).strict();
 export const NewReceipt = z.object({
   date: IsoDate,
   partyCode: MasterCode,
   cashAccount: AccountCode.optional(),
   whtAmount: Money.optional(),
   description: z.string().trim().max(300).optional(),
-  allocations: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).min(1, 'เลือกใบที่รับชำระอย่างน้อย 1 ใบ').max(50),
+  allocations: z.array(Settle).min(1, 'เลือกใบที่รับชำระอย่างน้อย 1 ใบ').max(50),
 }).strict();
 export const VoidDocument = z.object({ date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
 export const SalesListQuery = z.object({
@@ -244,7 +246,7 @@ export const NewPayment = z.object({
   cashAccount: AccountCode.optional(),
   ...Wht,
   description: z.string().trim().max(300).optional(),
-  allocations: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).min(1, 'เลือกใบที่จ่ายชำระอย่างน้อย 1 ใบ').max(50),
+  allocations: z.array(Settle).min(1, 'เลือกใบที่จ่ายชำระอย่างน้อย 1 ใบ').max(50),
 }).strict();
 export const PurchaseListQuery = z.object({
   kind: z.enum(['purchase_invoice', 'cash_purchase', 'purchase_credit_note', 'payment', 'goods_receipt', 'purchase_debit_note',
@@ -267,7 +269,7 @@ export const WorksheetQuery = z.object({ month: Month, format: z.enum(['6', '8',
 
 // ---- เฟส 3.3 เช็ค ----
 const ChequeNo = z.string().trim().regex(/^[0-9A-Za-z-]{1,20}$/, 'เลขที่เช็คเป็นตัวเลข/ตัวอักษร ไม่เกิน 20 ตัว');
-const Allocations = z.array(z.object({ documentId: Uuid, amount: Money }).strict()).min(1, 'เลือกใบอย่างน้อย 1 ใบ').max(50);
+const Allocations = z.array(Settle).min(1, 'เลือกใบอย่างน้อย 1 ใบ').max(50);
 export const NewCheque = z.object({
   direction: z.enum(['received', 'paid']),
   chequeNo: ChequeNo,

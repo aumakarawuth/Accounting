@@ -140,7 +140,9 @@ export function VoucherPaper({ doc }: { doc: PurchaseDocument }) {
             <div className="text-[12px] text-ink2">{th.sales.amountInWords} ({th.purchases.netPaid})</div>
             <div>({bahtText(net)})</div>
           </div>
-          <Totals doc={doc} rows={[[th.purchases.paymentTotal, doc.total, true]]} />
+          <Totals doc={doc} rows={Number(doc.discount) > 0
+            ? [[th.sales.settledTotal, doc.gross], [th.sales.cashDiscountTotal, doc.discount], [th.purchases.paymentTotal, doc.total, true]]
+            : [[th.purchases.paymentTotal, doc.total, true]]} />
         </div>
         <div className="mt-6 grid grid-cols-3 gap-4 text-center text-[12px] @2xl:gap-8 @2xl:text-[13px]">
           {[th.purchases.preparedBy, th.purchases.approvedBy, th.purchases.receivedBy].map((s) => (

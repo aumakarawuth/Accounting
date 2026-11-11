@@ -45,7 +45,7 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         // ชื่อบัญชีที่ระบบลงให้เอง (ภาษีซื้อ เจ้าหนี้ หัก ณ ที่จ่าย) ใช้แสดงตัวอย่างรายการบัญชี ไม่มีในผังใช้ชื่อแม่แบบ
         () => c.query(`select t.code, coalesce(a.name, t.name) as name from acc.coa_template t
                    left join acc.chart_of_accounts a on a.company_id = $1 and a.code = t.code
-                  where t.code in ('1410', '1411', '1520', '2110', '2120', '2121', '2130', '2230', '5140') order by t.code`, [companyId]),
+                  where t.code in ('1410', '1411', '1520', '2110', '2120', '2121', '2130', '2230', '5120', '5140') order by t.code`, [companyId]),
       ] as const);
       return {
         company: company.rows[0], vendors: vendors.rows, items: items.rows,
@@ -92,7 +92,7 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
     const key = idemKey(req);
     const payload = {
       date: b.date, party_code: b.partyCode, cash_account: b.cashAccount, wht_kind: b.whtKind, wht_rate: b.whtRate, description: b.description,
-      allocations: b.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount })),
+      allocations: b.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount, discount: a.discount })),
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
@@ -150,10 +150,10 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
                    from acc.purchase_document_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
                    left join acc.items i on i.company_id = l.company_id and i.id = l.item_id
                   where l.company_id = $1 and l.document_id = $2 order by l.line_no`, [companyId, documentId]),
-        () => c.query(`select t.id, t.doc_no as "docNo", t.vendor_doc_no as "vendorDocNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
+        () => c.query(`select t.id, t.doc_no as "docNo", t.vendor_doc_no as "vendorDocNo", a.amount::text, a.vat_transfer::text as "vatTransfer", a.discount::text
                    from acc.purchase_allocations a join acc.purchase_documents t on t.company_id = a.company_id and t.id = a.target_id
                   where a.company_id = $1 and a.source_id = $2 order by a.id`, [companyId, documentId]),
-        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, s.voided_at is not null as voided
+        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, a.discount::text, s.voided_at is not null as voided
                    from acc.purchase_allocations a join acc.purchase_documents s on s.company_id = a.company_id and s.id = a.source_id
                   where a.company_id = $1 and a.target_id = $2 order by s.doc_date, s.doc_no`, [companyId, documentId]),
         () => c.query(`select x.id, x.kind, x.doc_no as "docNo", x.total::text, x.voided_at is not null as voided
