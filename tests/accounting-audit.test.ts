@@ -14,7 +14,7 @@ const apiPool = createPool(apiUrl());
 const app = buildApp({ pool: apiPool, auth: devAuth(), cfg: { ...authConfigFromEnv({}), allowedOrigins: false } });
 afterAll(async () => { await app.close(); await apiPool.end(); await db.end(); });
 
-type Method = 'GET' | 'POST' | 'PATCH';
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT';
 let owner: string;
 const as = (method: Method, url: string, payload?: unknown) =>
   app.inject({ method, url, payload: payload as object, headers: { 'x-dev-user-id': owner, 'x-dev-role': 'student', 'idempotency-key': randomUUID() } });
@@ -493,8 +493,9 @@ describe('ต้นทุนถัวเฉลี่ยตามลำดับ�
     await glMatches(c);
   });
 
-  it('สุ่ม 80 เอกสาร (ซื้อ/ขาย/รับคืน/ยกเลิก วันที่สุ่ม): ต้นทุนทุกใบตรงโมเดลถัวเฉลี่ยตามวันที่ที่คิดแยก · ไม่มีวันไหนติดลบ · 1310 = บัตรสต็อก', async () => {
+  it.each(['average', 'fifo'] as const)('สุ่ม 80 เอกสาร (ซื้อ/ขาย/รับคืน/ยกเลิก วันที่สุ่ม) %s: ต้นทุนทุกใบตรงโมเดลตามวันที่ที่คิดแยก · ไม่มีวันไหนติดลบ · 1310 = บัตรสต็อก', async (method) => {
     const c = await setup();
+    if (method === 'fifo') await ok('PUT', `/companies/${c}/inventory/method`, { method }); // FIFO: phase5-spec ข้อ 7
     let seed = 20261110;
     const rnd = (k: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return Math.floor(seed / 65536) % k; };
     type Doc = { id: string; kind: 'buy' | 'sell' | 'ret'; date: string; seq: number; qty: bigint; cents?: bigint; ref?: string; voided?: boolean };
@@ -536,16 +537,29 @@ describe('ต้นทุนถัวเฉลี่ยตามลำดับ�
     let Q = 0n, V = 0n;
     const unit = new Map<string, bigint>(); // ต้นทุนต่อหน่วย × 10^6 บาท = สตางค์ × 10^4
     const cost = new Map<string, bigint>();
+    const layers: { q: bigint; v: bigint }[] = []; // FIFO: ชั้นเก่าสุดก่อน
     for (const d of live) {
-      if (d.kind === 'buy') { Q += d.qty; V += d.cents!; continue; }
+      if (d.kind === 'buy') { Q += d.qty; V += d.cents!; layers.push({ q: d.qty, v: d.cents! }); continue; }
       if (d.kind === 'sell') {
         expect(Q >= d.qty, `สต็อก ณ ${d.date} ต้องพอ`).toBe(true);
-        const u = div(V * 10000n, Q);
-        const cst = d.qty === Q ? V : div(d.qty * u, 10000n);
-        unit.set(d.id, u); cost.set(d.id, cst); Q -= d.qty; V -= cst;
+        let cst: bigint;
+        if (method === 'fifo') {
+          let need = d.qty; cst = 0n;
+          while (need > 0n) {
+            const l = layers[0]!;
+            if (l.q <= need) { cst += l.v; need -= l.q; layers.shift(); }
+            else { const part = div(l.v * need, l.q); cst += part; l.v -= part; l.q -= need; need = 0n; }
+          }
+          unit.set(d.id, div(cst * 10000n, d.qty));
+        } else {
+          const u = div(V * 10000n, Q);
+          cst = d.qty === Q ? V : div(d.qty * u, 10000n);
+          unit.set(d.id, u);
+        }
+        cost.set(d.id, cst); Q -= d.qty; V -= cst;
       } else {
         const cst = div(d.qty * unit.get(d.ref!)!, 10000n);
-        cost.set(d.id, cst); Q += d.qty; V += cst;
+        cost.set(d.id, cst); Q += d.qty; V += cst; layers.push({ q: d.qty, v: cst });
       }
       expect(Q >= 0n).toBe(true);
     }

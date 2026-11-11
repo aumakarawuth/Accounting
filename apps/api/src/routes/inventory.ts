@@ -4,7 +4,7 @@ import { querySequence, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
-import { CompanyParams, IdempotencyKey, InventoryAdjustment, ItemParams } from '../schemas.js';
+import { CompanyParams, IdempotencyKey, InventoryAdjustment, InventoryMethod, ItemParams } from '../schemas.js';
 
 // เฟส 3.1 สินค้าคงเหลือ (perpetual / ถัวเฉลี่ยเคลื่อนที่): ยอดคงเหลือ บัตรสต็อก และปรับสต็อก (เปิดยอด/ตรวจนับ)
 // ตารางและการลงบัญชีอยู่ใน DB (migration 019–023, 031) route นี้แค่อ่านและเรียก acc.post_inventory_adjustment
@@ -18,9 +18,11 @@ export function inventoryRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthA
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const [company, items, gl, accounts] = await querySequence([
-        () => c.query(`select name, app.can_write_company(id) as "canWrite", app.company_locked(id) as locked from acc.companies where id = $1`, [companyId]),
+        () => c.query(`select name, app.can_write_company(id) as "canWrite", app.company_locked(id) as locked, inventory_method as "inventoryMethod"
+                   from acc.companies where id = $1`, [companyId]),
         () => c.query(
-          `select i.code, i.name, i.unit, i.active, b.quantity::text, b.value::text, b.unit_cost::text as "unitCost"
+          `select i.code, i.name, i.unit, i.active, b.quantity::text, b.value::text, b.unit_cost::text as "unitCost",
+                  acc.item_cost_method(i.company_id, i.id) as method
              from acc.items i cross join lateral acc.inventory_balance(i.company_id, i.id) b
             where i.company_id = $1 and i.track_inventory order by i.code`, [companyId]),
         () => c.query(
@@ -42,7 +44,8 @@ export function inventoryRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthA
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
       const item = (await c.query(
-        `select i.id, i.code, i.name, i.unit, i.track_inventory as "trackInventory" from acc.items i where i.company_id = $1 and i.code = $2`, [companyId, code])).rows[0];
+        `select i.id, i.code, i.name, i.unit, i.track_inventory as "trackInventory", acc.item_cost_method(i.company_id, i.id) as method
+           from acc.items i where i.company_id = $1 and i.code = $2`, [companyId, code])).rows[0];
       if (!item) throw new HttpError(404, 'not_found', `ไม่พบสินค้ารหัส ${code}`);
       const card = await c.query(
         `select to_char(m.movement_date, 'YYYY-MM-DD') as date, m.kind, m.reference, e.id as "entryId", e.doc_no as "entryDocNo",
@@ -55,9 +58,25 @@ export function inventoryRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthA
           where m.company_id = $1 and m.item_id = $2
          window w as (order by m.movement_date, m.created_at, m.id rows between unbounded preceding and current row)
           order by m.movement_date, m.created_at, m.id`, [companyId, item.id]);
+      // FIFO: ชั้นต้นทุนที่เหลือ (เก่าสุดก่อน) ใช้สอนว่าขายครั้งต่อไปตัดชั้นไหน
+      const layers = item.method === 'fifo'
+        ? (await c.query(`select l->>'date' as date, (l->>'qty')::numeric(14,3)::text as qty, (l->>'value')::numeric(18,2)::text as value
+                            from acc.fifo_walk($1, $2, null, null) w cross join lateral jsonb_array_elements(w.layers) l`, [companyId, item.id])).rows
+        : null;
       const { id: _id, ...rest } = item;
-      return { item: rest, card: card.rows };
+      return { item: rest, card: card.rows, layers };
     });
+  });
+
+  // วิธีคิดต้นทุนตั้งต้นของบริษัท (เปลี่ยนได้เมื่อสินค้าที่ใช้วิธีนี้ยังไม่เคลื่อนไหว)
+  app.put('/companies/:companyId/inventory/method', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const { method } = InventoryMethod.parse(req.body);
+    await withUser(pool, await user(req), async (c) => {
+      await requireWritable(c, companyId);
+      await c.query('select acc.set_inventory_method($1, $2)', [companyId, method]);
+    });
+    return { method };
   });
 
   // ปรับสต็อก: จำนวนบวก = รับเข้า (ต้องใส่ต้นทุนต่อหน่วย) · ลบ = ตัดออกตามต้นทุนเฉลี่ย · บัญชีคู่เลือกเอง

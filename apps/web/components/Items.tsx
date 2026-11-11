@@ -91,6 +91,7 @@ function ItemForm({ companyId, chart, item, onDone }: { companyId: string; chart
   const [purchase, setPurchase] = useState(item?.purchasePrice ?? '');
   const [salesAcc, setSalesAcc] = useState(item?.salesAccount ?? '');
   const [purchaseAcc, setPurchaseAcc] = useState(item?.purchaseAccount ?? '');
+  const [method, setMethod] = useState<string>(item?.costMethod ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const revenue = chart.filter((a) => a.active && a.type === 'revenue');
@@ -109,7 +110,7 @@ function ItemForm({ companyId, chart, item, onDone }: { companyId: string; chart
     setError(null);
     const body: Record<string, unknown> = {
       name: name.trim(), unit: unit.trim(), isService: service, trackInventory: !service && track, salePrice: sale || null, purchasePrice: purchase || null,
-      salesAccount: salesAcc || null, purchaseAccount: purchaseAcc || null,
+      salesAccount: salesAcc || null, purchaseAccount: purchaseAcc || null, costMethod: !service && track && method ? method : null,
     };
     try {
       if (item) {
@@ -152,6 +153,15 @@ function ItemForm({ companyId, chart, item, onDone }: { companyId: string; chart
         <span className="text-[13px] text-ink2">{th.items.note}</span>
       </fieldset>
       {!service && <CheckField label={th.items.track} checked={track} onChange={setTrack} note={th.items.trackNote} />}
+      {!service && track && (
+        <div className="flex flex-col gap-1">
+          <SelectField label={th.items.costMethod} value={method} onChange={setMethod}>
+            <option value="">{th.items.costMethodCompany}</option>
+            {Object.entries(th.inventory.methods).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </SelectField>
+          <span className="text-[13px] text-ink2">{th.items.costMethodNote}</span>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
         <TextField label={th.items.salePrice} value={sale} onChange={(v) => setSale(v.trim())} inputMode="decimal" mono error={errors.sale} />
         <TextField label={th.items.purchasePrice} value={purchase} onChange={(v) => setPurchase(v.trim())} inputMode="decimal" mono error={errors.purchase} />

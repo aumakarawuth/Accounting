@@ -22,6 +22,8 @@ export const postJson = <T>(path: string, data: unknown, headers: Record<string,
   api<T>(path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(data) });
 export const patchJson = <T>(path: string, data: unknown) =>
   api<T>(path, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+export const putJson = <T>(path: string, data: unknown) =>
+  api<T>(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
 
 export type Me = { id: string; role: 'admin' | 'teacher' | 'student' | 'ta'; displayName: string; studentCode: string | null; mustChange: boolean };
 export type WorkStatus = 'draft' | 'submitted' | 'reviewing' | 'returned' | 'passed' | 'closed';
@@ -120,11 +122,12 @@ export type Party = {
 };
 export type Item = {
   code: string; name: string; unit: string; isService: boolean; trackInventory: boolean; salePrice: string | null; purchasePrice: string | null;
-  salesAccount: string | null; purchaseAccount: string | null; active: boolean; version: number;
+  salesAccount: string | null; purchaseAccount: string | null; costMethod: CostMethod | null; active: boolean; version: number;
 };
-export type InventoryItem = { code: string; name: string; unit: string; active: boolean; quantity: string; value: string; unitCost: string };
+export type CostMethod = 'average' | 'fifo';
+export type InventoryItem = { code: string; name: string; unit: string; active: boolean; quantity: string; value: string; unitCost: string; method: CostMethod };
 export type InventoryOverview = {
-  company: { name: string; canWrite: boolean; locked: boolean };
+  company: { name: string; canWrite: boolean; locked: boolean; inventoryMethod: CostMethod };
   items: InventoryItem[]; totalValue: string; glBalance: string; accounts: { code: string; name: string }[];
 };
 export type StockCardRow = {
@@ -132,7 +135,10 @@ export type StockCardRow = {
   valueIn: string; valueOut: string; balanceQty: string; balanceValue: string;
   restated: boolean;
 };
-export type StockCard = { item: { code: string; name: string; unit: string; trackInventory: boolean }; card: StockCardRow[] };
+export type StockCard = {
+  item: { code: string; name: string; unit: string; trackInventory: boolean; method: CostMethod }; card: StockCardRow[];
+  layers: { date: string; qty: string; value: string }[] | null;
+};
 export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note' | 'deposit' | 'deposit_applied';
 export type SalesFormData = {
   company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };

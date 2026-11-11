@@ -147,10 +147,12 @@ const itemFields = {
   purchasePrice: Money.nullable(),
   salesAccount: AccountCode.nullable(),
   purchaseAccount: AccountCode.nullable(),
+  costMethod: z.enum(['average', 'fifo']).nullable(),   // null = ตามวิธีของบริษัท
 };
 export const NewItem = z.object({ code: MasterCode, ...itemFields }).partial({
-  unit: true, isService: true, trackInventory: true, salePrice: true, purchasePrice: true, salesAccount: true, purchaseAccount: true,
+  unit: true, isService: true, trackInventory: true, salePrice: true, purchasePrice: true, salesAccount: true, purchaseAccount: true, costMethod: true,
 }).strict();
+export const InventoryMethod = z.object({ method: z.enum(['average', 'fifo']) }).strict();
 export const EditItem = z.object({ version: Version, active: z.boolean(), ...itemFields }).partial().required({ version: true }).strict();
 export const ItemParams = z.object({ companyId: Uuid, code: MasterCode });
 // ปรับสต็อก (เปิดยอด/ผลตรวจนับ): จำนวนมีเครื่องหมาย บวก = รับเข้า ลบ = ตัดออก
