@@ -329,3 +329,19 @@ export type AssignmentOverview = {
   students: OverviewStudent[];
   now: string;
 };
+
+// ---- เฟส 5 โมดูล 3: ยอดยกมา ----
+export type OpeningItem = { docNo: string; ref?: string; partyCode: string; partyName: string; date: string; dueDate: string; amount: string; undueVat: string };
+export type OpeningData = {
+  opening: null | {
+    id: string; date: string; entryId: string; docNo: string; total: string; createdAt: string;
+    receivables: OpeningItem[]; payables: OpeningItem[];
+    assets: { code: string; name: string; cost: string; accumulated: string; months: number }[];
+    inventory: { itemCode: string; name: string; qty: string; unitCost: string; value: string }[];
+  };
+  canWrite: boolean; vatRegistered: boolean; firstEntryDate: string | null;
+  accounts: { code: string; name: string; type: string }[];
+  customers: { code: string; name: string; creditDays: number }[];
+  vendors: { code: string; name: string; creditDays: number }[];
+  items: { code: string; name: string; unit: string }[];
+};

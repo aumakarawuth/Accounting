@@ -314,5 +314,9 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   ต้นทุนขาย = ต้นงวด + ซื้อสุทธิ − ปลายงวด (ระบบต่อเนื่องและสิ้นงวด) · ระบบสิ้นงวดบันทึกยอดตรวจนับปลายเดือนเป็น AJ · ฐานะการเงินแยกหมุนเวียน/ไม่หมุนเวียน
   (`docs/assumptions.md` ข้อ 41, เทสต์ `tests/multi-step-statements.test.ts` + e2e `tests/e2e/multi-step-statements.spec.ts`)
   · migration `20261110000105` (โมดูล 1) merge แล้ว ยังไม่ apply กับ Supabase
-  ยังค้าง: โมดูล 3–10
+  · **โมดูล 3 ยอดยกมาพร้อมรายตัว** (11 พ.ย. 2569, migration `20261111000107` ยังไม่ apply กับ Supabase): หน้า "ยอดยกมา" ลง OB ครั้งเดียว
+  ลูกหนี้/เจ้าหนี้รายใบ (รับ/จ่ายชำระต่อได้) สินทรัพย์พร้อมค่าเสื่อมสะสม (ลงค่าเสื่อมต่อ) สินค้า (ต้นทุนถัวเฉลี่ยเริ่มจากยกมา) บัญชีคุมมาจากรายตัว ยกเลิกได้ทั้งชุด
+  (`docs/assumptions.md` ข้อ 42, เทสต์ `tests/opening-balances.test.ts` + e2e `tests/e2e/opening-balances.spec.ts`)
+  · migration `20261111000106` (โมดูล 2) merge แล้ว ยังไม่ apply กับ Supabase
+  ยังค้าง: โมดูล 4–10
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)
