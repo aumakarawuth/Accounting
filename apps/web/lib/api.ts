@@ -41,7 +41,15 @@ export type TrialBalance = {
   month: string;
   rows: { code: string; name: string; type: string; normalSide: 'debit' | 'credit'; debit: string; credit: string }[];
   totalDebit: string; totalCredit: string;
+  stage: 'before' | 'after'; fiscalYear: FiscalYearRange; closingDocNos: string[]; priorYearUnclosed: boolean;
 };
+export type FiscalYearRange = { start: string; end: string };
+export type FiscalYearClosing = { closedAt: string; netIncome: string; docNo: string | null };
+export type FiscalYears = {
+  startMonth: number; version: number; canClose: boolean; locked: boolean; canChangeStart: boolean;
+  years: { start: string; end: string; entries: number; closing: FiscalYearClosing | null; reopened: (FiscalYearClosing & { reopenedAt: string })[] }[];
+};
+export type YearClosingPreview = { yearEnd: string; lines: { code: string; name: string; debit: string; credit: string }[]; netIncome: string; totalDebit: string };
 export type LedgerAccount = { code: string; name: string; normalSide: 'debit' | 'credit'; opening: string; debit: string; credit: string; closing: string };
 export type Ledger = {
   month: string;
@@ -55,6 +63,7 @@ export type Statements = {
   month: string; scope: 'month' | 'ytd'; from: string;
   revenue: Line[]; expense: Line[]; assets: Line[]; liabilities: Line[]; equity: Line[];
   totalRevenue: string; totalExpense: string; netIncome: string; unclosedProfit: string;
+  fiscalYear: FiscalYearRange; yearProfit: string; priorUnclosedProfit: string;
   totalAssets: string; totalLiabilities: string; totalEquity: string; totalLiabilitiesEquity: string; balanced: boolean;
 };
 export type SubmissionEvent = { id: number; at: string; action: string; from: string; to: string; round: number; note: string | null; score: string | null; actorName: string | null; byOwner: boolean };
@@ -214,6 +223,7 @@ export type Worksheet = {
   month: string; formats: number[]; format: number | null; rows?: WorksheetRow[];
   totals?: { tb: WsPair; adj: WsPair; atb: WsPair; is: WsPair; bs: WsPair };
   netIncome?: string; result?: { is: WsPair; bs: WsPair }; grand?: { is: WsPair; bs: WsPair };
+  fiscalYear?: FiscalYearRange; priorYearUnclosed?: boolean;
 };
 
 // ---- เฟส 3.3 เช็ค ----

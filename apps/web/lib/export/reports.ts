@@ -22,7 +22,7 @@ export function trialBalanceReport(company: string, tb: TrialBalance, now = new 
   const unbalanced = tb.totalDebit !== tb.totalCredit;
   return {
     fileName: fileName(t.title, company, tb.month), sheetName: t.title, company, title: t.title,
-    subtitle: th.export.asOf(monthEndLabel(tb.month)), orientation: 'portrait', printedAt: printedAt(now),
+    subtitle: `${tb.stage === 'after' ? t.stageAfter : t.stageBefore} · ${th.export.asOf(monthEndLabel(tb.month))}`, orientation: 'portrait', printedAt: printedAt(now),
     sections: [{
       columns: [{ label: t.code, width: 10, kind: 'mono' }, { label: t.account, width: 40 }, money(th.money.debit), money(th.money.credit)],
       rows: [
@@ -91,7 +91,8 @@ export function statementsReport(company: string, st: Statements, now = new Date
       { cells: [null, s.totalLiabilities, st.totalLiabilities], style: 'subtotal' },
       { cells: [null, s.equity, null], style: 'heading' },
       ...lines(st.equity),
-      { cells: [null, s.unclosed, st.unclosedProfit], indent: 1 },
+      { cells: [null, s.yearProfit, st.yearProfit], indent: 1 },
+      ...((toCents(st.priorUnclosedProfit) ?? 0n) === 0n ? [] : [{ cells: [null, s.priorUnclosed, st.priorUnclosedProfit], indent: 1 } as Row]),
       { cells: [null, s.totalEquity, st.totalEquity], style: 'subtotal' },
       { cells: [null, s.totalLiabilitiesEquity, st.totalLiabilitiesEquity], style: 'total' },
     ],

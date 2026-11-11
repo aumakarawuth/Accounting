@@ -1,7 +1,9 @@
 import { Money } from '@/components/Money';
 import type { Statements } from '@/lib/api';
 import { monthEndLabel, monthLabel } from '@/lib/date';
-import { formatMoney, isNegative } from '@/lib/money';
+import { formatMoney, isNegative, toCents } from '@/lib/money';
+
+const isZero = (v: string) => (toCents(v) ?? 0n) === 0n;
 import { th } from '@/i18n/th';
 
 type Line = { code: string; name: string; amount: string };
@@ -13,8 +15,8 @@ function Section({ title, lines, total, totalLabel }: { title: string; lines: Li
       <h3 className="border-b border-rule pb-1 font-semibold">{title}</h3>
       {lines.length === 0 && <p className="py-1.5 pl-4 text-sm text-ink2">{th.statements.none}</p>}
       {lines.map((l) => (
-        <div key={l.code} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-rule-faint py-1.5 pl-4">
-          <span><span className="font-num text-[13px] text-ink2">{l.code}</span> {l.name}</span>
+        <div key={l.code || l.name} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-rule-faint py-1.5 pl-4">
+          <span>{/^\d/.test(l.code) && <span className="font-num text-[13px] text-ink2">{l.code} </span>}{l.name}</span>
           <Money value={l.amount} />
         </div>
       ))}
@@ -62,7 +64,11 @@ export function StatementsView({ st, company }: { st: Statements; company: strin
         <Section title={th.statements.liabilities} lines={st.liabilities} total={st.totalLiabilities} totalLabel={th.statements.totalLiabilities} />
         <Section
           title={th.statements.equity}
-          lines={[...st.equity, { code: '', name: th.statements.unclosed, amount: st.unclosedProfit }]}
+          lines={[
+            ...st.equity,
+            { code: '', name: th.statements.yearProfit, amount: st.yearProfit },
+            ...(isZero(st.priorUnclosedProfit) ? [] : [{ code: '', name: th.statements.priorUnclosed, amount: st.priorUnclosedProfit }]),
+          ]}
           total={st.totalEquity}
           totalLabel={th.statements.totalEquity}
         />

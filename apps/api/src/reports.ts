@@ -8,19 +8,49 @@ export type TrialBalanceData = {
   month: string;
   rows: { code: string; name: string; type: string; normalSide: 'debit' | 'credit'; debit: string; credit: string }[];
   totalDebit: string; totalCredit: string;
+  /** before = ก่อนปิดบัญชี (ไม่รวม CL ของปีบัญชีนี้) · after = หลังปิดบัญชี */
+  stage: 'before' | 'after';
+  fiscalYear: { start: string; end: string };
+  /** รายการปิดบัญชี (CL) ของปีบัญชีนี้ที่ลงในเดือนนี้: มี = เลือกดูหลังปิดบัญชีได้ */
+  closingDocNos: string[];
+  /** ปีบัญชีก่อนยังไม่ได้ปิดบัญชี: ยอดรายได้/ค่าใช้จ่ายปีก่อนยังรวมอยู่ */
+  priorYearUnclosed: boolean;
 };
 
-// งบทดลอง: ยอดสะสมตั้งแต่เริ่มบริษัทถึงสิ้นเดือนที่เลือก (จาก account_balances)
-// ยอดสุทธิของแต่ละบัญชีลงช่องเดบิตหรือเครดิตช่องเดียว; ยอดรวมคำนวณใน SQL (ไม่บวกเงินใน JS)
-export async function trialBalance(c: pg.PoolClient, companyId: string, month: string, all = false): Promise<TrialBalanceData> {
+/** ปีบัญชีของเดือน + มีรายได้/ค่าใช้จ่ายก่อนต้นปีบัญชีที่ยังไม่ได้ปิดบัญชีหรือไม่ */
+export async function fiscalContext(c: pg.PoolClient, companyId: string, month: string) {
   const r = await c.query(
-    `with net as (
+    `with fy as (select acc.fiscal_year_start($1, $2::date) as s)
+     select fy.s::text as start, (fy.s + interval '1 year - 1 day')::date::text as "end",
+            exists (select 1 from acc.journal_lines l
+                      join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
+                      join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+                     where l.company_id = $1 and e.entry_date < fy.s and a.type in ('revenue', 'expense')
+                     group by a.id having sum(l.debit - l.credit) <> 0) as "priorYearUnclosed"
+       from fy`, [companyId, `${month}-01`]);
+  return r.rows[0] as { start: string; end: string; priorYearUnclosed: boolean };
+}
+
+// งบทดลอง: ยอดสะสมตั้งแต่เริ่มบริษัทถึงสิ้นเดือนที่เลือก (จาก account_balances)
+// ก่อนปิดบัญชี (ค่าเริ่มต้น) หักรายการปิดบัญชี CL ของปีบัญชีนี้ออก ปีก่อนที่ปิดแล้วยอดอยู่ใน 3210
+// ยอดสุทธิของแต่ละบัญชีลงช่องเดบิตหรือเครดิตช่องเดียว; ยอดรวมคำนวณใน SQL (ไม่บวกเงินใน JS)
+export async function trialBalance(c: pg.PoolClient, companyId: string, month: string, all = false, stage: 'before' | 'after' = 'before'): Promise<TrialBalanceData> {
+  const fy = await fiscalContext(c, companyId, month);
+  const r = await c.query(
+    `with cl as (
+       select l.account_id, sum(l.debit - l.credit) as net
+         from acc.journal_lines l join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
+        where l.company_id = $1 and e.doc_prefix = 'CL' and e.entry_date >= $4::date
+          and e.entry_date < ($2::date + interval '1 month')
+        group by l.account_id
+     ), net as (
        select a.code, a.name, a.type, a.normal_side,
-              coalesce(sum(b.debit_total - b.credit_total) filter (where p.start_date <= $2::date), 0) as net,
-              count(b.*) filter (where p.start_date <= $2::date) as touched
+              coalesce(sum(b.debit_total - b.credit_total) filter (where p.start_date <= $2::date), 0)
+                - case when $5 then 0 else coalesce(max(cl.net), 0) end as net
          from acc.chart_of_accounts a
          left join acc.account_balances b on b.company_id = a.company_id and b.account_id = a.id
          left join acc.periods p on p.company_id = b.company_id and p.id = b.period_id
+         left join cl on cl.account_id = a.id
         where a.company_id = $1
         group by a.code, a.name, a.type, a.normal_side
      )
@@ -32,14 +62,22 @@ export async function trialBalance(c: pg.PoolClient, companyId: string, month: s
        from net
       where $3 or net <> 0
       order by code`,
-    [companyId, `${month}-01`, all],
+    [companyId, `${month}-01`, all, fy.start, stage === 'after'],
   );
+  const docs = await c.query(
+    `select doc_no from acc.journal_entries
+      where company_id = $1 and doc_prefix = 'CL' and entry_date >= $2::date and entry_date >= $3::date
+        and entry_date < ($3::date + interval '1 month') order by doc_no`, [companyId, fy.start, `${month}-01`]);
   const first = r.rows[0];
   return {
     month,
     rows: r.rows.map(({ totalDebit: _d, totalCredit: _c, ...row }) => row),
     totalDebit: first?.totalDebit ?? '0.00',
     totalCredit: first?.totalCredit ?? '0.00',
+    stage,
+    fiscalYear: { start: fy.start, end: fy.end },
+    closingDocNos: docs.rows.map((x) => x.doc_no as string),
+    priorYearUnclosed: fy.priorYearUnclosed,
   };
 }
 
@@ -120,32 +158,52 @@ export async function ledger(c: pg.PoolClient, companyId: string, month: string,
 type StLine = { code: string; name: string; amount: string };
 export type StatementsData = {
   month: string; scope: 'month' | 'ytd'; from: string;
+  fiscalYear: { start: string; end: string };
   revenue: StLine[]; expense: StLine[]; assets: StLine[]; liabilities: StLine[]; equity: StLine[];
-  totalRevenue: string; totalExpense: string; netIncome: string; unclosedProfit: string;
+  totalRevenue: string; totalExpense: string; netIncome: string;
+  /** กำไรที่ยังไม่ได้โอนเข้าบัญชีทุน = yearProfit + priorUnclosedProfit */
+  unclosedProfit: string;
+  /** กำไร(ขาดทุน)สุทธิตั้งแต่ต้นปีบัญชีถึงสิ้นเดือนนี้ */
+  yearProfit: string;
+  /** กำไร(ขาดทุน)ของปีบัญชีก่อนที่ยังไม่ได้ปิดบัญชี */
+  priorUnclosedProfit: string;
   totalAssets: string; totalLiabilities: string; totalEquity: string; totalLiabilitiesEquity: string; balanced: boolean;
 };
 
-// งบการเงิน: กำไรขาดทุน (เดือนนี้หรือต้นปีถึงเดือนนี้) + ฐานะการเงิน ณ สิ้นเดือน
+// งบการเงิน: กำไรขาดทุน (เดือนนี้หรือต้นปีบัญชีถึงเดือนนี้) + ฐานะการเงิน ณ สิ้นเดือน
 // ยอดหันตามด้านปกติ (บัญชีปรับลด เช่น ค่าเสื่อมราคาสะสม/ถอนใช้ส่วนตัว/ส่วนลด จึงติดลบ = หักออก)
-// ยังไม่มีปิดบัญชีสิ้นปี: กำไรสะสมตั้งแต่เริ่มบริษัทแสดงเป็น "ยังไม่ได้ปิดบัญชี" ในส่วนทุน
+// ก่อนปิดบัญชี: ไม่รวมรายการปิดบัญชี (CL) ของปีบัญชีนี้ · กำไรปีนี้และกำไรปีก่อนที่ยังไม่ได้ปิดบัญชีแสดงแยกในส่วนทุน
 export async function statements(c: pg.PoolClient, companyId: string, month: string, scope: 'month' | 'ytd'): Promise<StatementsData> {
   const to = `${month}-01`;
-  const from = scope === 'month' ? to : `${month.slice(0, 4)}-01-01`;
+  const fy = await fiscalContext(c, companyId, month);
+  const from = scope === 'month' ? to : fy.start;
   const r = await c.query(
-    `with b as (
+    `with cl as (
+       select l.account_id, sum(l.debit - l.credit) as net
+         from acc.journal_lines l join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
+        where l.company_id = $1 and e.doc_prefix = 'CL' and e.entry_date >= $4::date
+          and e.entry_date < ($3::date + interval '1 month')
+        group by l.account_id
+     ), b as (
        select a.code, a.name, a.type, case a.normal_side when 'debit' then 1 else -1 end as s,
-              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date between $2::date and $3::date), 0) as period_net,
-              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date <= $3::date), 0) as cum_net
+              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date between $2::date and $3::date), 0)
+                - coalesce(max(cl.net), 0) as period_net,
+              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date between $4::date and $3::date), 0)
+                - coalesce(max(cl.net), 0) as year_net,
+              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date <= $3::date), 0)
+                - coalesce(max(cl.net), 0) as cum_net
          from acc.chart_of_accounts a
          left join acc.account_balances x on x.company_id = a.company_id and x.account_id = a.id
          left join acc.periods p on p.company_id = x.company_id and p.id = x.period_id
+         left join cl on cl.account_id = a.id
         where a.company_id = $1
         group by a.code, a.name, a.type, a.normal_side
      ), lines as (
-       select type, code, name, (period_net * s) as period_amt, (cum_net * s) as balance from b
+       select type, code, name, (period_net * s) as period_amt, (year_net * s) as year_amt, (cum_net * s) as balance from b
      ), t as (
        select coalesce(sum(period_amt) filter (where type = 'revenue'), 0) as rev,
               coalesce(sum(period_amt) filter (where type = 'expense'), 0) as exp,
+              coalesce(sum(year_amt) filter (where type = 'revenue'), 0) - coalesce(sum(year_amt) filter (where type = 'expense'), 0) as year_profit,
               coalesce(sum(balance) filter (where type = 'revenue'), 0) - coalesce(sum(balance) filter (where type = 'expense'), 0) as unclosed,
               coalesce(sum(balance) filter (where type = 'asset'), 0) as assets,
               coalesce(sum(balance) filter (where type = 'liability'), 0) as liabilities,
@@ -162,15 +220,17 @@ export async function statements(c: pg.PoolClient, companyId: string, month: str
        'totalExpense', exp::numeric(18,2)::text,
        'netIncome', (rev - exp)::numeric(18,2)::text,
        'unclosedProfit', unclosed::numeric(18,2)::text,
+       'yearProfit', year_profit::numeric(18,2)::text,
+       'priorUnclosedProfit', (unclosed - year_profit)::numeric(18,2)::text,
        'totalAssets', assets::numeric(18,2)::text,
        'totalLiabilities', liabilities::numeric(18,2)::text,
        'totalEquity', (equity + unclosed)::numeric(18,2)::text,
        'totalLiabilitiesEquity', (liabilities + equity + unclosed)::numeric(18,2)::text,
        'balanced', assets = liabilities + equity + unclosed
      ) as st from t`,
-    [companyId, from, to],
+    [companyId, from, to, fy.start],
   );
-  return { month, scope, from: from.slice(0, 7), ...r.rows[0].st };
+  return { month, scope, from: from.slice(0, 7), fiscalYear: { start: fy.start, end: fy.end }, ...r.rows[0].st };
 }
 
 // ---- กระดาษทำการ ----
@@ -191,6 +251,7 @@ export type WorksheetData =
   | { month: string; formats: number[]; format: null }
   | {
       month: string; formats: number[]; format: number; rows: WorksheetRow[];
+      fiscalYear: { start: string; end: string }; priorYearUnclosed: boolean;
       totals: { tb: Pair; adj: Pair; atb: Pair; is: Pair; bs: Pair };
       netIncome: string; result: { is: Pair; bs: Pair }; grand: { is: Pair; bs: Pair };
     };
@@ -226,9 +287,11 @@ export async function worksheet(c: pg.PoolClient, companyId: string, month: stri
   });
   // กำไรสุทธิ = เครดิตงบกำไรขาดทุน − เดบิต (ใส่ฝั่งที่น้อยกว่าของงบกำไรขาดทุน และฝั่งตรงข้ามของงบฐานะการเงิน)
   const net = sum.is.c - sum.is.d;
+  const fy = await fiscalContext(c, companyId, month);
   const pair = (k: keyof typeof sum) => ({ debit: money(sum[k].d), credit: money(sum[k].c) });
   return {
     month, formats, format, rows,
+    fiscalYear: { start: fy.start, end: fy.end }, priorYearUnclosed: fy.priorYearUnclosed,
     totals: { tb: pair('tb'), adj: pair('adj'), atb: pair('atb'), is: pair('is'), bs: pair('bs') },
     netIncome: money(net),
     result: {
