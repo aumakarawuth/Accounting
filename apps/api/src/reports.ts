@@ -168,7 +168,125 @@ export type StatementsData = {
   /** กำไร(ขาดทุน)ของปีบัญชีก่อนที่ยังไม่ได้ปิดบัญชี */
   priorUnclosedProfit: string;
   totalAssets: string; totalLiabilities: string; totalEquity: string; totalLiabilitiesEquity: string; balanced: boolean;
+  /** งบกำไรขาดทุนหลายขั้น (docs/phase5-spec.md ข้อ 2) */
+  multiStep: IncomeMultiStep;
+  /** งบแสดงฐานะการเงินแยกหมุนเวียน/ไม่หมุนเวียน */
+  classified: ClassifiedPosition;
 };
+
+export type CostOfSales = {
+  opening: string; purchases: string; discounts: string; returns: string; otherCosts: StLine[];
+  netPurchases: string; available: string; closing: string; adjustments: string; total: string;
+};
+export type IncomeMultiStep = {
+  sales: StLine[]; netSales: string;
+  costOfSales: CostOfSales | null;
+  grossProfit: string;
+  otherIncome: StLine[]; totalOtherIncome: string;
+  sellingAdmin: StLine[]; totalSellingAdmin: string;
+  otherExpenses: StLine[]; totalOtherExpenses: string;
+  profitBeforeFinance: string;
+  financeCosts: StLine[]; totalFinanceCosts: string;
+  profitBeforeTax: string;
+  incomeTax: StLine[]; totalIncomeTax: string;
+  netIncome: string;
+};
+export type ClassifiedPosition = {
+  currentAssets: StLine[]; totalCurrentAssets: string; nonCurrentAssets: StLine[]; totalNonCurrentAssets: string;
+  currentLiabilities: StLine[]; totalCurrentLiabilities: string; nonCurrentLiabilities: StLine[]; totalNonCurrentLiabilities: string;
+};
+
+// ---- จัดกลุ่มตามรหัสบัญชี (ผังไทย: หลักที่สองบอกกลุ่มย่อย) ----
+type IncomeGroup = 'sales' | 'otherIncome' | 'cogs' | 'sellingAdmin' | 'otherExpenses' | 'financeCosts' | 'incomeTax';
+export function incomeGroup(code: string, type: 'revenue' | 'expense'): IncomeGroup {
+  if (type === 'revenue') return /^4[12]/.test(code) ? 'sales' : 'otherIncome';
+  if (code.startsWith('51')) return 'cogs';
+  if (code.startsWith('531')) return 'financeCosts';
+  if (code.startsWith('53')) return 'otherExpenses';
+  if (/^5[4-9]/.test(code)) return 'incomeTax';
+  return 'sellingAdmin';
+}
+/** สินทรัพย์ 11–15 / หนี้สิน 21–25 = หมุนเวียน */
+export const isCurrent = (code: string) => /^[12][1-5]/.test(code);
+
+const toC = (v: string): bigint => {
+  const neg = v.startsWith('-');
+  const [i, f = ''] = (neg ? v.slice(1) : v).split('.');
+  const c = BigInt(i || '0') * 100n + BigInt((f + '00').slice(0, 2));
+  return neg ? -c : c;
+};
+const sumC = (lines: StLine[]) => lines.reduce((a, l) => a + toC(l.amount), 0n);
+
+async function multiStepParts(
+  c: pg.PoolClient, companyId: string, from: string, to: string, fyStart: string,
+  revenue: StLine[], expense: StLine[], assets: StLine[], liabilities: StLine[],
+): Promise<{ multiStep: IncomeMultiStep; classified: ClassifiedPosition }> {
+  const g: Record<IncomeGroup, StLine[]> = { sales: [], otherIncome: [], cogs: [], sellingAdmin: [], otherExpenses: [], financeCosts: [], incomeTax: [] };
+  for (const l of revenue) g[incomeGroup(l.code, 'revenue')].push(l);
+  for (const l of expense) g[incomeGroup(l.code, 'expense')].push(l);
+
+  // ต้นทุนขาย: 1310 ต้น/ปลายงวด + บัญชี 51xx จากรายการที่ไม่ได้ลง 1310 (รายการที่ลง 1310 = โอนภายในของระบบต่อเนื่อง)
+  const inv = (await c.query(
+    `select coalesce(sum(l.debit - l.credit) filter (where e.entry_date < $2::date), 0)::numeric(18,2)::text as opening,
+            coalesce(sum(l.debit - l.credit) filter (where e.entry_date < ($3::date + interval '1 month')), 0)::numeric(18,2)::text as closing
+       from acc.journal_lines l
+       join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
+       join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+      where l.company_id = $1 and a.code = '1310'`, [companyId, from, to])).rows[0] as { opening: string; closing: string };
+  const flows = (await c.query(
+    `with ent as (
+       select e.id from acc.journal_entries e
+        where e.company_id = $1 and e.entry_date >= $2::date and e.entry_date < ($3::date + interval '1 month')
+          and not (e.doc_prefix = 'CL' and e.entry_date >= $4::date)
+          and not exists (select 1 from acc.journal_lines x join acc.chart_of_accounts xa on xa.company_id = x.company_id and xa.id = x.account_id
+                           where x.company_id = e.company_id and x.entry_id = e.id and xa.code = '1310')
+     )
+     select a.code, a.name, sum(l.debit - l.credit)::numeric(18,2)::text as net
+       from ent join acc.journal_lines l on l.company_id = $1 and l.entry_id = ent.id
+       join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+      where a.type = 'expense' and a.code like '51%'
+      group by a.code, a.name having sum(l.debit - l.credit) <> 0
+      order by a.code`, [companyId, from, to, fyStart])).rows as { code: string; name: string; net: string }[];
+  const flow = (code: string) => toC(flows.find((f) => f.code === code)?.net ?? '0.00');
+  const total = sumC(g.cogs);
+  const opening = toC(inv.opening), closing = toC(inv.closing);
+  let costOfSales: CostOfSales | null = null;
+  if (total !== 0n || opening !== 0n || closing !== 0n || flows.length > 0) {
+    const purchases = flow('5110'), discounts = -flow('5120'), returns = -flow('5140');
+    const otherCosts = flows.filter((f) => !['5110', '5120', '5130', '5140'].includes(f.code)).map((f) => ({ code: f.code, name: f.name, amount: f.net }));
+    const netPurchases = purchases - discounts - returns + sumC(otherCosts);
+    const available = opening + netPurchases;
+    costOfSales = {
+      opening: money(opening), purchases: money(purchases), discounts: money(discounts), returns: money(returns), otherCosts,
+      netPurchases: money(netPurchases), available: money(available), closing: money(closing),
+      adjustments: money(total - (available - closing)), total: money(total),
+    };
+  }
+  const netSales = sumC(g.sales);
+  const gross = netSales - total;
+  const oi = sumC(g.otherIncome), sa = sumC(g.sellingAdmin), oe = sumC(g.otherExpenses), fc = sumC(g.financeCosts), tax = sumC(g.incomeTax);
+  const pbf = gross + oi - sa - oe;
+  const pbt = pbf - fc;
+  const cur = (ls: StLine[], want: boolean) => ls.filter((l) => isCurrent(l.code) === want);
+  const ca = cur(assets, true), nca = cur(assets, false), cl = cur(liabilities, true), ncl = cur(liabilities, false);
+  return {
+    multiStep: {
+      sales: g.sales, netSales: money(netSales), costOfSales, grossProfit: money(gross),
+      otherIncome: g.otherIncome, totalOtherIncome: money(oi),
+      sellingAdmin: g.sellingAdmin, totalSellingAdmin: money(sa),
+      otherExpenses: g.otherExpenses, totalOtherExpenses: money(oe),
+      profitBeforeFinance: money(pbf),
+      financeCosts: g.financeCosts, totalFinanceCosts: money(fc),
+      profitBeforeTax: money(pbt),
+      incomeTax: g.incomeTax, totalIncomeTax: money(tax),
+      netIncome: money(pbt - tax),
+    },
+    classified: {
+      currentAssets: ca, totalCurrentAssets: money(sumC(ca)), nonCurrentAssets: nca, totalNonCurrentAssets: money(sumC(nca)),
+      currentLiabilities: cl, totalCurrentLiabilities: money(sumC(cl)), nonCurrentLiabilities: ncl, totalNonCurrentLiabilities: money(sumC(ncl)),
+    },
+  };
+}
 
 // งบการเงิน: กำไรขาดทุน (เดือนนี้หรือต้นปีบัญชีถึงเดือนนี้) + ฐานะการเงิน ณ สิ้นเดือน
 // ยอดหันตามด้านปกติ (บัญชีปรับลด เช่น ค่าเสื่อมราคาสะสม/ถอนใช้ส่วนตัว/ส่วนลด จึงติดลบ = หักออก)
@@ -230,7 +348,9 @@ export async function statements(c: pg.PoolClient, companyId: string, month: str
      ) as st from t`,
     [companyId, from, to, fy.start],
   );
-  return { month, scope, from: from.slice(0, 7), fiscalYear: { start: fy.start, end: fy.end }, ...r.rows[0].st };
+  const st = r.rows[0].st;
+  const parts = await multiStepParts(c, companyId, from, to, fy.start, st.revenue, st.expense, st.assets, st.liabilities);
+  return { month, scope, from: from.slice(0, 7), fiscalYear: { start: fy.start, end: fy.end }, ...st, ...parts };
 }
 
 // ---- กระดาษทำการ ----

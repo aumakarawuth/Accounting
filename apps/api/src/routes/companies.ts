@@ -7,7 +7,7 @@ import { HttpError } from '../errors.js';
 import { ledger, ledgerAccounts, statements, trialBalance } from '../reports.js';
 import {
   AccountParams, CommentParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, NewComment, PeriodParams,
-  FiscalYearStart, PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery, YearEndParams,
+  EndingInventory, FiscalYearStart, PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery, YearEndParams,
 } from '../schemas.js';
 
 // ชั้นบาง: ตรวจรูปแบบด้วย Zod แล้วเรียกฟังก์ชันใน Postgres; สิทธิ์ตัดสินที่ RLS/ฟังก์ชัน
@@ -414,5 +414,35 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     const version = await withUser(pool, await user(req), async (c) =>
       (await c.query('select acc.set_fiscal_year_start($1, $2::smallint, $3) as v', [companyId, body.month, body.version])).rows[0].v);
     return { startMonth: body.month, version };
+  });
+
+  // ---- ระบบสินค้าสิ้นงวด: สินค้าคงเหลือปลายงวดตามตรวจนับ (docs/phase5-spec.md ข้อ 2) ----
+  app.get('/companies/:companyId/ending-inventory', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const { month } = MonthQuery.parse(req.query);
+    if (!month) throw new HttpError(400, 'invalid', 'ต้องระบุเดือน');
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const r = (await c.query(
+        `select coalesce((select sum(l.debit - l.credit) from acc.journal_lines l
+                   join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
+                   join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+                  where l.company_id = $1 and a.code = '1310' and e.entry_date < ($2::date + interval '1 month')), 0)::numeric(18,2)::text as "glBalance",
+                exists (select 1 from acc.items where company_id = $1 and track_inventory) as perpetual,
+                app.can_write_company($1) and not app.company_locked($1) as "canWrite"`, [companyId, `${month}-01`])).rows[0];
+      return { month, ...r };
+    });
+  });
+
+  app.post('/companies/:companyId/ending-inventory', async (req, reply) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const body = EndingInventory.parse(req.body);
+    const key = idemKey(req);
+    const out = await withUser(pool, await user(req), async (c) => {
+      const end = (await c.query(`select (date_trunc('month', $1::date) + interval '1 month - 1 day')::date::text d`, [`${body.month}-01`])).rows[0].d;
+      const id = (await c.query('select acc.record_ending_inventory($1, $2::date, $3::numeric, $4) as id', [companyId, end, body.amount, key])).rows[0].id;
+      return docNo(c, companyId, id);
+    });
+    return reply.code(201).send({ id: out.id, docNo: out.doc_no });
   });
 }

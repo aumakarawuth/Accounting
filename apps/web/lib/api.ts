@@ -64,8 +64,24 @@ export type Statements = {
   revenue: Line[]; expense: Line[]; assets: Line[]; liabilities: Line[]; equity: Line[];
   totalRevenue: string; totalExpense: string; netIncome: string; unclosedProfit: string;
   fiscalYear: FiscalYearRange; yearProfit: string; priorUnclosedProfit: string;
+  multiStep: IncomeMultiStep; classified: ClassifiedPosition;
   totalAssets: string; totalLiabilities: string; totalEquity: string; totalLiabilitiesEquity: string; balanced: boolean;
 };
+export type CostOfSales = {
+  opening: string; purchases: string; discounts: string; returns: string; otherCosts: Line[];
+  netPurchases: string; available: string; closing: string; adjustments: string; total: string;
+};
+export type IncomeMultiStep = {
+  sales: Line[]; netSales: string; costOfSales: CostOfSales | null; grossProfit: string;
+  otherIncome: Line[]; totalOtherIncome: string; sellingAdmin: Line[]; totalSellingAdmin: string;
+  otherExpenses: Line[]; totalOtherExpenses: string; profitBeforeFinance: string;
+  financeCosts: Line[]; totalFinanceCosts: string; profitBeforeTax: string; incomeTax: Line[]; totalIncomeTax: string; netIncome: string;
+};
+export type ClassifiedPosition = {
+  currentAssets: Line[]; totalCurrentAssets: string; nonCurrentAssets: Line[]; totalNonCurrentAssets: string;
+  currentLiabilities: Line[]; totalCurrentLiabilities: string; nonCurrentLiabilities: Line[]; totalNonCurrentLiabilities: string;
+};
+export type EndingInventory = { month: string; glBalance: string; perpetual: boolean; canWrite: boolean };
 export type SubmissionEvent = { id: number; at: string; action: string; from: string; to: string; round: number; note: string | null; score: string | null; actorName: string | null; byOwner: boolean };
 export type Submission = { mode: 'practice' | 'submit'; status: WorkStatus | null; round: number; score: string | null; maxScore: string; events: SubmissionEvent[] };
 export type TeacherSubmission = { companyId: string; company: string; classroom: string; studentCode: string; studentName: string; status: WorkStatus; round: number; score: string | null; maxScore: string; updatedAt: string };
