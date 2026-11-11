@@ -53,6 +53,7 @@ export default async function PurchaseDocumentPage({ params }: { params: Promise
       {open && <p className="print:hidden">{th.sales.open} <Money value={d.open!} /></p>}
       {payable && !open && !d.voidedAt && <p className="print:hidden">{th.purchases.paid}</p>}
       {d.kind === 'deposit' && !d.voidedAt && d.depositRemaining && <p className="print:hidden">{th.purchases.depositRemaining(formatMoney(d.depositRemaining))}</p>}
+      {d.warehouse && <p className="print:hidden">{th.inventory.warehouse} {d.warehouse}</p>}
       {d.order && (
         <p className="print:hidden">
           <Link href={c(`/purchases/orders/${d.order.id}`)} className="underline">{th.purchases.fromOrderLink(d.order.docNo)}</Link>

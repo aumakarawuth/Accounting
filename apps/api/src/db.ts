@@ -1,5 +1,6 @@
 import pg from 'pg';
 import type { AuthUser } from './auth.js';
+import { HttpError } from './errors.js';
 
 // ทุกคำขอผ่าน pooler แบบ transaction pooling: ตั้งค่าตัวตนด้วย set_config(..., true)
 // ซึ่งหมดอายุพร้อมทรานแซกชัน จึงไม่รั่วข้ามคำขอบน connection เดียวกัน
@@ -49,3 +50,12 @@ export async function querySequence<T extends readonly (() => Promise<unknown>)[
   for (const query of queries) results.push(await query());
   return results as { -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> };
 }
+
+/** เลือกคลังให้เอกสารในทรานแซกชันนี้ (บรรทัดบัตรสต็อกและเอกสารที่ลงต่อจากนี้อยู่คลังนี้) ไม่ระบุ = คลังหลัก */
+export async function useWarehouse(c: pg.PoolClient, companyId: string, code: string | undefined) {
+  if (!code) return;
+  const w = (await c.query('select id from acc.warehouses where company_id = $1 and code = $2 and active', [companyId, code.toUpperCase()])).rows[0];
+  if (!w) throw new HttpError(422, 'ACC04', `ไม่พบคลังรหัส ${code} ที่เปิดใช้`);
+  await c.query(`select set_config('acc.warehouse', $1, true)`, [w.id]);
+}
+

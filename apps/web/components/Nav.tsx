@@ -39,6 +39,7 @@ export function studentNav(companyId: string): Group[] {
     ] },
     { title: n.group.inventory, items: [
       { label: n.inventory, href: c('/inventory') },
+      { label: n.warehouses, href: c('/inventory/warehouses') },
     ] },
     { title: n.group.tax, items: [
       { label: n.vat, href: c('/tax/vat') },

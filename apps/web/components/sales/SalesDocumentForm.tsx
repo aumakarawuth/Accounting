@@ -55,6 +55,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc, fromDoc }: {
   const [cashAccount, setCashAccount] = useState(form.cashAccounts[0]?.code ?? '1110');
   const [discount, setDiscount] = useState(kind === 'sales-order' && fromDoc && fromDoc.discount !== '0.00' ? fromDoc.discount : '');
   const [description, setDescription] = useState('');
+  const [warehouse, setWarehouse] = useState(''); // '' = คลังหลัก (คลังแรกในรายการ)
   const [reason, setReason] = useState('');
   const [lines, setLines] = useState<Line[]>(() => (fromDoc ? fromLines() : []).concat(fromDoc ? [] : [blank()]));
   const [busy, setBusy] = useState(false);
@@ -205,6 +206,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc, fromDoc }: {
           ...(l.orderLineNo ? { orderLineNo: l.orderLineNo } : {}),
         })),
         ...(kind === 'invoice' && fromDoc ? { orderId: fromDoc.id } : {}),
+        ...(warehouse && (kind === 'invoice' || kind === 'cash-sale') ? { warehouse } : {}),
         ...(picked.length ? { deposits: picked.map((d) => ({ documentId: d.id, amount: fromCents(toCents(d.amount)!) })) } : {}),
       };
       const r = await postJson<{ id: string; docNo: string }>(`/companies/${companyId}/sales/${kind}`, body, { 'idempotency-key': idemKey });
@@ -215,7 +217,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc, fromDoc }: {
       setError(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message);
       setBusy(false);
     }
-  }, [canPost, isoDate, isNote, refDoc, reason, partyCode, isService, co.vatRegistered, priceMode, calc, description, kind, creditDays, days, cashAccount, lines, companyId, router, draft, idemKey, isOrderDoc, untilIso, fromDoc, picked]);
+  }, [canPost, isoDate, isNote, refDoc, reason, partyCode, isService, co.vatRegistered, priceMode, calc, description, kind, creditDays, days, cashAccount, lines, companyId, router, draft, idemKey, isOrderDoc, untilIso, fromDoc, picked, warehouse]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -295,6 +297,14 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc, fromDoc }: {
               {th.sales.date}
               <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(maskDate(e.target.value))} aria-invalid={isoDate === null} />
             </label>
+            {(kind === 'invoice' || kind === 'cash-sale') && form.warehouses.length > 1 && (
+              <label className="flex flex-col text-sm">
+                {th.inventory.warehouse}
+                <select className={inputCls} value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
+                  {form.warehouses.map((w, i) => <option key={w.code} value={i === 0 ? '' : w.code}>{w.code} {w.name}</option>)}
+                </select>
+              </label>
+            )}
             {isOrderDoc && (
               <label className="flex flex-col text-sm">
                 {kind === 'quotation' ? th.sales.untilQuote : th.sales.untilOrder}

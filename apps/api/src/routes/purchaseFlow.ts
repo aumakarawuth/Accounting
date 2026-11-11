@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { querySequence, withUser } from '../db.js';
+import { querySequence, useWarehouse, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
@@ -109,6 +109,7 @@ export function purchaseFlowRoutes(app: FastifyInstance, pool: pg.Pool, auth: Au
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
+      await useWarehouse(c, companyId, b.warehouse);
       const id = (await c.query('select acc.post_goods_receipt($1, $2::jsonb, $3) id', [companyId, JSON.stringify(p), key])).rows[0].id;
       return { id, docNo: await docNo(c, companyId, id) };
     });

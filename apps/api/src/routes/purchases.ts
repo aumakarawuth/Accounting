@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { querySequence, withUser } from '../db.js';
+import { querySequence, useWarehouse, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
@@ -52,6 +52,7 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         expenseAccounts: accounts.rows.filter((a) => !a.code.startsWith('11')).map(({ code, name }) => ({ code, name })),
         cashAccounts: accounts.rows.filter((a) => a.code.startsWith('11')).map(({ code, name }) => ({ code, name })),
         systemAccounts: system.rows,
+        warehouses: (await c.query(`select code, name from acc.warehouses where company_id = $1 and active order by is_main desc, code`, [companyId])).rows,
       };
     });
   });
@@ -79,6 +80,7 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
+      await useWarehouse(c, companyId, b.warehouse);
       const fn = note ? 'acc.post_purchase_document' : 'acc.post_purchase_ext';
       const id = (await c.query(`select ${fn}($1, $2, $3::jsonb, $4) id`, [companyId, PURCHASE_KIND_SQL[kind], JSON.stringify(payload), key])).rows[0].id;
       return { id, docNo: await docNo(c, companyId, id) };
@@ -129,7 +131,8 @@ export function purchaseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         `select ${DOC}, d.party_tax_id as "partyTaxId", d.party_branch_no as "partyBranchNo", d.party_address as "partyAddress",
                 co.name as "companyName", co.tax_id as "companyTaxId", co.branch_no as "companyBranchNo", co.address as "companyAddress",
                 ca.code as "cashAccount", ca.name as "cashAccountName", e.id as "entryId", e.doc_no as "entryDocNo",
-                ve.doc_no as "voidDocNo", r.doc_no as "refDocNo", r.kind as "refKind", (d.total - s.amount)::text as open,
+                ve.doc_no as "voidDocNo", (select w.code || ' ' || w.name from acc.warehouses w where w.company_id = d.company_id and w.id = d.warehouse_id and not w.is_main) as warehouse,
+                r.doc_no as "refDocNo", r.kind as "refKind", (d.total - s.amount)::text as open,
                 case when d.kind = 'deposit' then (select amount::text from acc.purchase_deposit_remaining(d.company_id, d.id)) end as "depositRemaining",
                 (select json_build_object('id', o.id, 'docNo', o.doc_no) from acc.purchase_orders o
                   where o.company_id = d.company_id and o.id = coalesce(d.purchase_order_id,
