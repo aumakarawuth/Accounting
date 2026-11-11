@@ -36,7 +36,7 @@ export function salesEntry(o: Totals & {
 }
 
 export function purchaseEntry(o: Totals & {
-  kind: 'purchase_invoice' | 'cash_purchase' | 'purchase_credit_note';
+  kind: 'purchase_invoice' | 'cash_purchase' | 'purchase_credit_note' | 'purchase_debit_note';
   lines: { code: string; amount: bigint }[]; service: boolean; claimable: boolean; cashAccount: string; wht: bigint;
 }): EntryLine[] {
   const claim = o.claimable && o.vat > 0n;
@@ -46,7 +46,7 @@ export function purchaseEntry(o: Totals & {
   if (o.kind === 'purchase_credit_note') {
     return [dr('2110', o.total), ...shares.map((s) => cr(s.code, s.share)), ...(claim ? [cr(o.service ? '1411' : '1410', o.vat)] : [])];
   }
-  const vatCode = o.service && o.kind === 'purchase_invoice' ? '1411' : '1410';
+  const vatCode = o.service && o.kind !== 'cash_purchase' ? '1411' : '1410';
   const tail = o.kind === 'cash_purchase'
     ? [cr(o.cashAccount, o.total - o.wht), ...(o.wht > 0n ? [cr('2230', o.wht)] : [])]
     : [cr('2110', o.total)];

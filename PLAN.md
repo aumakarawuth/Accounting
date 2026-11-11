@@ -322,5 +322,9 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   → ใบวางบิล · รับเงินมัดจำ (ภาษีขายตอนรับเงิน) แล้วหักมัดจำตอนขายเชื่อ (สินค้าหัก 2210 บริการหัก 2211)
   (`docs/assumptions.md` ข้อ 43, เทสต์ `tests/sales-documents-flow.test.ts` + e2e `tests/e2e/sales-flow.spec.ts`)
   · migration `20261111000107` (โมดูล 3) merge แล้ว ยังไม่ apply กับ Supabase
-  ยังค้าง: โมดูล 5–10
+  · **โมดูล 5 เอกสารซื้อ** (11 พ.ย. 2569, migration `20261111000109` ยังไม่ apply กับ Supabase): ใบสั่งซื้อ → ใบรับสินค้า (เข้าคลัง + 2130)
+  → ซื้อเชื่อจากใบรับสินค้า (ล้าง 2130) · ใบเพิ่มหนี้จากผู้ขาย (จ่ายชำระได้) · จ่ายเงินมัดจำ (ภาษีซื้อตอนจ่าย) หักตอนซื้อเชื่อ
+  (`docs/assumptions.md` ข้อ 44, เทสต์ `tests/purchase-documents-flow.test.ts` + e2e `tests/e2e/purchase-flow.spec.ts`)
+  · migration `20261111000108` (โมดูล 4) merge แล้ว ยังไม่ apply กับ Supabase
+  ยังค้าง: โมดูล 6–10
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

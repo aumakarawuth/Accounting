@@ -30,7 +30,10 @@ export function studentNav(companyId: string): Group[] {
       { label: n.receivables, href: c('/sales/receivables') },
     ] },
     { title: n.group.purchase, items: [
+      { label: n.purchaseOrder, href: c('/purchases/orders') },
+      { label: n.goodsReceipt, href: c('/purchases/receipts') },
       { label: n.purchase, href: c('/purchases') },
+      { label: n.purchaseDeposits, href: c('/purchases/deposits') },
       { label: n.payment, href: c('/purchases/payments') },
       { label: n.payables, href: c('/purchases/payables') },
     ] },

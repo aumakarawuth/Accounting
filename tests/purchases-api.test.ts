@@ -46,7 +46,7 @@ describe('API เอกสารซื้อ', () => {
     expect(exp).toContain('1630');
     expect(exp).not.toContain('1110');
     expect(f.cashAccounts.map((a: { code: string }) => a.code)).toEqual(['1110', '1120', '1130', '1140']);
-    expect(f.systemAccounts.map((a: { code: string }) => a.code)).toEqual(['1410', '1411', '2110', '2120', '2121', '2230', '5140']);
+    expect(f.systemAccounts.map((a: { code: string }) => a.code)).toEqual(['1410', '1411', '1520', '2110', '2120', '2121', '2130', '2230', '5140']);
   });
 
   it('ซื้อเชื่อบริการ → จ่ายชำระหัก 3% → ใบสำคัญจ่ายมี 50 ทวิ → ใบเดิมจ่ายครบ', async () => {

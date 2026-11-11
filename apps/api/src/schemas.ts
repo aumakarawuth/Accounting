@@ -212,8 +212,10 @@ export const SalesListQuery = z.object({
 export const AsOfQuery = z.object({ asOf: IsoDate.optional() }).strict();
 
 // ---- เฟส 2.3 เอกสารซื้อ ----
-export const PurchaseKind = z.enum(['invoice', 'cash-purchase', 'credit-note']);
-export const PURCHASE_KIND_SQL = { invoice: 'purchase_invoice', 'cash-purchase': 'cash_purchase', 'credit-note': 'purchase_credit_note' } as const;
+export const PurchaseKind = z.enum(['invoice', 'cash-purchase', 'credit-note', 'debit-note']);
+export const PURCHASE_KIND_SQL = {
+  invoice: 'purchase_invoice', 'cash-purchase': 'cash_purchase', 'credit-note': 'purchase_credit_note', 'debit-note': 'purchase_debit_note',
+} as const;
 export const PurchaseKindParams = z.object({ companyId: Uuid, kind: PurchaseKind });
 const Wht = { whtKind: WhtKind.optional(), whtRate: Rate.optional() };
 export const NewPurchaseDocument = z.object({
@@ -229,7 +231,12 @@ export const NewPurchaseDocument = z.object({
   ...Wht,
   refDocumentId: Uuid.optional(),
   reason: z.string().trim().max(300).optional(),
-  lines: z.array(SalesLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+  orderId: Uuid.optional(),       // อ้างใบสั่งซื้อ (บรรทัดระบุ orderLineNo)
+  deposits: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).max(20).optional(),
+  lines: z.array(SalesLine.extend({
+    receiptId: Uuid.optional(),   // บันทึกซื้อจากใบรับสินค้า: ใบรับสินค้าและบรรทัด
+    receiptLineNo: z.number().int().min(1).max(200).optional(),
+  })).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
 }).strict();
 export const NewPayment = z.object({
   date: IsoDate,
@@ -240,7 +247,8 @@ export const NewPayment = z.object({
   allocations: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).min(1, 'เลือกใบที่จ่ายชำระอย่างน้อย 1 ใบ').max(50),
 }).strict();
 export const PurchaseListQuery = z.object({
-  kind: z.enum(['purchase_invoice', 'cash_purchase', 'purchase_credit_note', 'payment']).optional(),
+  kind: z.enum(['purchase_invoice', 'cash_purchase', 'purchase_credit_note', 'payment', 'goods_receipt', 'purchase_debit_note',
+    'deposit', 'deposit_applied']).optional(),
   party: MasterCode.optional(),
   month: Month.optional(),
 }).strict();
@@ -405,3 +413,27 @@ export const NewBillingNote = z.object({
   description: z.string().trim().max(300).optional(),
 }).strict();
 export const BillingNoteParams = z.object({ companyId: Uuid, noteId: Uuid });
+
+// ---- เฟส 5 โมดูล 5: ใบสั่งซื้อ ใบรับสินค้า เงินมัดจำจ่าย ----
+export const NewPurchaseOrder = z.object({
+  date: IsoDate, partyCode: MasterCode, untilDate: IsoDate.optional(),
+  isService: z.boolean().optional(), priceMode: z.enum(['exclusive', 'inclusive']).optional(), discount: Money.optional(),
+  description: z.string().trim().max(300).optional(),
+  lines: z.array(OrderLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+}).strict();
+export const PurchaseOrderParams = z.object({ companyId: Uuid, orderId: Uuid });
+export const NewGoodsReceipt = z.object({
+  date: IsoDate, partyCode: MasterCode,
+  vendorDocNo: z.string().trim().min(1, 'ต้องใส่เลขที่ใบส่งของของผู้ขาย').max(40),
+  orderId: Uuid.optional(), description: z.string().trim().max(300).optional(),
+  lines: z.array(z.object({
+    itemCode: MasterCode, description: z.string().trim().max(200).optional(), qty: Qty, unitPrice: Money,
+    orderLineNo: z.number().int().min(1).max(200).optional(),
+  }).strict()).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+}).strict();
+export const NewPurchaseDeposit = z.object({
+  date: IsoDate, partyCode: MasterCode,
+  vendorDocNo: z.string().trim().min(1, 'ต้องใส่เลขที่ใบกำกับภาษี/ใบรับเงินมัดจำของผู้ขาย').max(40),
+  amount: Money, priceMode: z.enum(['exclusive', 'inclusive']).optional(), isService: z.boolean().optional(),
+  cashAccount: AccountCode.optional(), orderId: Uuid.optional(), description: z.string().trim().max(300).optional(),
+}).strict();
