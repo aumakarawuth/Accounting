@@ -77,7 +77,11 @@ jobs:
           printf 'Acquire::Retries "2";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci-timeouts
           for i in 1 2 3; do
             timeout 360 pnpm --filter @accounting/tests exec playwright install-deps chromium webkit && exit 0
-            echo "ติดตั้งไลบรารีระบบไม่สำเร็จ ครั้งที่ $i"; sleep 30
+            echo "ติดตั้งไลบรารีระบบไม่สำเร็จ ครั้งที่ $i"
+            # timeout หยุดแค่ pnpm แต่ apt-get (รันผ่าน sudo) ยังค้างถือ lock ของ dpkg อยู่ ต้องหยุดเองก่อนลองใหม่
+            sudo pkill -9 -x apt-get || true; sudo pkill -9 -x dpkg || true; sleep 5
+            sudo dpkg --configure -a || true
+            sleep 25
           done
           echo "apt ของ runner ใช้ไม่ได้ (ดู log ข้างบนว่าหาเซิร์ฟเวอร์ไม่เจอหรือไม่) รันซ้ำภายหลัง"; exit 1
       - name: ฐานข้อมูลตัวอย่าง (ครู + นักเรียน + บริษัท)
