@@ -7,14 +7,14 @@
     "e2e": "playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
-    "@types/node": "^22.0.0",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
     "@types/pg": "^8.11.0",
     "@types/ws": "^8.18.2",
     "pg": "^8.13.0",
-    "playwright": "^1.63.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
+    "playwright": "^1.65.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
     "ws": "^8.22.1"
   }
 }

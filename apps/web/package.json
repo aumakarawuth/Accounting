@@ -25,13 +25,13 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^22.0.0",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^26.6.6",
     "@types/pdfkit": "^0.17.7",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^5.6.0"
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2"
   }
 }
