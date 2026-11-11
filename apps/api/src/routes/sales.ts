@@ -54,16 +54,24 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     if ((kind === 'credit-note' || kind === 'debit-note') ? !b.refDocumentId : !b.partyCode) {
       throw new HttpError(400, 'invalid', kind.endsWith('note') ? 'ต้องเลือกใบขายเชื่อที่อ้างถึง' : 'ต้องเลือกลูกค้า');
     }
+    if (kind !== 'invoice' && (b.orderId || b.deposits?.length || b.lines.some((l) => l.orderLineNo))) {
+      throw new HttpError(400, 'invalid', 'อ้างใบสั่งขายหรือหักเงินมัดจำได้เฉพาะใบขายเชื่อ');
+    }
     const key = idemKey(req);
     const payload = {
       date: b.date, party_code: b.partyCode, is_service: b.isService, price_mode: b.priceMode, discount: b.discount,
       description: b.description, credit_days: b.creditDays, cash_account: b.cashAccount, wht_amount: b.whtAmount,
-      ref_document_id: b.refDocumentId, reason: b.reason,
-      lines: b.lines.map((l) => ({ item_code: l.itemCode, description: l.description, qty: l.qty, unit: l.unit, unit_price: l.unitPrice, account_code: l.accountCode })),
+      ref_document_id: b.refDocumentId, reason: b.reason, order_id: b.orderId,
+      deposits: (b.deposits ?? []).map((d) => ({ document_id: d.documentId, amount: d.amount })),
+      lines: b.lines.map((l) => ({ item_code: l.itemCode, description: l.description, qty: l.qty, unit: l.unit, unit_price: l.unitPrice,
+        account_code: l.accountCode, order_line_no: l.orderLineNo })),
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
-      const id = (await c.query('select acc.post_sales_document($1, $2, $3::jsonb, $4) id', [companyId, SALES_KIND_SQL[kind], JSON.stringify(payload), key])).rows[0].id;
+      // ขายเชื่อผ่านฟังก์ชันต่อยอด (อ้างใบสั่งขาย + หักมัดจำในธุรกรรมเดียว) ใบอื่นเหมือนเดิม
+      const id = kind === 'invoice'
+        ? (await c.query('select acc.post_sales_invoice_ext($1, $2::jsonb, $3) id', [companyId, JSON.stringify(payload), key])).rows[0].id
+        : (await c.query('select acc.post_sales_document($1, $2, $3::jsonb, $4) id', [companyId, SALES_KIND_SQL[kind], JSON.stringify(payload), key])).rows[0].id;
       return { id, docNo: await docNo(c, companyId, id) };
     });
     return reply.code(201).send(row);

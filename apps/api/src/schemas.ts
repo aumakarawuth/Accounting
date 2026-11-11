@@ -177,6 +177,7 @@ const SalesLine = z.object({
   unit: z.string().trim().max(20).optional(),
   unitPrice: Money,
   accountCode: AccountCode.optional(),
+  orderLineNo: z.number().int().min(1).max(200).optional(),  // ขายเชื่อจากใบสั่งขาย: บรรทัดของใบสั่งขาย
 }).strict();
 export const NewSalesDocument = z.object({
   date: IsoDate,
@@ -191,6 +192,8 @@ export const NewSalesDocument = z.object({
   refDocumentId: Uuid.optional(),
   reason: z.string().trim().max(300).optional(),
   lines: z.array(SalesLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+  orderId: Uuid.optional(),
+  deposits: z.array(z.object({ documentId: Uuid, amount: Money }).strict()).max(20).optional(),
 }).strict();
 export const NewReceipt = z.object({
   date: IsoDate,
@@ -202,7 +205,7 @@ export const NewReceipt = z.object({
 }).strict();
 export const VoidDocument = z.object({ date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
 export const SalesListQuery = z.object({
-  kind: z.enum(['sales_invoice', 'cash_sale', 'receipt', 'credit_note', 'debit_note']).optional(),
+  kind: z.enum(['sales_invoice', 'cash_sale', 'receipt', 'credit_note', 'debit_note', 'deposit', 'deposit_applied']).optional(),
   party: MasterCode.optional(),
   month: Month.optional(),
 }).strict();
@@ -375,3 +378,30 @@ export const OpeningBalances = z.object({
   }).strict()).max(500).default([]),
 }).strict();
 export const VoidOpening = z.object({ reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
+
+// ---- เฟส 5 โมดูล 4: ใบเสนอราคา ใบสั่งขาย เงินมัดจำ ใบวางบิล ----
+const OrderLine = z.object({
+  itemCode: MasterCode.optional(), description: z.string().trim().max(200).optional(), qty: Qty,
+  unit: z.string().trim().max(20).optional(), unitPrice: Money,
+}).strict();
+export const NewSalesOrder = z.object({
+  kind: z.enum(['quotation', 'sales_order']),
+  date: IsoDate, partyCode: MasterCode, untilDate: IsoDate.optional(), sourceId: Uuid.optional(),
+  isService: z.boolean().optional(), priceMode: z.enum(['exclusive', 'inclusive']).optional(), discount: Money.optional(),
+  description: z.string().trim().max(300).optional(),
+  lines: z.array(OrderLine).min(1, 'ต้องมีรายการอย่างน้อย 1 บรรทัด').max(200),
+}).strict();
+export const SalesOrderParams = z.object({ companyId: Uuid, orderId: Uuid });
+export const SalesOrderListQuery = z.object({ kind: z.enum(['quotation', 'sales_order']).optional(), party: MasterCode.optional() }).strict();
+export const CancelWithReason = z.object({ reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
+export const NewDeposit = z.object({
+  date: IsoDate, partyCode: MasterCode, amount: Money, priceMode: z.enum(['exclusive', 'inclusive']).optional(),
+  isService: z.boolean().optional(), cashAccount: AccountCode.optional(), orderId: Uuid.optional(),
+  description: z.string().trim().max(300).optional(),
+}).strict();
+export const PartyFilter = z.object({ party: MasterCode.optional() }).strict();
+export const NewBillingNote = z.object({
+  date: IsoDate, partyCode: MasterCode, dueDate: IsoDate.optional(), documentIds: z.array(Uuid).min(1, 'เลือกใบที่จะวางบิลอย่างน้อยหนึ่งใบ').max(200),
+  description: z.string().trim().max(300).optional(),
+}).strict();
+export const BillingNoteParams = z.object({ companyId: Uuid, noteId: Uuid });
