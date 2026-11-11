@@ -455,3 +455,34 @@ export const NewTransfer = z.object({
 }).strict();
 export const TransferParams = z.object({ companyId: Uuid, transferId: Uuid });
 
+
+// เฟส 5 โมดูล 9 (docs/phase5-spec.md ข้อ 9): เงินสดย่อย + โอนเงินระหว่างบัญชี
+export const NewCashTransfer = z.object({
+  date: IsoDate,
+  from: AccountCode,
+  to: AccountCode,
+  amount: Money,
+  fee: Money.optional(),
+  feeAccount: AccountCode.optional(),
+  description: z.string().trim().max(300).optional(),
+}).strict();
+export const PettyCashFund = z.object({
+  date: IsoDate,
+  fund: Money,
+  cashAccount: AccountCode.optional(),
+  custodian: z.string().trim().min(1, 'ต้องระบุผู้รักษาเงินสดย่อย').max(160),
+}).strict();
+export const NewPettyCashVoucher = z.object({
+  date: IsoDate,
+  payee: z.string().trim().min(1, 'ต้องระบุผู้รับเงิน').max(160),
+  description: z.string().trim().min(1, 'ต้องระบุรายการ').max(200),
+  account: AccountCode,
+  amount: Money,
+  receiptNo: z.string().trim().max(40).optional(),
+}).strict();
+export const NewPettyCashReimbursement = z.object({
+  date: IsoDate,
+  cashAccount: AccountCode.optional(),
+  voucherIds: z.array(Uuid).min(1, 'เลือกใบสำคัญที่จะเบิกชดเชยอย่างน้อย 1 ใบ').max(200),
+}).strict();
+export const CashDocParams = z.object({ companyId: Uuid, id: Uuid });

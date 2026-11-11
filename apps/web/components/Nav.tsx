@@ -46,6 +46,8 @@ export function studentNav(companyId: string): Group[] {
       { label: n.wht, href: c('/tax/wht') },
     ] },
     { title: n.group.cash, items: [
+      { label: n.pettyCash, href: c('/cash/petty-cash') },
+      { label: n.cashTransfers, href: c('/cash/transfers') },
       { label: n.cheques, href: c('/cheques') },
       { label: n.bankRec, href: c('/bank-reconciliation') },
     ] },
