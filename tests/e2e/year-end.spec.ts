@@ -1,44 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { test, expect, type Browser, type TestInfo } from '@playwright/test';
-import { checkScreen, env, login, watchErrors } from './helpers';
+import { test, expect } from '@playwright/test';
+import { checkScreen, freshStudent, login, watchErrors } from './helpers';
 
 // ปิดบัญชีสิ้นปี (docs/phase5-spec.md ข้อ 1) ทุกจอ: ปีก่อนยังไม่ปิด = เตือนในงบทดลองปีใหม่
 // → ดูรายการปิดบัญชีก่อนยืนยัน → CL-0001 → งบทดลองหลังปิดบัญชี → งบการเงินปีใหม่ไม่มีรายได้ปีก่อน
 // ครู ห้อง นักเรียน และบริษัทใหม่ต่อการรัน (ปิดปีแล้วลงรายการในปีนั้นไม่ได้ จึงไม่ใช้บริษัทตัวอย่างที่เทสต์อื่นใช้)
 
-const tag = (info: TestInfo) => `${info.project.name.toUpperCase().replace(/[^A-Z0-9]/g, '')}-${randomUUID().slice(0, 4)}`;
-
-async function setup(browser: Browser, info: TestInfo, origin: string) {
-  const t = tag(info);
-  const actx = await browser.newContext({ extraHTTPHeaders: { origin } });
-  const admin = actx.request;
-  expect((await admin.post(`${origin}/api/auth/login`, { data: { kind: 'staff', identifier: env.adminEmail, password: env.adminPassword } })).status()).toBe(200);
-  const username = `ye-${t.toLowerCase()}`;
-  const staff = await admin.post(`${origin}/api/admin/staff`, { data: { email: username, name: `ครูปิดบัญชี ${t}`, role: 'teacher' } });
-  expect(staff.status()).toBe(201);
-  const { id: teacherId, tempPassword } = await staff.json() as { id: string; tempPassword: string };
-  const room = await admin.post(`${origin}/api/admin/classrooms`, { data: { name: `ห้องปิดบัญชี ${t}`, teacherId } });
-  expect(room.status()).toBe(201);
-  const roomId = (await room.json()).id as string;
-  await actx.close();
-
-  const tctx = await browser.newContext({ extraHTTPHeaders: { origin } });
-  const teacher = tctx.request;
-  expect((await teacher.post(`${origin}/api/auth/login`, { data: { kind: 'staff', identifier: username, password: tempPassword } })).status()).toBe(200);
-  expect((await teacher.post(`${origin}/api/auth/change-password`, { data: { newPassword: `ครูปิดบัญชี-${randomUUID().slice(0, 8)}` } })).status()).toBe(200);
-  const code = `Y${randomUUID().replace(/-/g, '').slice(0, 10)}`;
-  const temp = `ชั่วคราว-${randomUUID().slice(0, 8)}`;
-  expect((await teacher.post(`${origin}/api/classrooms/${roomId}/import`, { data: { rows: [{ studentCode: code, name: `นักเรียน ${t}`, password: temp }] } })).status()).toBe(200);
-  expect((await teacher.post(`${origin}/api/classrooms/${roomId}/companies`, { data: { name: `ร้านปิดบัญชี ${t}`, mode: 'practice' } })).status()).toBeLessThan(300);
-  await tctx.close();
-  return { code, temp };
-}
-
 test('ปิดบัญชีสิ้นปี: ตรวจรายการ → CL → งบทดลองหลังปิดบัญชี → ปีใหม่ไม่มีรายได้ปีก่อน', async ({ page, browser, baseURL }, info) => {
   test.setTimeout(120_000);
   const errors = watchErrors(page);
   const origin = new URL(baseURL!).origin;
-  const { code, temp } = await setup(browser, info, origin);
+  const { code, temp } = await freshStudent(browser, info, origin, 'ปิดบัญชี');
   await login(page, 'student', code, temp);
   await page.waitForURL('**/change-password');
   await page.context().setExtraHTTPHeaders({ origin });
@@ -91,7 +63,7 @@ test('ปิดบัญชีสิ้นปี: ตรวจรายการ
   await expect(page.getByText('ยังไม่ได้ปิดบัญชีปีก่อน')).toHaveCount(0);
   await page.goto(`${home}/statements?month=2026-01&scope=ytd`);
   const income = page.getByRole('article', { name: 'งบกำไรขาดทุน' });
-  await expect(income.getByText('รวมรายได้').locator('..')).toContainText('5,000.00');
+  await expect(income.getByText('รายได้สุทธิ', { exact: true }).locator('..')).toContainText('5,000.00');
   const position = page.getByRole('article', { name: 'งบแสดงฐานะการเงิน' });
   await expect(position.getByText('กำไรสะสม').locator('..')).toContainText('16,750.00');
   await expect(position.getByText('กำไร(ขาดทุน)สุทธิปีนี้').locator('..')).toContainText('5,000.00');

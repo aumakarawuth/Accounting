@@ -43,6 +43,10 @@ const Month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'เดือนต้
 export const MonthQuery = z.object({ month: Month.optional() });
 export const TrialBalanceQuery = z.object({ month: Month, all: z.enum(['0', '1']).default('0'), stage: z.enum(['before', 'after']).default('before') });
 export const YearEndParams = z.object({ companyId: z.string().uuid(), yearEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'วันที่ต้องเป็น YYYY-MM-DD') });
+export const EndingInventory = z.object({
+  month: Month,
+  amount: z.string().regex(/^\d{1,15}(\.\d{1,2})?$/, 'มูลค่าเป็นตัวเลขไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง'),
+}).strict();
 export const FiscalYearStart = z.object({ month: z.number().int().min(1).max(12), version: z.number().int().positive() }).strict();
 export const StatementsQuery = z.object({ month: Month, scope: z.enum(['month', 'ytd']).default('ytd') });
 export const SubmissionAction = z.object({

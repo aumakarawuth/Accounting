@@ -66,16 +66,42 @@ export function statementsReport(company: string, st: Statements, now = new Date
   const lines = (xs: { code: string; name: string; amount: string }[]): Row[] =>
     xs.length ? xs.map((x) => ({ cells: [x.code, x.name, x.amount], indent: 1 })) : [{ cells: [null, s.none, null], indent: 1 }];
   const loss = st.netIncome.startsWith('-');
+  const zero = (v: string) => (toCents(v) ?? 0n) === 0n;
+  const neg = (v: string) => v.startsWith('-');
+  const m = st.multiStep;
+  const k = st.classified;
+  const group = (title: string, xs: { code: string; name: string; amount: string }[], totalLabel: string, total: string): Row[] => [
+    { cells: [null, title, null], style: 'heading' }, ...lines(xs), { cells: [null, totalLabel, total], style: 'subtotal' }];
+  const step = (label: [string, string], v: string): Row => ({ cells: [null, neg(v) ? label[1] : label[0], v], style: 'subtotal' });
+  const c = m.costOfSales;
+  const cogs: Row[] = c ? [
+    { cells: [null, s.costOfSales, null], style: 'heading' },
+    { cells: [null, s.openingInventory, c.opening], indent: 1 },
+    { cells: [null, s.purchases, c.purchases], indent: 1 },
+    ...(zero(c.discounts) ? [] : [{ cells: [null, s.lessDiscounts, c.discounts], indent: 1 } as Row]),
+    ...(zero(c.returns) ? [] : [{ cells: [null, s.lessReturns, c.returns], indent: 1 } as Row]),
+    ...c.otherCosts.map((x): Row => ({ cells: [x.code, s.plus(x.name), x.amount], indent: 1 })),
+    { cells: [null, s.netPurchases, c.netPurchases], indent: 1 },
+    { cells: [null, s.available, c.available], indent: 1 },
+    { cells: [null, s.lessClosingInventory, c.closing], indent: 1 },
+    ...(zero(c.adjustments) ? [] : [{ cells: [null, s.inventoryAdjustments, c.adjustments], indent: 1 } as Row]),
+    { cells: [null, s.totalCostOfSales, c.total], style: 'subtotal' },
+  ] : [];
+  const showFinance = m.financeCosts.length > 0 || m.incomeTax.length > 0;
   const income: Section = {
     heading: `${s.income} · ${s.incomePeriod(company, monthLabel(st.from), monthLabel(st.month))}`,
     columns: cols,
     rows: [
-      { cells: [null, s.revenue, null], style: 'heading' },
-      ...lines(st.revenue),
-      { cells: [null, s.totalRevenue, st.totalRevenue], style: 'subtotal' },
-      { cells: [null, s.expense, null], style: 'heading' },
-      ...lines(st.expense),
-      { cells: [null, s.totalExpense, st.totalExpense], style: 'subtotal' },
+      ...group(s.sales, m.sales, s.netSales, m.netSales),
+      ...cogs,
+      step([s.grossProfit, s.grossLoss], m.grossProfit),
+      ...(m.otherIncome.length ? group(s.otherIncome, m.otherIncome, s.totalOtherIncome, m.totalOtherIncome) : []),
+      ...group(s.sellingAdmin, m.sellingAdmin, s.totalSellingAdmin, m.totalSellingAdmin),
+      ...(m.otherExpenses.length ? group(s.otherExpenses, m.otherExpenses, s.totalOtherExpenses, m.totalOtherExpenses) : []),
+      ...(showFinance ? [step([s.profitBeforeFinance, s.lossBeforeFinance], m.profitBeforeFinance)] : []),
+      ...(m.financeCosts.length ? group(s.financeCosts, m.financeCosts, s.totalFinanceCosts, m.totalFinanceCosts) : []),
+      ...(m.incomeTax.length ? [step([s.profitBeforeTax, s.lossBeforeTax], m.profitBeforeTax),
+        ...group(s.incomeTax, m.incomeTax, s.totalIncomeTax, m.totalIncomeTax)] : []),
       { cells: [null, loss ? s.netLoss : s.netProfit, loss ? st.netIncome.slice(1) : st.netIncome], style: 'total' },
     ],
   };
@@ -83,16 +109,16 @@ export function statementsReport(company: string, st: Statements, now = new Date
     heading: `${s.position} · ${s.positionAt(company, monthEndLabel(st.month))}`,
     columns: cols,
     rows: [
-      { cells: [null, s.assets, null], style: 'heading' },
-      ...lines(st.assets),
+      ...group(s.currentAssets, k.currentAssets, s.totalCurrentAssets, k.totalCurrentAssets),
+      ...group(s.nonCurrentAssets, k.nonCurrentAssets, s.totalNonCurrentAssets, k.totalNonCurrentAssets),
       { cells: [null, s.totalAssets, st.totalAssets], style: 'total' },
-      { cells: [null, s.liabilities, null], style: 'heading' },
-      ...lines(st.liabilities),
+      ...group(s.currentLiabilities, k.currentLiabilities, s.totalCurrentLiabilities, k.totalCurrentLiabilities),
+      ...group(s.nonCurrentLiabilities, k.nonCurrentLiabilities, s.totalNonCurrentLiabilities, k.totalNonCurrentLiabilities),
       { cells: [null, s.totalLiabilities, st.totalLiabilities], style: 'subtotal' },
       { cells: [null, s.equity, null], style: 'heading' },
       ...lines(st.equity),
       { cells: [null, s.yearProfit, st.yearProfit], indent: 1 },
-      ...((toCents(st.priorUnclosedProfit) ?? 0n) === 0n ? [] : [{ cells: [null, s.priorUnclosed, st.priorUnclosedProfit], indent: 1 } as Row]),
+      ...(zero(st.priorUnclosedProfit) ? [] : [{ cells: [null, s.priorUnclosed, st.priorUnclosedProfit], indent: 1 } as Row]),
       { cells: [null, s.totalEquity, st.totalEquity], style: 'subtotal' },
       { cells: [null, s.totalLiabilitiesEquity, st.totalLiabilitiesEquity], style: 'total' },
     ],

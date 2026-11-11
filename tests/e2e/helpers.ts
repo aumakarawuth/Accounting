@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { expect, type Browser, type Page, type TestInfo } from '@playwright/test';
 
 export const env = {
   studentCode: process.env.E2E_STUDENT_CODE ?? '65012',
@@ -83,3 +84,49 @@ export async function studentHome(page: Page): Promise<string> {
 
 /** จอมือถือ (แถบล่าง + เมนูทั้งหมด แทนแถบข้าง) ใช้ได้ทั้ง Chromium และ Safari */
 export const isPhone = (info: TestInfo) => (info.project.use.viewport?.width ?? 1280) < 640;
+
+const tag = (info: TestInfo) => `${info.project.name.toUpperCase().replace(/[^A-Z0-9]/g, '')}-${randomUUID().slice(0, 4)}`;
+
+/**
+ * ผู้ดูแลสร้างครู + ห้องใหม่ → ครูนำเข้านักเรียนใหม่ 1 คน แล้วเปิดบริษัทให้ (โหมดฝึกหัด)
+ * ใช้กับเทสต์ที่ลงรายการซึ่งกระทบเทสต์อื่น (เช่น ปิดบัญชีสิ้นปี) แทนบริษัทตัวอย่างที่ใช้ร่วมกัน
+ */
+export async function freshStudent(browser: Browser, info: TestInfo, origin: string, label: string) {
+  const t = tag(info);
+  const actx = await browser.newContext({ extraHTTPHeaders: { origin } });
+  const admin = actx.request;
+  expect((await admin.post(`${origin}/api/auth/login`, { data: { kind: 'staff', identifier: env.adminEmail, password: env.adminPassword } })).status()).toBe(200);
+  const username = `ye-${t.toLowerCase()}`;
+  const staff = await admin.post(`${origin}/api/admin/staff`, { data: { email: username, name: `ครู${label} ${t}`, role: 'teacher' } });
+  expect(staff.status()).toBe(201);
+  const { id: teacherId, tempPassword } = await staff.json() as { id: string; tempPassword: string };
+  const room = await admin.post(`${origin}/api/admin/classrooms`, { data: { name: `ห้อง${label} ${t}`, teacherId } });
+  expect(room.status()).toBe(201);
+  const roomId = (await room.json()).id as string;
+  await actx.close();
+
+  const tctx = await browser.newContext({ extraHTTPHeaders: { origin } });
+  const teacher = tctx.request;
+  expect((await teacher.post(`${origin}/api/auth/login`, { data: { kind: 'staff', identifier: username, password: tempPassword } })).status()).toBe(200);
+  expect((await teacher.post(`${origin}/api/auth/change-password`, { data: { newPassword: `ครูปิดบัญชี-${randomUUID().slice(0, 8)}` } })).status()).toBe(200);
+  const code = `Y${randomUUID().replace(/-/g, '').slice(0, 10)}`;
+  const temp = `ชั่วคราว-${randomUUID().slice(0, 8)}`;
+  expect((await teacher.post(`${origin}/api/classrooms/${roomId}/import`, { data: { rows: [{ studentCode: code, name: `นักเรียน ${t}`, password: temp }] } })).status()).toBe(200);
+  expect((await teacher.post(`${origin}/api/classrooms/${roomId}/companies`, { data: { name: `ร้าน${label} ${t}`, mode: 'practice' } })).status()).toBeLessThan(300);
+  await tctx.close();
+  return { code, temp };
+}
+
+
+/** นักเรียนใหม่ (freshStudent) เข้าครั้งแรก เปลี่ยนรหัส แล้วไปที่บริษัทของตัวเอง คืน path หน้าบริษัทและ id */
+export async function freshStudentHome(page: Page, browser: Browser, info: TestInfo, origin: string, label: string) {
+  const { code, temp } = await freshStudent(browser, info, origin, label);
+  await login(page, 'student', code, temp);
+  await page.waitForURL('**/change-password');
+  await page.context().setExtraHTTPHeaders({ origin });
+  expect((await page.request.post('/api/auth/change-password', { data: { newPassword: `${label}-${randomUUID().slice(0, 8)}` } })).status()).toBe(200);
+  await page.goto('/');
+  await page.waitForURL(/\/c\/[0-9a-f-]{36}$/);
+  const home = new URL(page.url()).pathname;
+  return { home, co: home.split('/').pop()! };
+}

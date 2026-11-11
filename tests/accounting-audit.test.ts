@@ -276,6 +276,13 @@ describe('พฤศจิกายน 2569: เช็ค นำส่งภา�
     const ytd = await ok('GET', `/companies/${co}/statements?month=${M2}&scope=ytd`);
     expect([ytd.totalRevenue, ytd.totalExpense, ytd.netIncome]).toEqual(['37900.00', '47077.22', '-9177.22']);
     expect([ytd.totalAssets, ytd.totalLiabilities, ytd.totalEquity, ytd.balanced]).toEqual(['509692.35', '18869.57', '490822.78', true]);
+    // งบหลายขั้น (phase5-spec ข้อ 2): กำไรสุทธิเท่าขั้นเดียว · สินทรัพย์หมุนเวียน + ไม่หมุนเวียน = รวม
+    expect(ytd.multiStep.netIncome).toBe('-9177.22');
+    const k = ytd.classified;
+    expect((Number(k.totalCurrentAssets) * 100 + Number(k.totalNonCurrentAssets) * 100) / 100).toBe(509692.35);
+    const cogsCents = ytd.expense.filter((l: { code: string }) => l.code.startsWith('51'))
+      .reduce((s: number, l: { amount: string }) => s + Math.round(Number(l.amount) * 100), 0);
+    expect(Math.round(Number(ytd.multiStep.costOfSales.total) * 100)).toBe(cogsCents);
     const mo = await ok('GET', `/companies/${co}/statements?month=${M2}&scope=month`);
     expect([mo.totalRevenue, mo.totalExpense, mo.netIncome]).toEqual(['8600.00', '25591.69', '-16991.69']);
     // ทะเบียนลูกหนี้/เจ้าหนี้ = ยอดคุม

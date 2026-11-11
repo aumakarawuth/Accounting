@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { PeriodTable } from '@/components/PeriodTable';
 import { YearEndPanel } from '@/components/YearEndPanel';
+import { EndingInventoryPanel } from '@/components/EndingInventoryPanel';
 import { serverApi } from '@/lib/server-api';
 import type { Company, FiscalYears, Periods } from '@/lib/api';
 import { th } from '@/i18n/th';
@@ -28,6 +29,8 @@ export default async function ClosingPage({ params }: { params: Promise<{ compan
         )}
       </section>
       <PeriodTable companyId={companyId} data={periods} linkJournal />
+      <EndingInventoryPanel companyId={companyId} months={periods.periods.filter((p) => !p.closed).map((p) => p.month)}
+        writable={company.can_write && !company.locked} />
       <YearEndPanel companyId={companyId} data={years} teacher={!company.can_write} />
     </div>
   );
