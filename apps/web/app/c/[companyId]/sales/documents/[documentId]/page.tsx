@@ -6,6 +6,7 @@ import { DocumentPaper, type Paper } from '@/components/sales/DocumentPaper';
 import { serverApi } from '@/lib/server-api';
 import type { ApiError, Company, SalesDocument } from '@/lib/api';
 import { isoToThai } from '@/lib/date';
+import { fromCents, toCents } from '@/lib/money';
 import { th } from '@/i18n/th';
 
 // เอกสารขายที่ผ่านรายการแล้ว: กระดาษพร้อมตราประทับ (พิมพ์ได้) + ใบที่ตัดยอด/ถูกตัดยอด แก้ไม่ได้ ยกเลิกหรือออกใบลด/เพิ่มหนี้แทน
@@ -28,6 +29,8 @@ export default async function SalesDocumentPage({ params }: { params: Promise<{ 
     lines: d.lines.map((l) => ({ description: l.description, qty: String(Number(l.qty)), unit: l.unit, unitPrice: l.unitPrice, amount: l.amount })),
     gross: d.gross, discount: d.discount, base: d.base, vat: d.vat, total: d.total, vatRate: d.vatRate, priceMode: d.priceMode,
     whtAmount: d.whtAmount,
+    // ใบขายเชื่อที่หักเงินมัดจำ: แสดงยอดหักและคงค้างชำระใต้ยอดรวม
+    depositDeducted: fromCents(d.settledBy.filter((x) => x.kind === 'deposit_applied' && !x.voided).reduce((a, x) => a + (toCents(x.amount) ?? 0n), 0n)),
     stamp: d.voidedAt ? { kind: 'voided', docNo: d.voidDocNo ?? '', date: d.voidedAt.slice(0, 10) } : { kind: 'posted', docNo: d.entryDocNo, date: d.date },
   };
   // คำสั่งตามชนิดเอกสาร: ใบที่ยังค้างออกใบลด/เพิ่มหนี้และรับชำระได้
@@ -45,9 +48,9 @@ export default async function SalesDocumentPage({ params }: { params: Promise<{ 
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6 print:p-0">
-      <Link href={d.kind === 'receipt' ? c('/sales/receipts') : c(`/sales/invoices?month=${d.date.slice(0, 7)}`)}
+      <Link href={d.kind === 'receipt' ? c('/sales/receipts') : d.kind === 'deposit' ? c('/sales/deposits') : c(`/sales/invoices?month=${d.date.slice(0, 7)}`)}
         className="flex min-h-11 items-center self-start text-sm underline print:hidden">
-        ‹ {d.kind === 'receipt' ? th.sales.backToReceipts : th.sales.backToList}
+        ‹ {d.kind === 'receipt' ? th.sales.backToReceipts : d.kind === 'deposit' ? th.deposits.list : th.sales.backToList}
       </Link>
       {d.voidedAt
         ? <p role="status" className="neg border border-rule-strong bg-band px-4 py-2.5 print:hidden">{th.sales.voidedNote(isoToThai(d.voidedAt.slice(0, 10)), d.voidReason ?? '', d.voidDocNo ?? '')}</p>

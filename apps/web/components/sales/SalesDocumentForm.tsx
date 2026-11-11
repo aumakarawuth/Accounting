@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
-import { postJson, type ApiError, type SalesDocument, type SalesFormData } from '@/lib/api';
+import { api, postJson, type ApiError, type OpenDeposit, type SalesDocument, type SalesFormData, type SalesOrderDetail } from '@/lib/api';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { addDays, isoToThai, thaiToIso, todayIso, maskDate } from '@/lib/date';
 import { lineAmount, vatCalc, type PriceMode } from '@/lib/vat';
@@ -16,19 +16,29 @@ import { salesEntry } from '@/lib/entry-preview';
 // ฟอร์มออกเอกสารขาย (ใบกำกับภาษี/ใบแจ้งหนี้ ขายสด ใบลดหนี้ ใบเพิ่มหนี้) ตาม mockup ที่อนุมัติ
 // มือถือ: 4 ขั้น มีปุ่มดูตัวอย่างกระดาษ · iPad/คอม: ฟอร์มซ้าย กระดาษตัวอย่างขวา
 // ยอดคิดสูตรเดียวกับ DB (lib/vat.ts) เพื่อให้ตัวอย่างตรงกับใบจริงทุกสตางค์ — DB ตรวจซ้ำอีกครั้งตอนผ่านรายการ
-export type SalesFormKind = 'invoice' | 'cash-sale' | 'credit-note' | 'debit-note';
-type Line = { key: number; itemCode: string; description: string; qty: string; unit: string; unitPrice: string };
+export type SalesFormKind = 'invoice' | 'cash-sale' | 'credit-note' | 'debit-note' | 'quotation' | 'sales-order';
+type Line = { key: number; itemCode: string; description: string; qty: string; unit: string; unitPrice: string; orderLineNo?: number; maxQty?: string };
+type DepositPick = { id: string; docNo: string; date: string; remaining: string; amount: string; on: boolean };
 
 let seq = 0;
 const blank = (): Line => ({ key: ++seq, itemCode: '', description: '', qty: '1', unit: '', unitPrice: '' });
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
 const money = (c: bigint) => formatMoney(fromCents(c));
 
-export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
-  companyId: string; kind: SalesFormKind; form: SalesFormData; refDoc?: SalesDocument | null;
+// fromDoc: ขายเชื่อจากใบสั่งขาย (kind=invoice) หรือใบสั่งขายจากใบเสนอราคา (kind=sales-order)
+export function SalesDocumentForm({ companyId, kind, form, refDoc, fromDoc }: {
+  companyId: string; kind: SalesFormKind; form: SalesFormData; refDoc?: SalesDocument | null; fromDoc?: SalesOrderDetail | null;
 }) {
   const router = useRouter();
   const isNote = kind === 'credit-note' || kind === 'debit-note';
+  const isOrderDoc = kind === 'quotation' || kind === 'sales-order';
+  const fromLines = (): Line[] => (fromDoc?.lines ?? []).flatMap((l) => {
+    const left = kind === 'invoice' ? Number(l.qty) - Number(l.delivered) : Number(l.qty);
+    if (left <= 0) return [];
+    const qty = String(Math.round(left * 1000) / 1000);
+    return [{ key: ++seq, itemCode: l.itemCode ?? '', description: l.description, qty, unit: l.unit, unitPrice: l.unitPrice,
+      ...(kind === 'invoice' ? { orderLineNo: l.lineNo, maxQty: qty } : {}) }];
+  });
   const co = form.company;
   const writable = co.canWrite && !co.locked;
   const itemsByCode = useMemo(() => new Map(form.items.map((i) => [i.code, i])), [form.items]);
@@ -36,20 +46,35 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
   const [step, setStep] = useState(0); // ขั้นบนมือถือ 0–3 (จอใหญ่เห็นทุกส่วนพร้อมกัน)
   const [paperOpen, setPaperOpen] = useState(false); // มือถือ: ดูตัวอย่างกระดาษแทนฟอร์ม
   const [date, setDate] = useState(isoToThai(todayIso()));
-  const [partyCode, setPartyCode] = useState('');
-  const [service, setService] = useState<boolean | null>(null); // null = ตามรายการแรกที่เลือกจากสินค้า
-  const [priceMode, setPriceMode] = useState<'exclusive' | 'inclusive'>('exclusive');
+  const [partyCode, setPartyCode] = useState(fromDoc?.partyCode ?? '');
+  const [service, setService] = useState<boolean | null>(fromDoc ? fromDoc.isService : null); // null = ตามรายการแรกที่เลือกจากสินค้า
+  const [priceMode, setPriceMode] = useState<'exclusive' | 'inclusive'>(fromDoc?.priceMode === 'inclusive' ? 'inclusive' : 'exclusive');
+  const [until, setUntil] = useState('');
+  const [depositState, setDepositState] = useState<{ party: string; rows: DepositPick[] }>({ party: '', rows: [] });
   const [creditDays, setCreditDays] = useState<string | null>(null); // null = ตามลูกค้า
   const [cashAccount, setCashAccount] = useState(form.cashAccounts[0]?.code ?? '1110');
-  const [discount, setDiscount] = useState('');
+  const [discount, setDiscount] = useState(kind === 'sales-order' && fromDoc && fromDoc.discount !== '0.00' ? fromDoc.discount : '');
   const [description, setDescription] = useState('');
   const [reason, setReason] = useState('');
-  const [lines, setLines] = useState<Line[]>(() => [blank()]);
+  const [lines, setLines] = useState<Line[]>(() => (fromDoc ? fromLines() : []).concat(fromDoc ? [] : [blank()]));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID()); // คีย์เดิมจนบันทึกสำเร็จ กดซ้ำ/เน็ตหลุดไม่ออกใบซ้ำ
 
   const party = isNote ? null : form.customers.find((c) => c.code === partyCode) ?? null;
+
+  // ขายเชื่อ: เงินมัดจำคงเหลือของลูกค้ารายนี้ (เลือกหักได้)
+  useEffect(() => {
+    if (kind !== 'invoice' || !partyCode) return;
+    let live = true;
+    api<OpenDeposit[]>(`/companies/${companyId}/deposits?party=${encodeURIComponent(partyCode)}`).then(
+      (rows) => { if (live) setDepositState({ party: partyCode, rows: rows.map((d) => ({ id: d.id, docNo: d.docNo, date: d.date, remaining: d.remaining, amount: d.remaining, on: false })) }); },
+      () => {});
+    return () => { live = false; };
+  }, [kind, partyCode, companyId]);
+  // รายการของลูกค้าคนอื่น (ก่อนโหลดใหม่เสร็จ) ไม่แสดง
+  const deposits = useMemo(() => (kind === 'invoice' && depositState.party === partyCode ? depositState.rows : []), [kind, depositState, partyCode]);
+  const setDeposits = (fn: (rows: DepositPick[]) => DepositPick[]) => setDepositState((st) => ({ ...st, rows: fn(st.rows) }));
 
   const update = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const addLine = useCallback(() => setLines((ls) => [...ls, blank()]), []);
@@ -75,6 +100,8 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
         problems.set(l.key, th.sales.lineInvalid(i + 1));
       } else if (it && it.isService !== isService) {
         problems.set(l.key, th.sales.lineMixed(i + 1));
+      } else if (l.maxQty && Number(l.qty) > Number(l.maxQty)) {
+        problems.set(l.key, th.sales.orderQtyOver(i + 1, l.maxQty));
       }
       if (amt !== null) { gross += amt; amounts.set(l.key, amt); }
       filled++;
@@ -86,6 +113,11 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
   }, [lines, itemsByCode, isService, discount, rate, mode]);
 
   const isoDate = thaiToIso(date);
+  const untilIso = until.trim() ? thaiToIso(until) : null;
+  const untilBad = until.trim() !== '' && (untilIso === null || (isoDate !== null && untilIso < isoDate));
+  const picked = useMemo(() => deposits.filter((d) => d.on), [deposits]);
+  const depTotal = useMemo(() => picked.reduce((a, d) => a + (toCents(d.amount) ?? 0n), 0n), [picked]);
+  const depBad = picked.some((d) => { const c = toCents(d.amount); return c === null || c <= 0n || c > (toCents(d.remaining) ?? 0n); }) || depTotal > calc.total;
   const days = creditDays === null ? party?.creditDays ?? 0 : Number(creditDays);
   const daysBad = (creditDays !== null && !/^\d{1,3}$/.test(creditDays)) || days > 365;
   const credit = kind === 'invoice' || kind === 'debit-note';
@@ -101,13 +133,15 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
     calc.discBad ? th.sales.discountInvalid
       : daysBad ? th.sales.creditDaysInvalid
       : overOpen ? th.sales.overOpen(formatMoney(refDoc!.open ?? '0'))
-      : isTax && !co.taxId ? th.sales.needCompanyTaxId : null,
+      : untilBad ? th.sales.untilInvalid
+      : depBad ? th.sales.depositInvalid
+      : isTax && !co.taxId && !isOrderDoc ? th.sales.needCompanyTaxId : null,
   ];
   const blocked = stepProblem.find(Boolean) ?? null;
   const canPost = writable && !busy && !blocked;
 
   // ร่างในเครื่อง + ครูดูสด (รายการบัญชีที่ใบนี้จะสร้าง)
-  const sqlKind = ({ invoice: 'sales_invoice', 'cash-sale': 'cash_sale', 'credit-note': 'credit_note', 'debit-note': 'debit_note' } as const)[kind];
+  const sqlKind = ({ invoice: 'sales_invoice', 'cash-sale': 'cash_sale', 'credit-note': 'credit_note', 'debit-note': 'debit_note', quotation: 'sales_invoice', 'sales-order': 'sales_invoice' } as const)[kind];
   const entry = salesEntry({
     kind: sqlKind, service: isService, cashAccount, wht: 0n, base: calc.base, vat: calc.vat, total: calc.total,
     lines: lines.filter((l) => calc.amounts.has(l.key)).map((l) => ({
@@ -115,7 +149,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
       amount: calc.amounts.get(l.key)!,
     })),
   });
-  const draft = useDocDraft(writable ? `sales:${kind}${refDoc ? `:${refDoc.id}` : ''}` : null, companyId, {
+  const draft = useDocDraft(writable ? `sales:${kind}${refDoc ? `:${refDoc.id}` : ''}${fromDoc ? `:${fromDoc.id}` : ''}` : null, companyId, {
     date, partyCode, service, priceMode, creditDays, cashAccount, discount, description, reason,
     lines: lines.map(({ key: _key, ...l }) => l), idemKey,
   }, {
@@ -127,7 +161,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
       setLines(d.lines.length ? d.lines.map((l) => ({ ...l, key: ++seq })) : [blank()]);
       setIdemKey(d.idemKey);
     },
-    live: calc.amounts.size > 0 ? { title: th.sales.formTitle[kind], date: isoDate ?? date, description: refDoc?.partyName ?? party?.name ?? '', lines: liveLines(entry) } : null,
+    live: calc.amounts.size > 0 && !isOrderDoc ? { title: th.sales.formTitle[kind], date: isoDate ?? date, description: refDoc?.partyName ?? party?.name ?? '', lines: liveLines(entry) } : null,
   });
   const discardDraft = () => {
     setPartyCode(''); setService(null); setCreditDays(null); setDiscount(''); setDescription(''); setReason(''); setLines([blank()]);
@@ -141,6 +175,21 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
     setBusy(true);
     setError(null);
     try {
+      if (isOrderDoc) {
+        const r = await postJson<{ id: string; docNo: string }>(`/companies/${companyId}/sales-orders`, {
+          kind: kind === 'quotation' ? 'quotation' : 'sales_order', date: isoDate, partyCode, isService,
+          ...(untilIso ? { untilDate: untilIso } : {}), ...(fromDoc ? { sourceId: fromDoc.id } : {}),
+          ...(co.vatRegistered ? { priceMode } : {}), ...(calc.disc > 0n ? { discount: fromCents(calc.disc) } : {}),
+          ...(description.trim() ? { description: description.trim() } : {}),
+          lines: lines.filter((l) => calc.amounts.has(l.key)).map((l) => ({
+            ...(l.itemCode ? { itemCode: l.itemCode } : {}), description: l.description.trim(), qty: l.qty.trim(),
+            unitPrice: fromCents(toCents(l.unitPrice)!), ...(l.unit.trim() ? { unit: l.unit.trim() } : {}),
+          })),
+        }, { 'idempotency-key': idemKey });
+        draft.finish();
+        router.push(`/c/${companyId}/sales/orders/${r.id}`);
+        return;
+      }
       const body = {
         date: isoDate,
         ...(isNote ? { refDocumentId: refDoc!.id, reason: reason.trim() } : { partyCode, isService }),
@@ -153,7 +202,10 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
           ...(l.itemCode ? { itemCode: l.itemCode } : {}),
           description: l.description.trim(), qty: l.qty.trim(), unitPrice: fromCents(toCents(l.unitPrice)!),
           ...(l.unit.trim() ? { unit: l.unit.trim() } : {}),
+          ...(l.orderLineNo ? { orderLineNo: l.orderLineNo } : {}),
         })),
+        ...(kind === 'invoice' && fromDoc ? { orderId: fromDoc.id } : {}),
+        ...(picked.length ? { deposits: picked.map((d) => ({ documentId: d.id, amount: fromCents(toCents(d.amount)!) })) } : {}),
       };
       const r = await postJson<{ id: string; docNo: string }>(`/companies/${companyId}/sales/${kind}`, body, { 'idempotency-key': idemKey });
       draft.finish();
@@ -163,7 +215,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
       setError(err.code === 'server' ? th.error.server(err.ref ?? '-') : err.message);
       setBusy(false);
     }
-  }, [canPost, isoDate, isNote, refDoc, reason, partyCode, isService, co.vatRegistered, priceMode, calc, description, kind, creditDays, days, cashAccount, lines, companyId, router, draft, idemKey]);
+  }, [canPost, isoDate, isNote, refDoc, reason, partyCode, isService, co.vatRegistered, priceMode, calc, description, kind, creditDays, days, cashAccount, lines, companyId, router, draft, idemKey, isOrderDoc, untilIso, fromDoc, picked]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -176,14 +228,16 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
 
   const target = isNote ? refDoc! : null;
   const paper: Paper = {
-    kind: ({ invoice: 'sales_invoice', 'cash-sale': 'cash_sale', 'credit-note': 'credit_note', 'debit-note': 'debit_note' } as const)[kind],
-    isTaxInvoice: isTax,
+    kind: ({ invoice: 'sales_invoice', 'cash-sale': 'cash_sale', 'credit-note': 'credit_note', 'debit-note': 'debit_note', quotation: 'quotation', 'sales-order': 'sales_order' } as const)[kind],
+    isTaxInvoice: isTax && !isOrderDoc,
+    untilDate: isOrderDoc ? untilIso : null,
+    depositDeducted: depTotal > 0n ? fromCents(depTotal) : undefined,
     seller: { name: co.name, taxId: co.taxId, branchNo: co.branchNo, address: co.address },
     party: target ? { name: target.partyName, taxId: target.partyTaxId, branchNo: target.partyBranchNo, address: target.partyAddress }
       : party ? { name: party.name, taxId: party.taxId, branchNo: party.branchNo, address: party.address } : null,
     docNo: null, date: isoDate,
     dueDate: credit && isoDate ? addDays(isoDate, dueDays) : null,
-    refDocNo: target?.docNo ?? null, reason: isNote ? reason : null,
+    refDocNo: target?.docNo ?? fromDoc?.docNo ?? null, reason: isNote ? reason : null,
     lines: lines.filter((l) => calc.amounts.has(l.key)).map((l) => ({
       description: l.description, qty: l.qty, unit: l.unit || itemsByCode.get(l.itemCode)?.unit || '',
       unitPrice: fromCents(toCents(l.unitPrice) ?? 0n), amount: fromCents(calc.amounts.get(l.key)!),
@@ -192,6 +246,7 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
     total: fromCents(calc.total), vatRate: rate, priceMode: mode, whtAmount: '0',
   };
 
+  const postLabel = kind === 'quotation' ? th.sales.saveQuote : kind === 'sales-order' ? th.sales.saveOrder : th.sales.post;
   const steps = isNote ? [th.sales.ref, ...th.sales.steps.slice(1)] : th.sales.steps;
   const sec = (n: number) => `flex flex-col gap-4 ${step === n ? '' : 'max-sm:hidden'}`;
   const h2 = 'border-b border-rule-strong pb-1.5 font-doc text-[17px] font-bold';
@@ -227,6 +282,11 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
                   <input className={inputCls} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} aria-invalid={!reason.trim()} />
                 </label>
               </>
+            ) : fromDoc ? (
+              <p className="border border-rule-input px-3 py-2">
+                {kind === 'invoice' ? th.sales.fromOrder(fromDoc.docNo) : th.sales.fromQuote(fromDoc.docNo)}
+                <br /><span className="text-ink2">{fromDoc.partyCode} {fromDoc.partyName}</span>
+              </p>
             ) : (
               <PartyPicker parties={form.customers} selected={party} label={th.sales.customer} hint={th.sales.customerSearch} none={th.sales.customerNone}
                 onPick={(c) => { setPartyCode(c.code); setCreditDays(null); }} onClear={() => { setPartyCode(''); setCreditDays(null); }} />
@@ -235,6 +295,12 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
               {th.sales.date}
               <input className={`${inputCls} font-num`} inputMode="numeric" value={date} onChange={(e) => setDate(maskDate(e.target.value))} aria-invalid={isoDate === null} />
             </label>
+            {isOrderDoc && (
+              <label className="flex flex-col text-sm">
+                {kind === 'quotation' ? th.sales.untilQuote : th.sales.untilOrder}
+                <input className={`${inputCls} font-num`} inputMode="numeric" value={until} onChange={(e) => setUntil(maskDate(e.target.value))} aria-invalid={untilBad} />
+              </label>
+            )}
           </section>
 
           {/* ขั้น 2: รายการ */}
@@ -322,6 +388,27 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
                 </label>
               )}
             </div>
+            {kind === 'invoice' && partyCode && (
+              <fieldset className="flex flex-col gap-2 text-sm">
+                <legend className="font-medium">{th.sales.deposits}</legend>
+                {deposits.length === 0 ? <p className="text-ink2">{th.sales.depositsNone}</p> : deposits.map((d) => (
+                  <div key={d.id} className="flex flex-col gap-1 border border-rule px-3 py-2">
+                    <label className="flex min-h-11 items-center gap-2 text-base">
+                      <input type="checkbox" className="size-5 accent-ink" checked={d.on}
+                        onChange={(e) => setDeposits((ds) => ds.map((x) => (x.id === d.id ? { ...x, on: e.target.checked } : x)))} />
+                      {th.sales.depositRow(d.docNo, isoToThai(d.date), formatMoney(d.remaining))}
+                    </label>
+                    {d.on && (
+                      <label className="flex flex-col text-sm">
+                        {th.sales.depositAmount(d.docNo)}
+                        <input inputMode="decimal" className={`${inputCls} num`} value={d.amount}
+                          onChange={(e) => setDeposits((ds) => ds.map((x) => (x.id === d.id ? { ...x, amount: e.target.value } : x)))} />
+                      </label>
+                    )}
+                  </div>
+                ))}
+              </fieldset>
+            )}
             <label className="flex flex-col text-sm">
               {th.sales.note}
               <input className={inputCls} value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} />
@@ -333,6 +420,8 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
               {mode !== 'none' && <><dt className="py-1">{th.sales.vat(String(Number(rate)))}</dt><dd className="num py-1">{money(calc.vat)}</dd></>}
               <dt className="border-t border-ink py-1 font-semibold">{th.sales.total}</dt>
               <dd className="num border-t border-ink py-1 font-semibold">{money(calc.total)}</dd>
+              {depTotal > 0n && <><dt className="py-1">{th.sales.lessDeposit}</dt><dd className="num py-1">{money(depTotal)}</dd>
+                <dt className="py-1 font-semibold">{th.sales.netDue}</dt><dd className="num py-1 font-semibold">{money(calc.total - depTotal)}</dd></>}
             </dl>
           </section>
 
@@ -372,9 +461,9 @@ export function SalesDocumentForm({ companyId, kind, form, refDoc }: {
           {/* key ต่างกัน: ถ้า React ใช้ปุ่มเดิมแล้วเปลี่ยนเป็น submit ระหว่างคลิก เบราว์เซอร์จะส่งฟอร์ม (ผ่านรายการเองโดยไม่ได้กด) */}
           {step < 3
             ? <Button key="next" type="button" disabled={Boolean(stepProblem[step])} onClick={() => { setStep((s) => s + 1); setPaperOpen(false); window.scrollTo(0, 0); }}>{th.sales.next(steps[step + 1]!)}</Button>
-            : <Button key="post" type="submit" disabled={!canPost}>{th.sales.post}</Button>}
+            : <Button key="post" type="submit" disabled={!canPost}>{postLabel}</Button>}
         </div>
-        <Button type="submit" shortcut="F9" disabled={!canPost} className="max-sm:hidden sm:ml-auto">{th.sales.post}</Button>
+        <Button type="submit" shortcut="F9" disabled={!canPost} className="max-sm:hidden sm:ml-auto">{postLabel}</Button>
       </footer>
     </form>
   );

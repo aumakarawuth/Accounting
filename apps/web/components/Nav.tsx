@@ -22,7 +22,10 @@ export function studentNav(companyId: string): Group[] {
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [
+      { label: n.quotesOrders, href: c('/sales/orders') },
       { label: n.taxInvoice, href: c('/sales/invoices') },
+      { label: n.deposits, href: c('/sales/deposits') },
+      { label: n.billing, href: c('/sales/billing') },
       { label: n.receipt, href: c('/sales/receipts') },
       { label: n.receivables, href: c('/sales/receivables') },
     ] },

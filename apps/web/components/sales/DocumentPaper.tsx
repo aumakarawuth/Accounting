@@ -7,7 +7,7 @@ import type { SalesKindSql } from '@/lib/api';
 
 // หน้ากระดาษเอกสารขาย ใช้ทั้งตัวอย่างระหว่างร่างและเอกสารที่ผ่านรายการแล้ว (ตาม mockup ใบกำกับภาษีที่อนุมัติ)
 export type Paper = {
-  kind: SalesKindSql;
+  kind: SalesKindSql | 'quotation' | 'sales_order';
   isTaxInvoice: boolean;
   seller: { name: string; taxId: string | null; branchNo: string; address: string };
   party: { name: string; taxId: string | null; branchNo: string; address: string } | null;
@@ -20,6 +20,10 @@ export type Paper = {
   gross: string; discount: string; base: string; vat: string; total: string; vatRate: string;
   priceMode: 'exclusive' | 'inclusive' | 'none';
   whtAmount: string;
+  /** หักเงินมัดจำในใบขายเชื่อ (ยอดรวมภาษี) */
+  depositDeducted?: string;
+  /** ใบเสนอราคา: ยืนราคาถึง · ใบสั่งขาย: กำหนดส่ง */
+  untilDate?: string | null;
   stamp?: { kind: 'posted' | 'voided'; docNo: string; date: string } | null;
 };
 
@@ -28,12 +32,13 @@ const money = (v: string) => formatMoney(v);
 const minus = (a: string, b: string) => fromCents((toCents(a) ?? 0n) - (toCents(b) ?? 0n));
 
 export function DocumentPaper({ p, className = '' }: { p: Paper; className?: string }) {
-  const paid = p.kind === 'cash_sale' || p.kind === 'receipt';
+  const paid = p.kind === 'cash_sale' || p.kind === 'receipt' || p.kind === 'deposit';
   const rows: [string, string, boolean?][] = [[p.kind === 'receipt' ? th.sales.receiptTotal : th.sales.subtotal, p.gross]];
   if (Number(p.discount) > 0) rows.push([th.sales.discount, p.discount], [th.sales.afterDiscount, minus(p.gross, p.discount)]);
   if (p.priceMode === 'inclusive' && p.kind !== 'receipt') rows.push([th.sales.base, p.base]);
   if (p.priceMode !== 'none' || Number(p.vat) > 0) rows.push([th.sales.vat(String(Number(p.vatRate))), p.vat]);
   rows.push([th.sales.total, p.total, true]);
+  if (p.depositDeducted && Number(p.depositDeducted) > 0) rows.push([th.sales.lessDeposit, p.depositDeducted], [th.sales.netDue, minus(p.total, p.depositDeducted), true]);
   const wht = Number(p.whtAmount) > 0;
 
   return (
@@ -72,6 +77,7 @@ export function DocumentPaper({ p, className = '' }: { p: Paper; className?: str
           <dt className="text-[12px] text-ink2">{th.sales.date}</dt>
           <dd className="font-num text-right">{p.date ? isoToThai(p.date) : '—'}</dd>
           {p.dueDate && <><dt className="text-[12px] text-ink2">{th.sales.dueDate}</dt><dd className="font-num text-right">{isoToThai(p.dueDate)}</dd></>}
+          {p.untilDate && <><dt className="text-[12px] text-ink2">{p.kind === 'quotation' ? th.orders.untilQuote : th.orders.untilOrder}</dt><dd className="font-num text-right">{isoToThai(p.untilDate)}</dd></>}
           {p.refDocNo && <><dt className="text-[12px] text-ink2">{th.sales.ref}</dt><dd className="font-num text-right">{p.refDocNo}</dd></>}
         </dl>
       </div>

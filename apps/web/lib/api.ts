@@ -133,7 +133,7 @@ export type StockCardRow = {
   restated: boolean;
 };
 export type StockCard = { item: { code: string; name: string; unit: string; trackInventory: boolean }; card: StockCardRow[] };
-export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note';
+export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note' | 'deposit' | 'deposit_applied';
 export type SalesFormData = {
   company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };
   customers: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string }[];
@@ -344,4 +344,29 @@ export type OpeningData = {
   customers: { code: string; name: string; creditDays: number }[];
   vendors: { code: string; name: string; creditDays: number }[];
   items: { code: string; name: string; unit: string }[];
+};
+
+// ---- เฟส 5 โมดูล 4: ใบเสนอราคา ใบสั่งขาย เงินมัดจำ ใบวางบิล ----
+export type OrderKind = 'quotation' | 'sales_order';
+export type OrderStatus = 'open' | 'expired' | 'accepted' | 'partial' | 'closed' | 'cancelled';
+export type SalesOrderRow = {
+  id: string; kind: OrderKind; docNo: string; date: string; untilDate: string | null; partyCode: string; partyName: string;
+  isService: boolean; priceMode: 'exclusive' | 'inclusive' | 'none'; vatRate: string; gross: string; discount: string; base: string;
+  vat: string; total: string; description: string; cancelReason: string | null; status: OrderStatus;
+};
+export type SalesOrderDetail = SalesOrderRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
+  sellerName: string; sellerTaxId: string | null; sellerBranchNo: string; sellerAddress: string;
+  source: { id: string; docNo: string } | null;
+  lines: { lineNo: number; itemCode: string | null; description: string; qty: string; unit: string; unitPrice: string; amount: string; delivered: string }[];
+  invoices: { id: string; docNo: string; date: string; total: string; voided: boolean }[];
+  deposits: { id: string; docNo: string; date: string; total: string; voided: boolean; remaining: string }[];
+  orders: { id: string; docNo: string; cancelled: boolean }[];
+};
+export type OpenDeposit = { id: string; docNo: string; date: string; partyCode: string; partyName: string; total: string; vat: string; remaining: string; orderDocNo: string | null; orderId: string | null };
+export type BillingNoteRow = { id: string; docNo: string; date: string; dueDate: string; partyCode: string; partyName: string; total: string; description: string; cancelReason: string | null; open: string; status: 'open' | 'paid' | 'cancelled' };
+export type BillingNoteDetail = BillingNoteRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
+  sellerName: string; sellerTaxId: string | null; sellerBranchNo: string; sellerAddress: string;
+  items: { id: string; docNo: string; date: string; dueDate: string; amount: string; open: string }[];
 };
