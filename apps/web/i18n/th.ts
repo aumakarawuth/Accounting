@@ -958,6 +958,12 @@ export const th = {
     confirmReset: 'ยืนยันรีเซ็ต',
     newPassword: 'รหัสผ่านใหม่',
     newPasswordHint: 'ตั้งรหัสเอง (ว่าง = สุ่ม)',
+    resetStudent: {
+      title: 'รีเซ็ตรหัสผ่านนักเรียน',
+      code: 'รหัสนักเรียน',
+      submit: 'รีเซ็ตรหัสผ่าน',
+      done: (name: string, pw: string) => `รีเซ็ตรหัสของ ${name} แล้ว รหัสใหม่ ${pw} (นักเรียนต้องเปลี่ยนเองเมื่อเข้าครั้งแรก)`,
+    },
     deactivate: 'ปิดบัญชี',
     confirmDeactivate: 'ยืนยันปิดบัญชี (ถูกออกจากระบบทันที)',
     activate: 'เปิดบัญชี',

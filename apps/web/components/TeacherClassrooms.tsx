@@ -9,7 +9,7 @@ import { OpenCompanies } from './OpenCompanies';
 import { JoinCodePanel } from './JoinCodePanel';
 import { StudentImport } from './StudentImport';
 
-type RowState = { confirm?: boolean; confirmDelete?: boolean; busy?: boolean; note?: string; error?: string };
+type RowState = { pw?: string; confirm?: boolean; confirmDelete?: boolean; busy?: boolean; note?: string; error?: string };
 
 // รีเซ็ตรหัส: กดสองจังหวะ (ปุ่มเปลี่ยนเป็น "ยืนยัน" ในที่เดิม ไม่ใช้ popup) รหัสชั่วคราวไปรวมที่ใบรหัสผ่านด้านล่าง
 export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
@@ -24,9 +24,9 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
   async function reset(room: Classroom, s: Classroom['students'][number]) {
     if (state[s.id]?.busy) return;
     if (!state[s.id]?.confirm) return set(s.id, { confirm: true });
-    set(s.id, { confirm: true, busy: true }); // กันกดยืนยันซ้ำระหว่างรอ (จะได้รหัสสองชุด)
+    set(s.id, { ...state[s.id], confirm: true, busy: true }); // กันกดยืนยันซ้ำระหว่างรอ (จะได้รหัสสองชุด)
     try {
-      const r = await postJson<{ tempPassword: string }>(`/teacher/students/${s.id}/reset-password`, {});
+      const r = await postJson<{ tempPassword: string }>(`/teacher/students/${s.id}/reset-password`, state[s.id]?.pw?.trim() ? { password: state[s.id]!.pw!.trim() } : {});
       set(s.id, { note: th.teacher.tempPassword(r.tempPassword) });
       addSlips([{ key: nextSlipKey(), idLabel: th.slips.studentCode, id: s.studentCode, name: s.name, room: room.name, temp: r.tempPassword }]);
     } catch (e) {
@@ -84,6 +84,10 @@ export function TeacherClassrooms({ rooms }: { rooms: Classroom[] }) {
                       <span className="font-num">{s.studentCode}</span>
                       <span className="min-w-0 flex-1">{s.name}</span>
                       <span className={`text-sm ${s.companies === 0 ? 'text-ink2' : ''}`}>{th.teacher.companyCount(s.companies)}</span>
+                      {st.confirm && (
+                        <input aria-label={th.admin.newPassword} placeholder={th.admin.newPasswordHint} className="h-11 w-44 rounded-doc border border-rule-input bg-paper px-3 text-base"
+                          value={st.pw ?? ''} onChange={(e) => set(s.id, { ...st, pw: e.target.value })} />
+                      )}
                       <button type="button" disabled={st.busy} className={`${btn} ${st.confirm ? 'bg-ink text-paper' : ''} disabled:bg-disabled disabled:text-ink2`} onClick={() => reset(room, s)}>
                         {st.confirm ? th.teacher.confirmReset : th.teacher.resetPassword}
                       </button>
