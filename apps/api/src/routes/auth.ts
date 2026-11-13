@@ -22,11 +22,20 @@ export function authRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
     const wait = await limiter.hit(`login:${req.ip}`, cfg.loginPerIpPerMinute, 60);
     if (wait) throw new HttpError(429, 'rate_limited', 'ส่งคำขอถี่เกินไป', { retryAfter: wait });
     const body = Login.parse(req.body);
-    const ident = body.identifier;
+    // หน้าเข้าระบบผิด (ครูกรอกในหน้านักเรียน หรือกลับกัน) ก็เข้าได้: ไม่พบในแบบที่เลือก ลองอีกแบบ
+    let kind: 'student' | 'staff' = body.kind;
+    let ident = body.identifier;
+    let found = (await pool.query('select * from app.auth_find($1, $2)', [kind, ident])).rows[0];
+    if (!found) {
+      const other = kind === 'student' ? 'staff' : 'student';
+      const t = other === 'staff' ? ident.trim().toLowerCase() : ident.trim();
+      const alt = (await pool.query('select * from app.auth_find($1, $2)', [other, t])).rows[0];
+      if (alt) { kind = other; ident = t; found = alt; }
+    }
 
     const lock = (await pool.query(
       'select failures, locked_until, ip_failures from app.auth_lock_state($1, $2, $3, $4, $5::interval, $6)',
-      [body.kind, ident, req.ip, cfg.maxFailures, window, cfg.ipMaxFailures],
+      [kind, ident, req.ip, cfg.maxFailures, window, cfg.ipMaxFailures],
     )).rows[0];
     if (lock.ip_failures >= cfg.ipMaxFailures) {
       throw new HttpError(429, 'ip_limited', 'ล็อกอินผิดจากเครือข่ายนี้มากเกินไป', { retryAfter: cfg.lockMinutes * 60 });
@@ -36,10 +45,11 @@ export function authRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
       throw new HttpError(423, 'locked', 'บัญชีถูกล็อกชั่วคราว', { minutes });
     }
 
-    const found = (await pool.query('select * from app.auth_find($1, $2)', [body.kind, ident])).rows[0];
-    const ok = await verifyPassword(found?.password_hash ?? null, body.password);
+    // ช่องว่างหัว/ท้ายที่คีย์บอร์ดมือถือเติมให้เอง ไม่ถือว่าผิด
+    let ok = await verifyPassword(found?.password_hash ?? null, body.password);
+    if (!ok && found && body.password.trim() !== body.password) ok = await verifyPassword(found.password_hash, body.password.trim());
     await pool.query('select app.auth_record($1, $2, $3, $4, $5, $6, $7::interval)', [
-      body.kind, ident, req.ip, found?.user_id ?? null, ok, cfg.maxFailures, window,
+      kind, ident, req.ip, found?.user_id ?? null, ok, cfg.maxFailures, window,
     ]);
 
     if (!ok) {

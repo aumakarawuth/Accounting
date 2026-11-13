@@ -8,7 +8,7 @@ import { th } from '@/i18n/th';
 type Check = 'pass' | 'fail' | 'notYet' | 'pending';
 
 // เงื่อนไขแสดงเป็นคำ (ผ่าน/ไม่ผ่าน) ไม่ใช้สีอย่างเดียว; รายการรหัสยอดแย่ตรวจที่เซิร์ฟเวอร์
-export function ChangePasswordForm({ mustChange, studentCode }: { mustChange: boolean; studentCode: string | null }) {
+export function ChangePasswordForm({ mustChange, studentCode: _studentCode }: { mustChange: boolean; studentCode: string | null }) {
   const router = useRouter();
   const [current, setCurrent] = useState('');
   const [pw, setPw] = useState('');
@@ -18,8 +18,8 @@ export function ChangePasswordForm({ mustChange, studentCode }: { mustChange: bo
   const [busy, setBusy] = useState(false);
 
   const len = [...pw].length;
-  const lengthOk: Check = len >= 8 ? 'pass' : 'notYet';
-  const codeOk: Check = !pw ? 'notYet' : studentCode && pw.toLowerCase().includes(studentCode.toLowerCase()) ? 'fail' : 'pass';
+  const lengthOk: Check = len >= 6 ? 'pass' : 'notYet';
+  const codeOk: Check = 'pass'; // ผ่อนกติกา: รหัสผ่านมีรหัสนักเรียนได้
   const commonOk: Check = commonFor === pw && pw ? 'fail' : 'pending';
   const matches = confirm.length > 0 && confirm === pw;
   const canSubmit = !busy && lengthOk === 'pass' && codeOk === 'pass' && commonOk !== 'fail' && matches && (mustChange || current.length > 0);
@@ -72,7 +72,6 @@ export function ChangePasswordForm({ mustChange, studentCode }: { mustChange: bo
       </label>
       <ul aria-live="polite">
         {row(lengthOk, lengthOk === 'pass' ? th.password.rule.length : th.password.rule.lengthNow(len))}
-        {studentCode && row(codeOk, th.password.rule.notStudentCode)}
         {row(commonOk, commonOk === 'fail' ? th.password.rule.isCommon : th.password.rule.notCommon)}
       </ul>
       <label className="flex flex-col gap-1 text-sm">

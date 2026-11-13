@@ -20,15 +20,12 @@ const common = new Set((commonList as string[]).map((s) => s.trim().toLowerCase(
 
 export type WeakReason = 'length' | 'student_code' | 'common';
 
-/** กติกา PLAN.md ข้อ 5: ยาว ≥ 8, ไม่ใช่รหัสนักเรียน, ไม่อยู่ในรายการยอดแย่; ไม่บังคับสัญลักษณ์ */
+/** ผ่อนกติกา (13 พ.ย. 2569): ยาว ≥ 6 และไม่อยู่ในรายการรหัสยอดแย่ เท่านั้น */
 export function checkPassword(pw: string, ctx: { studentCode?: string | null; email?: string | null }): WeakReason | null {
   const len = [...pw].length; // นับตัวอักษร (ภาษาไทยหลายไบต์)
-  if (len < 8 || len > 128) return 'length';
+  if (len < 6 || len > 128) return 'length';
   const lower = pw.toLowerCase();
-  const code = ctx.studentCode?.toLowerCase();
-  if (code && lower.includes(code)) return 'student_code';
-  const local = ctx.email?.split('@')[0]?.toLowerCase();
-  if (local && local.length >= 3 && lower.includes(local)) return 'student_code';
+  void ctx;
   if (common.has(lower) || /^(.)\1+$/.test(pw) || /^(0123456789|123456789|12345678)/.test(pw)) return 'common';
   return null;
 }

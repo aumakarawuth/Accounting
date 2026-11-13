@@ -132,32 +132,37 @@ describe('จำกัดอัตรา', () => {
 });
 
 describe('ล็อกชั่วคราว', () => {
-  it('ผิด 5 ครั้งล็อก 15 นาที (รหัสถูกก็เข้าไม่ได้) และครูประจำห้องได้รับแจ้ง', async () => {
+  it('ผิด 10 ครั้งล็อก 3 นาที (รหัสถูกก็เข้าไม่ได้) และครูประจำห้องได้รับแจ้ง', async () => {
     const lefts: number[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 9; i++) {
       const r = await login('student', aCode, 'ผิดแน่นอน');
       expect(r.statusCode).toBe(401);
       lefts.push(r.json().left);
     }
-    expect(lefts).toEqual([4, 3, 2, 1]);
+    expect(lefts).toEqual([9, 8, 7, 6, 5, 4, 3, 2, 1]);
     const fifth = await login('student', aCode, 'ผิดแน่นอน');
     expect(fifth.statusCode).toBe(423);
-    expect(fifth.json()).toMatchObject({ code: 'locked', minutes: 15 });
+    expect(fifth.json()).toMatchObject({ code: 'locked', minutes: 3 });
     expect((await login('student', aCode, 'ลงบัญชีทุกวัน')).statusCode).toBe(423);
 
     const tc = sid(await login('staff', teacherEmail, 'ครูบัญชีห้องห้า'));
     const alerts = (await as(tc, 'GET', '/teacher/alerts')).json();
     expect(alerts[0]).toMatchObject({ kind: 'locked', studentCode: aCode });
 
-    // ครบ 15 นาทีแล้วปลดล็อกเอง
-    await admin.query(`update acc.login_attempts set at = at - interval '16 minutes' where identifier = $1`, [aCode]);
+    // ครบ 3 นาทีแล้วปลดล็อกเอง
+    await admin.query(`update acc.login_attempts set at = at - interval '4 minutes' where identifier = $1`, [aCode]);
     expect((await login('student', aCode, 'ลงบัญชีทุกวัน')).statusCode).toBe(200);
+  });
+
+  it('กรอกผิดหน้า (ครูในหน้านักเรียน/นักเรียนในหน้าครู) ก็เข้าได้ และช่องว่างท้ายรหัสผ่านไม่นับว่าผิด', async () => {
+    expect((await login('staff', aCode, 'ลงบัญชีทุกวัน')).statusCode).toBe(200);
+    expect((await login('student', aCode, 'ลงบัญชีทุกวัน ')).statusCode).toBe(200);
   });
 
   it('รหัสนักเรียนที่ไม่มีอยู่จริงตอบแบบเดียวกัน (เดาไม่ได้ว่ารหัสไหนมีอยู่)', async () => {
     const r = await login('student', 'NOPE999', 'อะไรก็ได้');
     expect(r.statusCode).toBe(401);
-    expect(r.json()).toEqual({ code: 'bad_credentials', message: 'ข้อมูลเข้าใช้งานไม่ถูกต้อง', left: 4, lockMinutes: 15 });
+    expect(r.json()).toEqual({ code: 'bad_credentials', message: 'ข้อมูลเข้าใช้งานไม่ถูกต้อง', left: 9, lockMinutes: 3 });
   });
 
   it('ต่อ IP: ผิดเกินเพดานจาก IP เดียวได้ 429 แต่ IP อื่นยังเข้าได้', async () => {
@@ -171,9 +176,10 @@ describe('ล็อกชั่วคราว', () => {
 });
 
 describe('รหัสผ่านและการรีเซ็ตโดยครู', () => {
-  it('กติการหัสผ่าน: ≥ 8 ตัว, ไม่ใช่รหัสนักเรียน, ไม่อยู่ในรายการยอดแย่, ไม่บังคับสัญลักษณ์', () => {
+  it('กติการหัสผ่าน (ผ่อนแล้ว): ≥ 6 ตัว และไม่อยู่ในรายการยอดแย่ มีรหัสนักเรียนได้', () => {
     expect(checkPassword('ลงบัญ', {})).toBe('length');
-    expect(checkPassword('abc65012xyz', { studentCode: '65012' })).toBe('student_code');
+    expect(checkPassword('abc650', {})).toBeNull();
+    expect(checkPassword('abc65012xyz', { studentCode: '65012' })).toBeNull();
     expect(checkPassword('password', {})).toBe('common');
     expect(checkPassword('12345678', {})).toBe('common');
     expect(checkPassword('aaaaaaaa', {})).toBe('common');
@@ -197,7 +203,7 @@ describe('รหัสผ่านและการรีเซ็ตโดย�
     expect(blocked.statusCode).toBe(403);
     expect(blocked.json().code).toBe('must_change_password');
 
-    for (const [pw, reason] of [['สั้น', 'length'], [`x${aCode}yz`, 'student_code'], ['qwerty123', 'common'], [temp, 'same']] as const) {
+    for (const [pw, reason] of [['สั้น', 'length'], ['qwerty123', 'common'], [temp, 'same']] as const) {
       const w = await as(c, 'POST', '/auth/change-password', { newPassword: pw });
       expect(w.statusCode, pw).toBe(422);
       expect(w.json().reason, pw).toBe(reason);
