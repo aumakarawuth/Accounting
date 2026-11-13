@@ -7,7 +7,7 @@ import { requireUser } from '../guard.js';
 import { hashPassword, temporaryPassword } from '../passwords.js';
 import { HttpError } from '../errors.js';
 import type { RateLimiter } from '../ratelimit.js';
-import { ClassroomParams, ImportStudents, JoinClassroom, JoinCodeChars, OpenCompanies, SetJoinCode, StudentParams } from '../schemas-auth.js';
+import { ClassroomParams, ImportStudents, JoinClassroom, JoinCodeChars, OpenCompanies, ResetPassword, SetJoinCode, StudentParams } from '../schemas-auth.js';
 
 // ครู: ห้องเรียน, รีเซ็ตรหัส, เตะอุปกรณ์, การแจ้งเตือนบัญชีถูกล็อก (สิทธิ์ตรวจใน DB อีกชั้น)
 export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter; limiter: RateLimiter }) {
@@ -71,9 +71,13 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
 
   app.post('/teacher/students/:studentId/reset-password', async (req) => {
     const { studentId } = StudentParams.parse(req.params);
-    const temp = temporaryPassword();
+    // ครูพิมพ์รหัสใหม่เองได้ (ว่าง = สุ่ม) นักเรียนยังต้องเปลี่ยนเองเมื่อเข้าครั้งแรก
+    const { password } = ResetPassword.parse(req.body ?? {});
+    const temp = password || temporaryPassword();
     const h = await hashPassword(temp);
-    await withUser(pool, await teacher(req), (c) => c.query('select acc.reset_student_password($1, $2)', [studentId, h]));
+    const user = await requireUser(auth, req, ['teacher', 'admin']);
+    await withUser(pool, user, (c) => c.query(
+      user.role === 'admin' ? 'select acc.admin_reset_password($1, $2)' : 'select acc.reset_student_password($1, $2)', [studentId, h]));
     // แสดงครั้งเดียว ไม่เก็บรหัสชั่วคราวไว้ที่ไหน
     return { tempPassword: temp };
   });

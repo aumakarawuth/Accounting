@@ -2,9 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import type { AuthAdapter } from '../auth.js';
 import { withUser } from '../db.js';
+import { HttpError } from '../errors.js';
 import { requireUser } from '../guard.js';
 import { hashPassword, temporaryPassword } from '../passwords.js';
-import { AssignTeacher, AuditQuery, ClassroomParams, CreateClassroom, CreateStaff, ResetPassword, SetActive, UserParams, WorksheetFormats } from '../schemas-auth.js';
+import { AdminResetStudent, AssignTeacher, AuditQuery, ClassroomParams, CreateClassroom, CreateStaff, ResetPassword, SetActive, UserParams, WorksheetFormats } from '../schemas-auth.js';
 
 // ผู้ดูแลระบบ: ครู/ห้อง และ audit log ของโรงเรียนตัวเอง (DB ตรวจบทบาทและโรงเรียนซ้ำ)
 export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter }) {
@@ -42,6 +43,20 @@ export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: A
     const { userId } = UserParams.parse(req.params);
     await withUser(pool, await admin(req), (c) => c.query('select acc.admin_delete_user($1)', [userId]));
     return { ok: true };
+  });
+
+  // รีเซ็ตรหัสนักเรียนด้วยรหัสนักเรียน (ผู้ดูแลไม่มีรายชื่อนักเรียนในหน้า) ว่าง = สุ่ม
+  app.post('/admin/students/reset-password', async (req) => {
+    const { studentCode, password } = AdminResetStudent.parse(req.body);
+    const temp = password || temporaryPassword();
+    const h = await hashPassword(temp);
+    const name = await withUser(pool, await admin(req), async (c) => {
+      const u = (await c.query(`select id, display_name from acc.users where role = 'student' and lower(student_code) = lower($1)`, [studentCode])).rows;
+      if (u.length !== 1) throw new HttpError(404, 'not_found', 'ไม่พบรหัสนักเรียนนี้ในโรงเรียน');
+      await c.query('select acc.admin_reset_password($1, $2)', [u[0].id, h]);
+      return u[0].display_name as string;
+    });
+    return { studentCode, name, tempPassword: temp };
   });
 
   app.post('/admin/users/:userId/active', async (req) => {

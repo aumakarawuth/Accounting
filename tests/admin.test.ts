@@ -218,3 +218,27 @@ describe('ลบนักเรียน', () => {
     expect((await call(adminC, 'POST', `/teacher/students/${id}/delete`)).statusCode).toBe(409);
   });
 });
+
+describe('รีเซ็ตรหัสผ่านนักเรียน', () => {
+  it('ครูตั้งรหัสใหม่เองได้ ผู้ดูแลรีเซ็ตด้วยรหัสนักเรียนได้ และรหัสนักเรียนที่ไม่มีได้ 404', async () => {
+    const code = `rs${randomUUID().slice(0, 6)}`;
+    await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: code, name: 'รีเซ็ตทดสอบ' }] });
+    const id = (await db.query('select id from acc.users where student_code=$1', [code])).rows[0].id as string;
+
+    const t = await call(teacherC, 'POST', `/teacher/students/${id}/reset-password`, { password: 'ห้องห้าปีนี้' });
+    expect(t.statusCode).toBe(200);
+    expect(t.json().tempPassword).toBe('ห้องห้าปีนี้');
+    expect((await login('student', code, 'ห้องห้าปีนี้')).res.json()).toEqual({ role: 'student', mustChange: true });
+    expect((await call(teacherC, 'POST', `/teacher/students/${id}/reset-password`, { password: '123' })).statusCode).toBe(400);
+    expect((await call(otherTeacherC, 'POST', `/teacher/students/${id}/reset-password`)).statusCode).toBe(403);
+
+    const a = await call(adminC, 'POST', '/admin/students/reset-password', { studentCode: code.toUpperCase(), password: 'ผู้ดูแลตั้งให้' });
+    expect(a.statusCode).toBe(200);
+    expect(a.json()).toMatchObject({ name: 'รีเซ็ตทดสอบ', tempPassword: 'ผู้ดูแลตั้งให้' });
+    expect((await login('student', code, 'ผู้ดูแลตั้งให้')).res.statusCode).toBe(200);
+    const r = await call(adminC, 'POST', '/admin/students/reset-password', { studentCode: code });
+    expect(r.json().tempPassword).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+    expect((await call(adminC, 'POST', '/admin/students/reset-password', { studentCode: 'NOPE404' })).statusCode).toBe(404);
+    expect((await call(teacherC, 'POST', '/admin/students/reset-password', { studentCode: code })).statusCode).toBe(403);
+  });
+});

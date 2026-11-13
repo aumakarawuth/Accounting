@@ -53,3 +53,8 @@ export const WorksheetFormats = z.object({ formats: z.array(z.union([z.literal(6
 export const ResetPassword = z.object({
   password: z.string().trim().max(128).refine((v) => v === '' || [...v].length >= 6, 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัว').optional(),
 }).strict();
+
+export const AdminResetStudent = z.object({
+  studentCode: StudentCode,
+  password: z.string().trim().max(128).refine((v) => v === '' || [...v].length >= 6, 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัว').optional(),
+}).strict();
