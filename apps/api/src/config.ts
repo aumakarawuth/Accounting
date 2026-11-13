@@ -19,8 +19,9 @@ export function authConfigFromEnv(env = process.env): AuthConfig {
     cookieSecure: secure,
     idleSeconds: Number(env.SESSION_IDLE_SECONDS ?? 8 * 3600),
     maxAgeSeconds: Number(env.SESSION_MAX_AGE_SECONDS ?? 7 * 24 * 3600),
-    maxFailures: 5,
-    lockMinutes: 15,
+    // ผ่อนให้ใช้ง่าย (เจ้าของโปรเจกต์ขอ 13 พ.ย. 2569): ผิด 10 ครั้งติดกันจึงพัก 3 นาที
+    maxFailures: 10,
+    lockMinutes: 3,
     ipMaxFailures: Number(env.LOGIN_IP_MAX_FAILURES ?? 300),
     // k6 500 คนจาก IP เดียว (docs/load-test.md): ค่าเดิม 300/6000 ทำให้คำขอล้ม 78% ตอนเริ่มคาบ
     // การเดารหัสยังถูกจำกัดด้วยล็อกต่อบัญชี (5 ครั้ง) และเพดานล็อกอินผิดต่อ IP (ipMaxFailures)
