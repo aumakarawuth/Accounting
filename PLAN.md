@@ -350,5 +350,5 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   · **ตรวจทั้งระบบ** (14 พ.ย. 2569): ทดสอบสุ่มข้ามโมดูล `tests/cross-module-invariants.test.ts` (GL ตรงทะเบียนย่อยทุกตัว) พบ
   (1) บริษัทใหม่ที่สถิติยังไม่รู้จัก รายงานค้างหลายนาที → แก้ query + migration `20261114000115`–`116` (`docs/performance.md`)
   (2) ส่งคืนผู้ขายจนหมดมีมูลค่าค้าง / ลงย้อนวันที่จน 1310 ติดลบ → migration `20261114000117` (`docs/assumptions.md` ข้อ 50)
-  migration 115–117 ยังไม่ apply กับ Supabase
+  migration 115–117 apply กับ Supabase แล้ว 14 พ.ย. 2569 (ฟังก์ชัน 220 ตัวตรงกับฐานที่สร้างจากไฟล์ · statistics ครบ 59 ตาราง)
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)
