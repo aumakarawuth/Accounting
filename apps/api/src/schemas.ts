@@ -308,6 +308,7 @@ export const NewFixedAsset = z.object({
   cost: Money,
   salvage: Money.optional(),
   lifeMonths: z.number().int().min(1).max(1200),
+  depMethod: z.enum(['monthly', 'daily']).optional(),
   assetAccount: AccountCode,
   accumAccount: AccountCode,
   expenseAccount: AccountCode.optional(),
@@ -322,6 +323,12 @@ export const DisposeAsset = z.object({
   date: IsoDate,
   proceeds: Money.optional(),
   proceedsAccount: AccountCode.optional(),
+  // บริษัทจด VAT ขายสินทรัพย์ = ออกใบกำกับภาษี: ผู้ซื้อจากทะเบียน (partyCode) หรือกรอกเอง
+  partyCode: MasterCode.optional(),
+  buyerName: z.string().trim().min(1).max(160).optional(),
+  buyerTaxId: z.string().regex(/^[0-9]{13}$/, 'เลขประจำตัวผู้เสียภาษี 13 หลัก').optional(),
+  buyerBranchNo: z.string().regex(/^[0-9]{5}$/, 'สาขา 5 หลัก').optional(),
+  buyerAddress: z.string().trim().max(300).optional(),
   description: z.string().trim().max(300).optional(),
 }).strict();
 export const VoidWithReason = z.object({ date: IsoDate.optional(), reason: z.string().trim().min(1, 'ต้องระบุเหตุผล').max(300) }).strict();

@@ -7,7 +7,7 @@ import { Money } from '@/components/Money';
 import { AccountSelect, ConfirmPanel, DateInput, PlainInput, useAction } from '@/components/ConfirmPanel';
 import type { AssetPage, AssetRow, DepreciationRunRow } from '@/lib/api';
 import { addMonths, isoToThai, monthLabel, thaiToIso, todayIso } from '@/lib/date';
-import { depreciationFor, monthlyDepreciation } from '@/lib/depreciation';
+import { dailyCumulative, dayBefore, depreciationFor, lifeDays, monthEnd, monthlyDepreciation } from '@/lib/depreciation';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { th } from '@/i18n/th';
 
@@ -34,7 +34,7 @@ export function FixedAssets({ companyId, data }: { companyId: string; data: Asse
       <span className="font-medium">{t.status[r.status]}</span>
       <span className="block text-[13px] text-ink2">
         {r.status === 'disposed' && r.disposalDate ? t.disposedOn(isoToThai(r.disposalDate), formatMoney(r.gainLoss ?? '0'))
-          : [t.posted(r.monthsPosted, r.lifeMonths), r.nextMonth && t.next(monthLabel(r.nextMonth))].filter(Boolean).join(' · ')}
+          : [t.posted(r.monthsPosted, r.totalMonths), r.nextMonth && t.next(monthLabel(r.nextMonth))].filter(Boolean).join(' · ')}
       </span>
       <span className="flex flex-wrap gap-x-3 text-[13px]">
         {r.entryId && <Link className="underline decoration-rule-input" href={href(`/journal/${r.entryId}`)}>{t.viewEntry('FA')}</Link>}
@@ -51,7 +51,7 @@ export function FixedAssets({ companyId, data }: { companyId: string; data: Asse
   );
   const panel = (r: AssetRow) => acting?.id === r.id && (
     acting.kind === 'dispose'
-      ? <DisposePanel companyId={companyId} asset={r} accounts={data.accounts} onDone={() => setActing(null)} />
+      ? <DisposePanel companyId={companyId} asset={r} data={data} onDone={() => setActing(null)} />
       : <ReasonPanel title={acting.kind === 'voidAsset' ? `${t.voidAsset} ${r.code}` : `${t.voidDisposal} ${r.code}`}
           explain={acting.kind === 'voidAsset' ? t.voidAssetExplain : t.voidDisposalExplain}
           path={acting.kind === 'voidAsset' ? `/companies/${companyId}/fixed-assets/${r.id}/void` : `/companies/${companyId}/asset-disposals/${r.disposalId}/void`}
@@ -104,7 +104,7 @@ export function FixedAssets({ companyId, data }: { companyId: string; data: Asse
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3">
                     <span className="truncate"><span className="font-num">{r.code}</span> <span className="font-medium">{r.name}</span></span>
                     <Money value={r.bookValue} />
-                    <span className="font-num text-[13px] text-ink2">{isoToThai(r.acquiredDate)} · {t.col.cost} {formatMoney(r.cost)}</span>
+                    <span className="font-num text-[13px] text-ink2">{isoToThai(r.acquiredDate)} · {t.col.cost} {formatMoney(r.cost)}{r.depMethod === 'daily' ? ` · ${t.dailyRate}` : ''}</span>
                     <span className="text-right text-[13px] text-ink2">{t.col.accumulated} <span className="num">{formatMoney(r.accumulated)}</span></span>
                   </div>
                   <div className="text-sm">{status(r)}</div>
@@ -157,7 +157,7 @@ function AssetTableRow({ r, cell, status, buttons, panel }: { r: AssetRow; cell:
           <span className="block font-num text-[13px] text-ink2">{r.assetCode} · {r.accumCode} · {r.expenseCode} · {t.lifeUnit(r.lifeMonths)}</span></td>
         <td className={`${cell} font-num`}>{isoToThai(r.acquiredDate)}</td>
         <td className={`${cell} text-right`}><Money value={r.cost} />{r.salvage !== '0.00' && <span className="block text-[13px] text-ink2">{th.assets.col.salvage} <span className="num">{formatMoney(r.salvage)}</span></span>}</td>
-        <td className={`${cell} text-right`}><Money value={r.monthly} /></td>
+        <td className={`${cell} text-right`}>{r.monthly === null ? <span className="text-sm">{t.dailyRate}</span> : <Money value={r.monthly} />}</td>
         <td className={`${cell} text-right`}><Money value={r.depThisMonth} /></td>
         <td className={`${cell} text-right`}><Money value={r.accumulated} /></td>
         <td className={`${cell} text-right`}><Money value={r.bookValue} /></td>
@@ -219,32 +219,58 @@ function ReasonPanel({ title, explain, path, onDone }: { title: string; explain:
   );
 }
 
-function DisposePanel({ companyId, asset, accounts, onDone }: { companyId: string; asset: AssetRow; accounts: { code: string; name: string }[]; onDone: () => void }) {
+function DisposePanel({ companyId, asset, data, onDone }: { companyId: string; asset: AssetRow; data: AssetPage; onDone: () => void }) {
   // วันที่ตั้งต้น = วันแรกของเดือนถัดจากเดือนที่ลงค่าเสื่อมล่าสุด (หรือวันนี้ถ้าหลังจากนั้น)
   const today = todayIso();
   const first = asset.nextMonth ? `${asset.nextMonth}-01` : today;
   const [date, setDate] = useState(isoToThai(today > first ? today : first));
   const [proceeds, setProceeds] = useState('');
-  const [acc, setAcc] = useState(accounts.find((x) => x.code === '1120')?.code ?? accounts[0]?.code ?? '');
+  const [acc, setAcc] = useState(data.accounts.find((x) => x.code === '1120')?.code ?? data.accounts[0]?.code ?? '');
+  const [buyer, setBuyer] = useState(data.customers[0]?.code ?? '');
+  const [buyerName, setBuyerName] = useState('');
+  const [buyerTax, setBuyerTax] = useState('');
   const a = useAction();
   const iso = thaiToIso(date);
   const p = toCents(proceeds);
-  const book = toCents(asset.bookValue) ?? 0n;
-  const ready = iso !== null && p !== null && (p === 0n || acc !== '');
+  const vatOn = data.company.vatRegistered && p !== null && p > 0n;
+  const rate = toCents(data.company.vatRate) ?? 0n; // 7.00 → 700
+  const vat = vatOn ? (2n * p! * rate + 10_000n) / 20_000n : 0n;
+  // ตามจำนวนวัน: ค่าเสื่อมตั้งแต่ต้นเดือนถึงวันก่อนวันจำหน่าย
+  const final = asset.depMethod === 'daily' && iso !== null && iso >= asset.acquiredDate
+    ? (() => {
+        const c = toCents(asset.cost)!; const sv = toCents(asset.salvage)!;
+        const prevEnd = monthEnd(dayBefore(`${iso.slice(0, 7)}-01`));
+        const v = dailyCumulative(c, sv, asset.acquiredDate, asset.lifeMonths, dayBefore(iso))
+          - (prevEnd < asset.acquiredDate ? 0n : dailyCumulative(c, sv, asset.acquiredDate, asset.lifeMonths, prevEnd));
+        const from = asset.acquiredDate.slice(0, 7) === iso.slice(0, 7) ? Number(asset.acquiredDate.slice(8, 10)) : 1;
+        return { amount: v > 0n ? v : 0n, days: Number(iso.slice(8, 10)) - from };
+      })()
+    : null;
+  const book = (toCents(asset.bookValue) ?? 0n) - (final?.amount ?? 0n);
+  const buyerOk = !vatOn || (buyer !== '' ? true : buyerName.trim() !== '' && (buyerTax === '' || /^[0-9]{13}$/.test(buyerTax)));
+  const ready = iso !== null && p !== null && (p === 0n || acc !== '') && buyerOk;
   return (
-    <ConfirmPanel title={t.disposeTitle(asset.code)} explain={t.disposeExplain} ready={ready} busy={a.busy} error={a.error} onCancel={onDone}
+    <ConfirmPanel title={t.disposeTitle(asset.code)} explain={asset.depMethod === 'daily' ? t.disposeExplainDaily : t.disposeExplain}
+      ready={ready} busy={a.busy} error={a.error} onCancel={onDone}
       onConfirm={async () => {
         const r = await a.run(`/companies/${companyId}/fixed-assets/${asset.id}/dispose`, {
           date: iso, ...(p && p > 0n ? { proceeds: fromCents(p), proceedsAccount: acc } : {}),
+          ...(vatOn ? (buyer !== '' ? { partyCode: buyer } : { buyerName: buyerName.trim(), ...(buyerTax ? { buyerTaxId: buyerTax } : {}) }) : {}),
         });
         if (r) onDone();
       }}>
       <div className="grid gap-3 @md:grid-cols-3">
         <DateInput label={t.disposeDate} value={date} onChange={setDate} invalid={iso === null} />
-        <PlainInput label={t.proceeds} value={proceeds} onChange={setProceeds} inputMode="decimal" invalid={p === null} />
-        {p !== null && p > 0n && <AccountSelect label={t.proceedsAccount} value={acc} onChange={setAcc} accounts={accounts} />}
+        <PlainInput label={data.company.vatRegistered ? t.proceedsVat : t.proceeds} value={proceeds} onChange={setProceeds} inputMode="decimal" invalid={p === null} />
+        {p !== null && p > 0n && <AccountSelect label={t.proceedsAccount} value={acc} onChange={setAcc} accounts={data.accounts} />}
+        {vatOn && <AccountSelect label={t.buyer} value={buyer} onChange={setBuyer} accounts={data.customers} none={t.buyerOther} />}
+        {vatOn && buyer === '' && <PlainInput label={t.buyerName} value={buyerName} onChange={setBuyerName} maxLength={160} />}
+        {vatOn && buyer === '' && <PlainInput label={t.buyerTaxId} value={buyerTax} onChange={(v) => setBuyerTax(v.trim())} inputMode="numeric" mono maxLength={13}
+          invalid={buyerTax !== '' && !/^[0-9]{13}$/.test(buyerTax)} />}
       </div>
-      {p !== null && <p className="text-sm">{t.gainPreview(formatMoney(asset.bookValue), formatMoney(fromCents(p - book)))}</p>}
+      {final && final.amount > 0n && <p className="text-sm">{t.finalPreview(final.days, formatMoney(fromCents(final.amount)))}</p>}
+      {vatOn && <p className="text-sm">{t.vatPreview(data.company.vatRate.replace(/\.00$/, ''), formatMoney(fromCents(vat)), formatMoney(fromCents(p! + vat)))}</p>}
+      {p !== null && <p className="text-sm">{t.gainPreview(formatMoney(fromCents(book)), formatMoney(fromCents(p - book)))}</p>}
     </ConfirmPanel>
   );
 }
@@ -254,6 +280,7 @@ function NewAsset({ companyId, data, onDone }: { companyId: string; data: AssetP
   const [name, setName] = useState('');
   const [acquired, setAcquired] = useState(isoToThai(todayIso()));
   const [nextMonth, setNextMonth] = useState(false);
+  const [method, setMethod] = useState<'monthly' | 'daily'>('monthly');
   const [cost, setCost] = useState('');
   const [salvage, setSalvage] = useState('');
   const [years, setYears] = useState('5');
@@ -276,15 +303,20 @@ function NewAsset({ companyId, data, onDone }: { companyId: string; data: AssetP
   };
   const ready = CODE.test(code) && name.trim() !== '' && iso !== null && c !== null && c > 0n && !errors.salvage && lifeOk
     && assetAcc !== '' && accumAcc !== '' && assetAcc !== accumAcc && expAcc !== '';
-  const preview = useMemo(() => (ready ? t.preview(formatMoney(fromCents(monthlyDepreciation(c!, s!, life))), formatMoney(fromCents(depreciationFor(c!, s!, life, life)))) : null),
-    [ready, c, s, life]);
+  const preview = useMemo(() => {
+    if (!ready) return null;
+    if (method === 'monthly') return t.preview(formatMoney(fromCents(monthlyDepreciation(c!, s!, life))), formatMoney(fromCents(depreciationFor(c!, s!, life, life))));
+    const days = lifeDays(iso!, life);
+    const perDay = (2n * (c! - s!) + BigInt(days)) / (2n * BigInt(days));
+    return t.previewDaily(formatMoney(fromCents(perDay)), days, formatMoney(fromCents(dailyCumulative(c!, s!, iso!, life, monthEnd(iso!)))));
+  }, [ready, c, s, life, method, iso]);
   const err = Object.values(errors).find(Boolean);
 
   return (
     <ConfirmPanel title={t.addTitle} explain={t.counterHint} ready={ready} busy={a.busy} error={a.error} confirm={t.save} onCancel={onDone}
       onConfirm={async () => {
         const r = await a.run(`/companies/${companyId}/fixed-assets`, {
-          code, name: name.trim(), acquiredDate: iso, ...(nextMonth ? { depStart: addMonths(iso!.slice(0, 7), 1) } : {}),
+          code, name: name.trim(), acquiredDate: iso, depMethod: method, ...(method === 'monthly' && nextMonth ? { depStart: addMonths(iso!.slice(0, 7), 1) } : {}),
           cost: fromCents(c!), ...(s && s > 0n ? { salvage: fromCents(s) } : {}), lifeMonths: life,
           assetAccount: assetAcc, accumAccount: accumAcc, expenseAccount: expAcc, ...(counter ? { counterAccount: counter } : {}),
         });
@@ -304,14 +336,22 @@ function NewAsset({ companyId, data, onDone }: { companyId: string; data: AssetP
         <AccountSelect label={t.accumAccount} value={accumAcc} onChange={setAccumAcc} accounts={data.assetAccounts} />
         <AccountSelect label={t.expenseAccount} value={expAcc} onChange={setExpAcc} accounts={data.expenseAccounts} />
         <label className="flex min-w-0 flex-col text-sm">
+          {t.method}
+          <select className="h-11 w-full border-b border-rule-input bg-transparent text-base" value={method} onChange={(e) => setMethod(e.target.value === 'daily' ? 'daily' : 'monthly')}>
+            <option value="monthly">{t.methodMonthly}</option>
+            <option value="daily">{t.methodDaily}</option>
+          </select>
+        </label>
+        {method === 'monthly' && <label className="flex min-w-0 flex-col text-sm">
           {t.depStart}
           <select className="h-11 w-full border-b border-rule-input bg-transparent text-base" value={nextMonth ? 'next' : 'same'} onChange={(e) => setNextMonth(e.target.value === 'next')}>
             <option value="same">{t.depStartSame}</option>
             <option value="next">{t.depStartNext}</option>
           </select>
-        </label>
+        </label>}
         <AccountSelect label={t.counter} value={counter} onChange={setCounter} accounts={data.accounts.filter((x) => x.code !== assetAcc && x.code !== accumAcc)} none={t.counterNone} />
       </div>
+      {method === 'daily' && <p className="text-sm text-ink2">{t.methodHint}</p>}
       {err && <p className="neg text-sm">{err}</p>}
       {preview && <p className="text-sm">{preview}</p>}
     </ConfirmPanel>
