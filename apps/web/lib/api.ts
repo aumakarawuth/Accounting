@@ -283,15 +283,16 @@ export type ChequePage = {
 export type AssetStatus = 'active' | 'fully_depreciated' | 'disposed' | 'voided';
 export type AssetRow = {
   id: string; code: string; name: string; acquiredDate: string; depStart: string; cost: string; salvage: string; lifeMonths: number;
-  monthly: string; assetCode: string; accumCode: string; expenseCode: string; monthsPosted: number; accumulated: string;
+  monthly: string | null; assetCode: string; accumCode: string; expenseCode: string; monthsPosted: number; accumulated: string;
   depThisMonth: string; bookValue: string; status: AssetStatus; disposalId: string | null; disposalDate: string | null;
   proceeds: string | null; gainLoss: string | null; entryId: string | null; disposalEntryId: string | null; nextMonth: string | null;
+  depMethod: 'monthly' | 'daily'; totalMonths: number; disposalVat: string | null;
 };
 export type DepreciationRunRow = { id: string; month: string; entryId: string | null; docNo: string | null; date: string | null; amount: string; lines: number; voided: boolean; voidDocNo: string | null };
 export type AssetPage = {
-  company: { name: string; canWrite: boolean; locked: boolean };
+  company: { name: string; canWrite: boolean; locked: boolean; vatRegistered: boolean; vatRate: string };
   month: string; assets: AssetRow[]; runs: DepreciationRunRow[];
-  assetAccounts: CodeName[]; expenseAccounts: CodeName[]; accounts: CodeName[];
+  assetAccounts: CodeName[]; expenseAccounts: CodeName[]; accounts: CodeName[]; customers: CodeName[];
 };
 
 // ---- เฟส 4 โจทย์ / มอบหมาย / สอบ / สาธิต ----

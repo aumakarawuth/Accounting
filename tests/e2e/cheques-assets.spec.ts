@@ -151,10 +151,11 @@ test('ทะเบียนทรัพย์สิน: ลงทะเบีย
   await expect(page.getByRole('region', { name: 'รายการค่าเสื่อมราคา' }).getByRole('link', { name: /^AJ-\d{4}$/ }).first()).toBeVisible();
   await checkScreen(page, info, 'fixed-assets');
 
-  // ขายต้นเดือนถัดไป 12,000 → มูลค่าตามบัญชี 11,500 กำไร 500
+  // ขายต้นเดือนถัดไป 12,000 → มูลค่าตามบัญชี 11,500 กำไร 500 · บริษัทจด VAT ออกใบกำกับภาษี ภาษีขาย 840 (ผู้ซื้อตั้งต้นคนแรกในทะเบียน)
   await row.getByRole('button', { name: 'จำหน่าย / ขาย' }).click();
   const sell = page.getByRole('region', { name: `จำหน่ายสินทรัพย์ ${code}` });
-  await sell.getByLabel('ราคาขาย (ไม่มี = ตัดจำหน่าย)').fill('12000');
+  await sell.getByLabel('ราคาขาย ไม่รวม VAT (ไม่มี = ตัดจำหน่าย)').fill('12000');
+  await expect(sell.getByText('บริษัทจด VAT: ออกใบกำกับภาษีเลขที่ FD ภาษีขาย 7% = 840.00 · รับเงินรวม 12,840.00')).toBeVisible();
   await expect(sell.getByText('มูลค่าตามบัญชี 11,500.00 · กำไร(ขาดทุน) 500.00')).toBeVisible();
   await sell.getByRole('button', { name: 'ยืนยัน' }).click();
   await expect(sell).toBeHidden();

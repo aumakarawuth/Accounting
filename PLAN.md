@@ -340,5 +340,8 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   · **โมดูล 9 เงินสดย่อย + ฝาก/ถอน/โอนเงิน** (11 พ.ย. 2569, migration `20261111000113` ยังไม่ apply กับ Supabase): ย้ายเงินระหว่างบัญชี 11xx (BT)
   พร้อมค่าธรรมเนียม · เงินสดย่อยวงเงินคงที่ ใบสำคัญ PCV ไม่ลงบัญชี เบิกชดเชยลงค่าใช้จ่าย (`docs/assumptions.md` ข้อ 48,
   เทสต์ `tests/petty-cash-transfers.test.ts` + e2e `tests/e2e/petty-cash.spec.ts`)
-  ยังค้าง: โมดูล 10
+  · **โมดูล 10 ค่าเสื่อมตามจำนวนวัน + ภาษีขายสินทรัพย์** (14 พ.ย. 2569, migration `20261114000114` ยังไม่ apply กับ Supabase): เลือกวิธีรายเดือน/รายวัน
+  รายสินทรัพย์ ขายระหว่างเดือนคิดถึงวันก่อนวันขาย · บริษัทจด VAT ขายสินทรัพย์ออกใบกำกับภาษี (FD) ภาษีขาย 7% เข้ารายงานภาษีขาย/ภ.พ.30
+  (`docs/assumptions.md` ข้อ 49, เทสต์ `tests/daily-depreciation-asset-vat.test.ts` + e2e `tests/e2e/asset-vat.spec.ts`)
+  ครบ 10 โมดูลของ `docs/accounting-audit.md` ข้อ 4 แล้ว
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

@@ -255,31 +255,39 @@ describe('พฤศจิกายน 2569: เช็ค นำส่งภา�
       .toEqual({ 1310: ['0.00', '32.66'], 5260: ['32.66', '0.00'] });
   });
 
-  it('ขายคอมพิวเตอร์ 30,000 ใน พ.ย.: ไม่คิดค่าเสื่อมเดือนที่จำหน่าย (assumptions ข้อ 32) → ราคาตามบัญชี 35,000 ขาดทุน 5,000', async () => {
-    // ลงค่าเสื่อม พ.ย. ก่อนแล้วจำหน่ายใน พ.ย. ไม่ได้ (กติกาของระบบ ต่างจาก Express ที่คิดตามวันถึงวันจำหน่าย: docs/accounting-audit.md)
-    const d = await ok('POST', `/companies/${co}/fixed-assets/${id.fa}/dispose`, { date: `${M2}-30`, proceeds: '30000', proceedsAccount: '1120' });
+  it('ขายคอมพิวเตอร์ 30,000 + VAT 2,100 ใน พ.ย.: คิดค่าเสื่อมรายเดือน ไม่คิดเดือนที่จำหน่าย → ราคาตามบัญชี 35,000 ขาดทุน 5,000', async () => {
+    // สินทรัพย์รายเดือน: ลงค่าเสื่อม พ.ย. ก่อนแล้วจำหน่ายใน พ.ย. ไม่ได้ (รายวันดู tests/daily-depreciation-asset-vat.test.ts)
+    // บริษัทจด VAT ขายสินทรัพย์ = ออกใบกำกับภาษี ภาษีขาย 7% (assumptions ข้อ 49)
+    const d = await ok('POST', `/companies/${co}/fixed-assets/${id.fa}/dispose`, { date: `${M2}-30`, proceeds: '30000', proceedsAccount: '1120',
+      buyerName: 'นายสมศักดิ์ ใจดี' });
+    expect([d.docNo, d.vat, d.gainLoss]).toEqual(['FD-0001', '2100.00', '-5000.00']);
     const e = (await db.query(`select entry_id from acc.asset_disposals where id = $1`, [d.id])).rows[0].entry_id;
-    expect(await lines(e)).toEqual({ 1120: ['30000.00', '0.00'], 1630: ['0.00', '36000.00'], 1631: ['1000.00', '0.00'], 5320: ['5000.00', '0.00'] });
+    expect(await lines(e)).toEqual({ 1120: ['32100.00', '0.00'], 1630: ['0.00', '36000.00'], 1631: ['1000.00', '0.00'], 2210: ['0.00', '2100.00'],
+      5320: ['5000.00', '0.00'] });
     // สินทรัพย์ที่จำหน่ายแล้วไม่ถูกคิดค่าเสื่อมอีก
     expect((await as('POST', `/companies/${co}/depreciation`, { month: M2 })).statusCode).toBe(409);
   });
 
-  it('ภ.พ.30 พ.ย. ชำระเกินอีก 133 (สะสม 1,409.32) · งบทดลอง/งบการเงินสะสม ตรงเฉลย', async () => {
+  it('ภ.พ.30 พ.ย.: ภาษีขาย 602 + 2,100 (ขายสินทรัพย์) − ภาษีซื้อ 735 = 1,967 หักภาษีชำระเกินยกมา 1,276.32 ชำระ 690.68 · งบทดลอง/งบการเงินสะสม ตรงเฉลย', async () => {
     const vat = await ok('GET', `/companies/${co}/tax/vat?month=${M2}`);
-    expect([vat.preview.outputVat, vat.preview.inputVat]).toEqual(['602.00', '735.00']);
+    expect([vat.preview.outputVat, vat.preview.inputVat]).toEqual(['2702.00', '735.00']);
+    // รายงานภาษีขายมีใบกำกับภาษีขายสินทรัพย์ (เลขที่ FD) ผลรวมเท่าบัญชี 2210
+    const fd = vat.sales.find((r: { kind: string }) => r.kind === 'asset_sale');
+    expect([fd.docNo, fd.partyName, fd.base, fd.vat]).toEqual(['FD-0001', 'นายสมศักดิ์ ใจดี', '30000.00', '2100.00']);
+    expect(vat.sales.reduce((s: number, r: { vat: string }) => s + Math.round(Number(r.vat) * 100), 0)).toBe(270200);
     await ok('POST', `/companies/${co}/tax/vat/${M2}/close`);
     expect(await tbNet(co, M2)).toEqual({
-      1110: '17539.00', 1120: '473486.00', 1210: '9202.00', 1310: '7456.03', 1420: '600.00', 1430: '1409.32',
-      2110: '-17369.57', 2310: '-1500.00', 3110: '-500000.00',
+      1110: '17539.00', 1120: '475586.00', 1210: '9202.00', 1310: '7456.03', 1420: '600.00',
+      2110: '-17369.57', 2220: '-690.68', 2310: '-1500.00', 3110: '-500000.00',
       4110: '-18700.00', 4120: '-20000.00', 4220: '800.00', 5130: '11544.56', 5210: '15000.00', 5220: '10000.00', 5230: '1500.00',
       5250: '1000.00', 5260: '3032.66', 5320: '5000.00' });
     const ytd = await ok('GET', `/companies/${co}/statements?month=${M2}&scope=ytd`);
     expect([ytd.totalRevenue, ytd.totalExpense, ytd.netIncome]).toEqual(['37900.00', '47077.22', '-9177.22']);
-    expect([ytd.totalAssets, ytd.totalLiabilities, ytd.totalEquity, ytd.balanced]).toEqual(['509692.35', '18869.57', '490822.78', true]);
+    expect([ytd.totalAssets, ytd.totalLiabilities, ytd.totalEquity, ytd.balanced]).toEqual(['510383.03', '19560.25', '490822.78', true]);
     // งบหลายขั้น (phase5-spec ข้อ 2): กำไรสุทธิเท่าขั้นเดียว · สินทรัพย์หมุนเวียน + ไม่หมุนเวียน = รวม
     expect(ytd.multiStep.netIncome).toBe('-9177.22');
     const k = ytd.classified;
-    expect((Number(k.totalCurrentAssets) * 100 + Number(k.totalNonCurrentAssets) * 100) / 100).toBe(509692.35);
+    expect((Number(k.totalCurrentAssets) * 100 + Number(k.totalNonCurrentAssets) * 100) / 100).toBe(510383.03);
     const cogsCents = ytd.expense.filter((l: { code: string }) => l.code.startsWith('51'))
       .reduce((s: number, l: { amount: string }) => s + Math.round(Number(l.amount) * 100), 0);
     expect(Math.round(Number(ytd.multiStep.costOfSales.total) * 100)).toBe(cogsCents);
