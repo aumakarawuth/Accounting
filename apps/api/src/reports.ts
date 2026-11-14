@@ -20,13 +20,15 @@ export type TrialBalanceData = {
 /** ปีบัญชีของเดือน + มีรายได้/ค่าใช้จ่ายก่อนต้นปีบัญชีที่ยังไม่ได้ปิดบัญชีหรือไม่ */
 export async function fiscalContext(c: pg.PoolClient, companyId: string, month: string) {
   const r = await c.query(
-    `with fy as (select acc.fiscal_year_start($1, $2::date) as s)
+    // คิดต้นปีบัญชีครั้งเดียว (materialized) แล้วดูยอดรายงวดจาก account_balances ไม่ไล่บรรทัดรายการ:
+    // ถ้าให้ planner รวม CTE เข้าไป จะเรียก fiscal_year_start ทุกแถวในลูปบรรทัด × รายการ (บริษัทใหม่ ~7 วินาที)
+    `with fy as materialized (select acc.fiscal_year_start($1, $2::date) as s)
      select fy.s::text as start, (fy.s + interval '1 year - 1 day')::date::text as "end",
-            exists (select 1 from acc.journal_lines l
-                      join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
-                      join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
-                     where l.company_id = $1 and e.entry_date < fy.s and a.type in ('revenue', 'expense')
-                     group by a.id having sum(l.debit - l.credit) <> 0) as "priorYearUnclosed"
+            exists (select 1 from acc.account_balances b
+                      join acc.periods p on p.company_id = b.company_id and p.id = b.period_id
+                      join acc.chart_of_accounts a on a.company_id = b.company_id and a.id = b.account_id
+                     where b.company_id = $1 and p.start_date < fy.s and a.type in ('revenue', 'expense')
+                     group by a.id having sum(b.debit_total - b.credit_total) <> 0) as "priorYearUnclosed"
        from fy`, [companyId, `${month}-01`]);
   return r.rows[0] as { start: string; end: string; priorYearUnclosed: boolean };
 }
@@ -37,22 +39,26 @@ export async function fiscalContext(c: pg.PoolClient, companyId: string, month: 
 export async function trialBalance(c: pg.PoolClient, companyId: string, month: string, all = false, stage: 'before' | 'after' = 'before'): Promise<TrialBalanceData> {
   const fy = await fiscalContext(c, companyId, month);
   const r = await c.query(
-    `with cl as (
+    // แต่ละตารางอ่านครั้งเดียว (materialized + = any(array)) กันแผนวนซ้อนเมื่อสถิติของบริษัทใหม่ยังไม่มี
+    `with cl as materialized (
        select l.account_id, sum(l.debit - l.credit) as net
-         from acc.journal_lines l join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
-        where l.company_id = $1 and e.doc_prefix = 'CL' and e.entry_date >= $4::date
-          and e.entry_date < ($2::date + interval '1 month')
+         from acc.journal_lines l
+        where l.company_id = $1 and l.entry_id = any (array(
+          select e.id from acc.journal_entries e where e.company_id = $1 and e.doc_prefix = 'CL' and e.entry_date >= $4::date
+             and e.entry_date < ($2::date + interval '1 month')))
         group by l.account_id
+     ), bal as materialized (
+       select b.account_id, sum(b.debit_total - b.credit_total) as net
+         from acc.account_balances b join acc.periods p on p.company_id = b.company_id and p.id = b.period_id
+        where b.company_id = $1 and p.start_date <= $2::date
+        group by b.account_id
      ), net as (
        select a.code, a.name, a.type, a.normal_side,
-              coalesce(sum(b.debit_total - b.credit_total) filter (where p.start_date <= $2::date), 0)
-                - case when $5 then 0 else coalesce(max(cl.net), 0) end as net
+              coalesce(bal.net, 0) - case when $5 then 0 else coalesce(cl.net, 0) end as net
          from acc.chart_of_accounts a
-         left join acc.account_balances b on b.company_id = a.company_id and b.account_id = a.id
-         left join acc.periods p on p.company_id = b.company_id and p.id = b.period_id
+         left join bal on bal.account_id = a.id
          left join cl on cl.account_id = a.id
         where a.company_id = $1
-        group by a.code, a.name, a.type, a.normal_side
      )
      select code, name, type, normal_side as "normalSide",
             greatest(net, 0)::numeric(18,2)::text as debit,
@@ -227,26 +233,31 @@ async function multiStepParts(
 
   // ต้นทุนขาย: 1310 ต้น/ปลายงวด + บัญชี 51xx จากรายการที่ไม่ได้ลง 1310 (รายการที่ลง 1310 = โอนภายในของระบบต่อเนื่อง)
   const inv = (await c.query(
-    `select coalesce(sum(l.debit - l.credit) filter (where e.entry_date < $2::date), 0)::numeric(18,2)::text as opening,
-            coalesce(sum(l.debit - l.credit) filter (where e.entry_date < ($3::date + interval '1 month')), 0)::numeric(18,2)::text as closing
-       from acc.journal_lines l
-       join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
-       join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
-      where l.company_id = $1 and a.code = '1310'`, [companyId, from, to])).rows[0] as { opening: string; closing: string };
+    // ยอดรายงวด (งวด = เดือน) แทนการไล่บรรทัด × รายการ
+    `select coalesce(sum(b.debit_total - b.credit_total) filter (where p.start_date < $2::date), 0)::numeric(18,2)::text as opening,
+            coalesce(sum(b.debit_total - b.credit_total) filter (where p.start_date <= $3::date), 0)::numeric(18,2)::text as closing
+       from acc.account_balances b
+       join acc.periods p on p.company_id = b.company_id and p.id = b.period_id
+      where b.company_id = $1 and b.account_id = (select a.id from acc.chart_of_accounts a where a.company_id = $1 and a.code = '1310')`, [companyId, from, to])).rows[0] as { opening: string; closing: string };
   const flows = (await c.query(
-    `with ent as (
-       select e.id from acc.journal_entries e
-        where e.company_id = $1 and e.entry_date >= $2::date and e.entry_date < ($3::date + interval '1 month')
-          and not (e.doc_prefix = 'CL' and e.entry_date >= $4::date)
-          and not exists (select 1 from acc.journal_lines x join acc.chart_of_accounts xa on xa.company_id = x.company_id and xa.id = x.account_id
-                           where x.company_id = e.company_id and x.entry_id = e.id and xa.code = '1310')
+    // อ่านบรรทัดของงวดครั้งเดียวแล้วคัดรายการที่แตะ 1310 ด้วย bool_or (ห้ามใช้ not exists รายรายการ:
+    // บริษัทที่เพิ่งสร้างยังไม่มีสถิติ planner คาด 1 แถวแล้ววนซ้อนสามชั้น ใช้เวลาหลายนาที)
+    `with el as materialized (
+       select l.entry_id, a.code, a.name, a.type, l.debit - l.credit as net
+         from acc.journal_lines l
+         join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+        where l.company_id = $1 and l.entry_id = any (array(
+          select e.id from acc.journal_entries e
+           where e.company_id = $1 and e.entry_date >= $2::date and e.entry_date < ($3::date + interval '1 month')
+             and not (e.doc_prefix = 'CL' and e.entry_date >= $4::date)))
+     ), ent as materialized (
+       select entry_id from el group by entry_id having not bool_or(code = '1310')
      )
-     select a.code, a.name, sum(l.debit - l.credit)::numeric(18,2)::text as net
-       from ent join acc.journal_lines l on l.company_id = $1 and l.entry_id = ent.id
-       join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
-      where a.type = 'expense' and a.code like '51%'
-      group by a.code, a.name having sum(l.debit - l.credit) <> 0
-      order by a.code`, [companyId, from, to, fyStart])).rows as { code: string; name: string; net: string }[];
+     select el.code, el.name, sum(el.net)::numeric(18,2)::text as net
+       from el join ent on ent.entry_id = el.entry_id
+      where el.type = 'expense' and el.code like '51%'
+      group by el.code, el.name having sum(el.net) <> 0
+      order by el.code`, [companyId, from, to, fyStart])).rows as { code: string; name: string; net: string }[];
   const flow = (code: string) => toC(flows.find((f) => f.code === code)?.net ?? '0.00');
   const total = sumC(g.cogs);
   const opening = toC(inv.opening), closing = toC(inv.closing);
@@ -296,26 +307,31 @@ export async function statements(c: pg.PoolClient, companyId: string, month: str
   const fy = await fiscalContext(c, companyId, month);
   const from = scope === 'month' ? to : fy.start;
   const r = await c.query(
-    `with cl as (
+    // แต่ละตารางอ่านครั้งเดียว (materialized + = any(array)) กันแผนวนซ้อนเมื่อสถิติของบริษัทใหม่ยังไม่มี
+    `with cl as materialized (
        select l.account_id, sum(l.debit - l.credit) as net
-         from acc.journal_lines l join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
-        where l.company_id = $1 and e.doc_prefix = 'CL' and e.entry_date >= $4::date
-          and e.entry_date < ($3::date + interval '1 month')
+         from acc.journal_lines l
+        where l.company_id = $1 and l.entry_id = any (array(
+          select e.id from acc.journal_entries e where e.company_id = $1 and e.doc_prefix = 'CL' and e.entry_date >= $4::date
+             and e.entry_date < ($3::date + interval '1 month')))
         group by l.account_id
+     ), bal as materialized (
+       select x.account_id,
+              sum(x.debit_total - x.credit_total) filter (where p.start_date between $2::date and $3::date) as period_net,
+              sum(x.debit_total - x.credit_total) filter (where p.start_date between $4::date and $3::date) as year_net,
+              sum(x.debit_total - x.credit_total) filter (where p.start_date <= $3::date) as cum_net
+         from acc.account_balances x join acc.periods p on p.company_id = x.company_id and p.id = x.period_id
+        where x.company_id = $1
+        group by x.account_id
      ), b as (
        select a.code, a.name, a.type, case a.normal_side when 'debit' then 1 else -1 end as s,
-              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date between $2::date and $3::date), 0)
-                - coalesce(max(cl.net), 0) as period_net,
-              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date between $4::date and $3::date), 0)
-                - coalesce(max(cl.net), 0) as year_net,
-              coalesce(sum(x.debit_total - x.credit_total) filter (where p.start_date <= $3::date), 0)
-                - coalesce(max(cl.net), 0) as cum_net
+              coalesce(bal.period_net, 0) - coalesce(cl.net, 0) as period_net,
+              coalesce(bal.year_net, 0) - coalesce(cl.net, 0) as year_net,
+              coalesce(bal.cum_net, 0) - coalesce(cl.net, 0) as cum_net
          from acc.chart_of_accounts a
-         left join acc.account_balances x on x.company_id = a.company_id and x.account_id = a.id
-         left join acc.periods p on p.company_id = x.company_id and p.id = x.period_id
+         left join bal on bal.account_id = a.id
          left join cl on cl.account_id = a.id
         where a.company_id = $1
-        group by a.code, a.name, a.type, a.normal_side
      ), lines as (
        select type, code, name, (period_net * s) as period_amt, (year_net * s) as year_amt, (cum_net * s) as balance from b
      ), t as (

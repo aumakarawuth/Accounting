@@ -347,4 +347,8 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   · **apply กับ Supabase (accounting-dev) แล้ว** ครบถึง `20261114000114` (105–114 apply เมื่อ 14 พ.ย. 2569 ตามคำสั่งเจ้าของโปรเจกต์
   ข้อความ "ยังไม่ apply" ด้านบนเป็นสถานะ ณ ตอน merge) ตรวจเทียบกับฐานที่สร้างจากไฟล์ migration แล้ว ตรงกันครบ:
   คอลัมน์ 789, constraint 612, trigger 158, policy 83, ฟังก์ชัน 219 (เนื้อฟังก์ชันตรงกันเมื่อไม่นับ comment/ช่องว่าง)
+  · **ตรวจทั้งระบบ** (14 พ.ย. 2569): ทดสอบสุ่มข้ามโมดูล `tests/cross-module-invariants.test.ts` (GL ตรงทะเบียนย่อยทุกตัว) พบ
+  (1) บริษัทใหม่ที่สถิติยังไม่รู้จัก รายงานค้างหลายนาที → แก้ query + migration `20261114000115`–`116` (`docs/performance.md`)
+  (2) ส่งคืนผู้ขายจนหมดมีมูลค่าค้าง / ลงย้อนวันที่จน 1310 ติดลบ → migration `20261114000117` (`docs/assumptions.md` ข้อ 50)
+  migration 115–117 ยังไม่ apply กับ Supabase
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)
