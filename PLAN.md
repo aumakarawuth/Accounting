@@ -344,4 +344,11 @@ Branch: `main`, `develop`, feature branches ต้องผ่าน CI ถึ�
   รายสินทรัพย์ ขายระหว่างเดือนคิดถึงวันก่อนวันขาย · บริษัทจด VAT ขายสินทรัพย์ออกใบกำกับภาษี (FD) ภาษีขาย 7% เข้ารายงานภาษีขาย/ภ.พ.30
   (`docs/assumptions.md` ข้อ 49, เทสต์ `tests/daily-depreciation-asset-vat.test.ts` + e2e `tests/e2e/asset-vat.spec.ts`)
   ครบ 10 โมดูลของ `docs/accounting-audit.md` ข้อ 4 แล้ว
+  · **apply กับ Supabase (accounting-dev) แล้ว** ครบถึง `20261114000114` (105–114 apply เมื่อ 14 พ.ย. 2569 ตามคำสั่งเจ้าของโปรเจกต์
+  ข้อความ "ยังไม่ apply" ด้านบนเป็นสถานะ ณ ตอน merge) ตรวจเทียบกับฐานที่สร้างจากไฟล์ migration แล้ว ตรงกันครบ:
+  คอลัมน์ 789, constraint 612, trigger 158, policy 83, ฟังก์ชัน 219 (เนื้อฟังก์ชันตรงกันเมื่อไม่นับ comment/ช่องว่าง)
+  · **ตรวจทั้งระบบ** (14 พ.ย. 2569): ทดสอบสุ่มข้ามโมดูล `tests/cross-module-invariants.test.ts` (GL ตรงทะเบียนย่อยทุกตัว) พบ
+  (1) บริษัทใหม่ที่สถิติยังไม่รู้จัก รายงานค้างหลายนาที → แก้ query + migration `20261114000115`–`116` (`docs/performance.md`)
+  (2) ส่งคืนผู้ขายจนหมดมีมูลค่าค้าง / ลงย้อนวันที่จน 1310 ติดลบ → migration `20261114000117` (`docs/assumptions.md` ข้อ 50)
+  migration 115–117 apply กับ Supabase แล้ว 14 พ.ย. 2569 (ฟังก์ชัน 220 ตัวตรงกับฐานที่สร้างจากไฟล์ · statistics ครบ 59 ตาราง)
 - สเปก/OS ของ server และ domain: ยังไม่ระบุ (ต้องใช้ตอน staging จริง: ข้อเสนอเริ่มต้นใน `docs/self-host.md` ข้อ 1)

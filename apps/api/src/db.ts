@@ -27,7 +27,8 @@ export async function withUser<T>(
   try {
     // begin + ตั้งตัวตนในการไปกลับฐานข้อมูลรอบเดียว (simple query หลายคำสั่งรับพารามิเตอร์ไม่ได้ จึง escape ด้วย pg เอง)
     // ประหยัด 1 รอบต่อคำขอ ซึ่งมีผลเมื่อฐานข้อมูลอยู่คนละเครื่อง (Vercel → Supabase) docs/performance.md
-    await c.query(`begin; select set_config('app.user_id', ${c.escapeLiteral(user.id)}, true), set_config('app.client_info', ${c.escapeLiteral(user.clientInfo)}, true)`);
+    // statement_timeout ต่อทรานแซกชัน (ใช้กับ transaction pooling ได้): คำสั่งที่ค้างไม่ยึด connection ไว้ตลอด
+    await c.query(`begin; set local statement_timeout = '30s'; select set_config('app.user_id', ${c.escapeLiteral(user.id)}, true), set_config('app.client_info', ${c.escapeLiteral(user.clientInfo)}, true)`);
     const result = await fn(c);
     await c.query('commit');
     return result;

@@ -36,7 +36,8 @@ export function openingRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
         `select app.can_write_company($1) and not app.company_locked($1) as "canWrite",
                 (select vat_registered from acc.companies where id = $1) as "vatRegistered",
                 (select min(e.entry_date)::text from acc.journal_entries e where e.company_id = $1 and e.doc_prefix <> 'OB'
-                    and not exists (select 1 from acc.journal_entries o where o.company_id = e.company_id and o.id = e.reverses_entry_id and o.doc_prefix = 'OB')) as "firstEntryDate",
+                    and coalesce(e.reverses_entry_id <> all (array(
+                      select o.id from acc.journal_entries o where o.company_id = $1 and o.doc_prefix = 'OB')), true)) as "firstEntryDate",
                 (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'type', type) order by code), '[]')
                    from acc.chart_of_accounts where company_id = $1 and active) as accounts,
                 (select coalesce(json_agg(json_build_object('code', code, 'name', name, 'creditDays', credit_days) order by code), '[]')

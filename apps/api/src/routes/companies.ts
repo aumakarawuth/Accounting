@@ -83,10 +83,10 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       await requireReadable(c, companyId);
       const r = await c.query(
         `select e.id, e.doc_no, e.entry_date::text as date, e.description, e.total_amount::text as total,
-                r.doc_no as reverses_doc_no,
+                -- subquery ราย entry (หาด้วย primary key) แทน self join: บริษัทใหม่ที่ยังไม่มีสถิติ join ซ้อนรายการ × รายการ
+                (select r.doc_no from acc.journal_entries r where r.company_id = e.company_id and r.id = e.reverses_entry_id) as reverses_doc_no,
                 (select count(*)::int from acc.comments m where m.company_id = e.company_id and m.entry_id = e.id) as comments
            from acc.journal_entries e
-           left join acc.journal_entries r on r.company_id = e.company_id and r.id = e.reverses_entry_id
           where e.company_id = $1
             and ($2::text is null or to_char(e.entry_date, 'YYYY-MM') = $2)
           order by e.entry_date desc, e.doc_no desc
