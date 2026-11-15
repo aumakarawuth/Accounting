@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { subscribe } from '@/lib/realtime';
+import { subscribeOrPoll } from '@/lib/realtime';
 import { th } from '@/i18n/th';
 
 type Watch = { name: string; until: number };
@@ -14,14 +14,16 @@ export function WatchBanner({ userId }: { userId: string }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    api<{ id: string; teacherName: string }[]>('/me/watchers')
+    // รายชื่อครูที่กำลังดูจากเซิร์ฟเวอร์ (ส่ง ping ภายใน 45 วินาที) = ความจริงล่าสุด แทนที่ทั้งชุด
+    const load = () => api<{ id: string; teacherName: string }[]>('/me/watchers')
       .then((ws) => setWatches(Object.fromEntries(ws.map((w) => [w.id, { name: w.teacherName, until: Date.now() + TTL }]))))
       .catch(() => {});
-    const unsub = subscribe(`student:${userId}`, (e) => {
+    void load();
+    const unsub = subscribeOrPoll(`student:${userId}`, (e) => {
       const id = String(e.id);
       if (e.k === 'watch') setWatches((w) => ({ ...w, [id]: { name: String(e.by), until: Date.now() + TTL } }));
       if (e.k === 'unwatch') setWatches(({ [id]: _, ...rest }) => rest);
-    });
+    }, load, 30_000);
     const t = setInterval(() => setNow(Date.now()), 5_000);
     return () => { unsub(); clearInterval(t); };
   }, [userId]);
