@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { test, expect, type Page, type Request, type TestInfo } from '@playwright/test';
 import { checkScreen, studentHome, watchErrors } from './helpers';
 
 // เฟส 3.3–3.4: รับชำระเป็นเช็คลงวันที่ล่วงหน้า → นำฝาก → เช็คผ่าน · จ่ายเช็คเอง → เช็คคืน (กลับรายการ)
@@ -157,11 +157,19 @@ test('ทะเบียนทรัพย์สิน: ลงทะเบีย
   await sell.getByLabel('ราคาขาย ไม่รวม VAT (ไม่มี = ตัดจำหน่าย)').fill('12000');
   await expect(sell.getByText('บริษัทจด VAT: ออกใบกำกับภาษีเลขที่ FD ภาษีขาย 7% = 840.00 · รับเงินรวม 12,840.00')).toBeVisible();
   await expect(sell.getByText('มูลค่าตามบัญชี 11,500.00 · กำไร(ขาดทุน) 500.00')).toBeVisible();
+  // หลังยืนยัน router.refresh() โหลดเดือนเดิมใหม่ แล้ว prefetch ลิงก์ทุกเมนูใหม่ (คำขอ _rsc ~25 รายการ)
+  // ถ้า page.goto ตัดกลางคัน WebKit รายงาน "Load failed" (ไม่มี URL ให้กรอง) จึงรอให้คำขอ _rsc จบหมดและนิ่งก่อนเปลี่ยนเดือน
+  // (networkidle ไม่พอ: ป้ายครูกำลังดูเปิดการเชื่อมต่อค้าง และอาจนิ่งก่อน prefetch เริ่ม)
+  let rsc = 0;
+  let rscAt = Date.now();
+  const rscDone = (r: Request) => { if (r.url().includes('_rsc=')) { rsc--; rscAt = Date.now(); } };
+  page.on('request', (r) => { if (r.url().includes('_rsc=')) { rsc++; rscAt = Date.now(); } });
+  page.on('requestfinished', rscDone);
+  page.on('requestfailed', rscDone);
   await sell.getByRole('button', { name: 'ยืนยัน' }).click();
   await expect(sell).toBeHidden();
+  await expect.poll(() => rsc === 0 && Date.now() - rscAt > 750, { timeout: 15_000 }).toBe(true);
   const next = m === 12 ? '2032-01' : `2031-${String(m + 1).padStart(2, '0')}`;
-  // หลังยืนยัน หน้าอาจรีเฟรชเดือนเดิมอยู่ (Safari) รอให้นิ่งก่อนเปลี่ยนเดือน
-  await page.waitForLoadState('networkidle');
   await expect(async () => {
     await page.goto(`${home}/fixed-assets?month=${next}`);
     await expect(page).toHaveURL(new RegExp(`month=${next}$`));
