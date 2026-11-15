@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { postJson, type ApiError } from '@/lib/api';
 import { th } from '@/i18n/th';
+import { PasswordInput } from './PasswordInput';
 
 type Kind = 'student' | 'staff';
 
@@ -71,14 +72,13 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
       </label>
       <label className="flex flex-col gap-1 text-sm">
         {th.login.password}
-        <input
+        <PasswordInput
           name="password"
-          type="password"
           className={`${input} ${error ? 'border-red' : 'border-rule-input'}`}
           autoComplete="current-password"
           required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={setPassword}
         />
       </label>
       {error && <p role="alert" className="neg text-sm">{error}</p>}

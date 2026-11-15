@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { postJson, type ApiError } from '@/lib/api';
 import { th } from '@/i18n/th';
+import { PasswordInput } from './PasswordInput';
 
 type Check = 'pass' | 'fail' | 'notYet' | 'pending';
 
@@ -63,12 +64,12 @@ export function ChangePasswordForm({ mustChange, studentCode: _studentCode }: { 
       {!mustChange && (
         <label className="flex flex-col gap-1 text-sm">
           {th.password.current}
-          <input type="password" autoComplete="current-password" className={input} value={current} onChange={(e) => setCurrent(e.target.value)} />
+          <PasswordInput autoComplete="current-password" className={input} value={current} onChange={setCurrent} />
         </label>
       )}
       <label className="flex flex-col gap-1 text-sm">
         {th.password.newPassword}
-        <input type="password" autoComplete="new-password" className={input} value={pw} onChange={(e) => setPw(e.target.value)} />
+        <PasswordInput autoComplete="new-password" className={input} value={pw} onChange={setPw} />
       </label>
       <ul aria-live="polite">
         {row(lengthOk, lengthOk === 'pass' ? th.password.rule.length : th.password.rule.lengthNow(len))}
@@ -76,7 +77,7 @@ export function ChangePasswordForm({ mustChange, studentCode: _studentCode }: { 
       </ul>
       <label className="flex flex-col gap-1 text-sm">
         {th.password.confirm}
-        <input type="password" autoComplete="new-password" className={input} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <PasswordInput autoComplete="new-password" className={input} value={confirm} onChange={setConfirm} />
       </label>
       {confirm && <p className={`text-sm ${matches ? '' : 'neg'}`}>{matches ? th.password.match : th.password.mismatch}</p>}
       <p className="text-sm text-ink2">{th.password.advice}</p>

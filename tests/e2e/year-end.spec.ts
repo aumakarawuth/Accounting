@@ -11,11 +11,8 @@ test('ปิดบัญชีสิ้นปี: ตรวจรายการ
   const errors = watchErrors(page);
   const origin = new URL(baseURL!).origin;
   const { code, temp } = await freshStudent(browser, info, origin, 'ปิดบัญชี');
-  await login(page, 'student', code, temp);
-  await page.waitForURL('**/change-password');
+  await login(page, 'student', code, temp); // ใช้รหัสบนใบได้เลย ไม่บังคับเปลี่ยน
   await page.context().setExtraHTTPHeaders({ origin });
-  expect((await page.request.post('/api/auth/change-password', { data: { newPassword: `ปิดบัญชี-${randomUUID().slice(0, 8)}` } })).status()).toBe(200);
-  await page.goto('/');
   await page.waitForURL(/\/c\/[0-9a-f-]{36}$/);
   const home = new URL(page.url()).pathname;
   const co = home.split('/').pop()!;

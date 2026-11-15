@@ -11,7 +11,7 @@ psql postgres://postgres@localhost/accounting_dev -f db/dev/fixture.sql
 # ผู้ดูแลคนแรก (ครั้งเดียวตอนติดตั้ง) จากนั้นสร้างครู/ห้อง/นำเข้านักเรียนที่หน้า /admin ได้เลย
 export ADMIN_DATABASE_URL=postgres://postgres@localhost/accounting_dev
 pnpm --filter @accounting/api create-admin admin@example.test 'ผู้ดูแลระบบ'
-# ตั้งรหัสให้ข้อมูลตัวอย่าง (ไม่ใส่รหัส = สุ่มรหัสชั่วคราว บังคับเปลี่ยนตอนเข้าครั้งแรก)
+# ตั้งรหัสให้ข้อมูลตัวอย่าง (ไม่ใส่รหัส = สุ่มรหัสชั่วคราว ครู/ผู้ดูแลต้องเปลี่ยนตอนเข้าครั้งแรก นักเรียนไม่บังคับ)
 pnpm --filter @accounting/api set-password teacher@example.test    # ครู (อีเมล)
 pnpm --filter @accounting/api set-password 65012                   # นักเรียน (รหัสนักเรียน)
 

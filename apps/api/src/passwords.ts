@@ -36,3 +36,6 @@ export function temporaryPassword(): string {
   const group = () => Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
   return `${group()}-${group()}-${group()}`;
 }
+
+
+export { keyboardLayoutVariants } from './keyboard.js';
