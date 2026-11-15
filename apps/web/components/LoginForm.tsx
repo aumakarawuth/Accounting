@@ -70,9 +70,8 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
           onChange={(e) => setIdentifier(e.target.value)}
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        {th.login.password}
-        <PasswordInput
+      <PasswordInput
+          label={th.login.password}
           name="password"
           className={`${input} ${error ? 'border-red' : 'border-rule-input'}`}
           autoComplete="current-password"
@@ -80,7 +79,6 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
           value={password}
           onChange={setPassword}
         />
-      </label>
       {error && <p role="alert" className="neg text-sm">{error}</p>}
       <button type="submit" disabled={busy} className="min-h-12 rounded-doc bg-ink px-5 font-medium text-paper disabled:bg-disabled disabled:text-ink2 max-sm:min-h-13">
         {busy ? th.login.signingIn : th.login.submit}
