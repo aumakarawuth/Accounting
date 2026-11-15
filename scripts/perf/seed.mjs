@@ -30,7 +30,7 @@ await t('POST', `/api/classrooms/${room.id}/companies`, { name: 'ร้านว
 const s = session();
 await s('POST', '/api/auth/login', { kind: 'student', identifier: rows[0].studentCode, password: temp });
 const spw = `นักเรียนวัด-${randomUUID().slice(0, 8)}`;
-await s('POST', '/api/auth/change-password', { newPassword: spw });
+await s('POST', '/api/auth/change-password', { currentPassword: temp, newPassword: spw }); // นักเรียนไม่บังคับเปลี่ยน: ต้องใส่รหัสเดิม
 const [co] = await s('GET', '/api/me/companies');
 const uid = (await s('GET', '/api/auth/me')).id;
 
