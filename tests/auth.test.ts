@@ -3,7 +3,7 @@ import { buildApp } from '../apps/api/src/app';
 import { sessionAuth } from '../apps/api/src/auth';
 import { authConfigFromEnv, type AuthConfig } from '../apps/api/src/config';
 import { createPool } from '../apps/api/src/db';
-import { hashPassword, checkPassword, temporaryPassword } from '../apps/api/src/passwords';
+import { hashPassword, checkPassword, keyboardLayoutVariants, temporaryPassword } from '../apps/api/src/passwords';
 import { apiUrl } from './global-setup';
 import { pool as admin, newSchool, newUser, newClassroom, newCompany } from './helpers';
 
@@ -188,7 +188,20 @@ describe('รหัสผ่านและการรีเซ็ตโดย�
     expect(temporaryPassword()).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
   });
 
-  it('ครูรีเซ็ต: ได้รหัสชั่วคราว, เตะทุกอุปกรณ์, บังคับเปลี่ยนรหัสก่อนใช้งาน', async () => {
+  // แป้นเกษมณี: ล=] ง=' บ=[ ั=y ญ=P ช== ี=u ท=m ุ=6 ก=d ว=; น=o · a=ฟ b=ิ c=แ 1=ๅ 2=/ 3=- x=ป
+  it('พิมพ์รหัสตอนแป้นอยู่ผิดภาษาก็เข้าได้ (ไทย ↔ อังกฤษ) · รหัสผิดจริงยังผิด', async () => {
+    expect(keyboardLayoutVariants('ลงบัญชีทุกวัน')).toEqual([`]'[yP=um6d;yo`]);
+    expect(keyboardLayoutVariants('abc123x')).toEqual(['ฟิแๅ/-ป']);
+    expect(keyboardLayoutVariants('ฟิแๅ/-ป')).toEqual(['abc123x']);
+    expect((await login('student', aCode, `]'[yP=um6d;yo`)).statusCode).toBe(200);   // รหัสไทยพิมพ์ตอนแป้นอังกฤษ
+    expect((await login('student', aCode, ` ]'[yP=um6d;yo `)).statusCode).toBe(200); // + ช่องว่างหัวท้าย
+    expect((await login('student', aCode, `]'[yP=um6d;yp`)).statusCode).toBe(401);   // ผิดหนึ่งตัว
+    await setPassword(teacher, 'abc123x');
+    expect((await login('staff', teacherEmail, 'ฟิแๅ/-ป')).statusCode).toBe(200);           // รหัสอังกฤษพิมพ์ตอนแป้นไทย
+    await setPassword(teacher, 'ครูบัญชีห้องห้า');
+  });
+
+  it('ครูรีเซ็ต: ได้รหัสใหม่, เตะทุกอุปกรณ์, นักเรียนใช้รหัสบนใบได้เลย (ไม่บังคับเปลี่ยน) และเปลี่ยนเองได้', async () => {
     const studentCookie = sid(await login('student', aCode, 'ลงบัญชีทุกวัน'));
     const tc = sid(await login('staff', teacherEmail, 'ครูบัญชีห้องห้า'));
     const reset = await as(tc, 'POST', `/teacher/students/${a}/reset-password`);
@@ -197,18 +210,16 @@ describe('รหัสผ่านและการรีเซ็ตโดย�
     expect((await as(studentCookie, 'GET', '/auth/me')).statusCode).toBe(401); // ถูกเตะ
 
     const r = await login('student', aCode, temp);
-    expect(r.json()).toEqual({ role: 'student', mustChange: true });
+    expect(r.json()).toEqual({ role: 'student', mustChange: false });
     const c = sid(r);
-    const blocked = await as(c, 'GET', `/companies/${coA}`);
-    expect(blocked.statusCode).toBe(403);
-    expect(blocked.json().code).toBe('must_change_password');
+    expect((await as(c, 'GET', `/companies/${coA}`)).statusCode).toBe(200);
 
     for (const [pw, reason] of [['สั้น', 'length'], ['qwerty123', 'common'], [temp, 'same']] as const) {
-      const w = await as(c, 'POST', '/auth/change-password', { newPassword: pw });
+      const w = await as(c, 'POST', '/auth/change-password', { currentPassword: temp, newPassword: pw });
       expect(w.statusCode, pw).toBe(422);
       expect(w.json().reason, pw).toBe(reason);
     }
-    expect((await as(c, 'POST', '/auth/change-password', { newPassword: 'ลงบัญชีทุกวัน2' })).statusCode).toBe(200);
+    expect((await as(c, 'POST', '/auth/change-password', { currentPassword: temp, newPassword: 'ลงบัญชีทุกวัน2' })).statusCode).toBe(200);
     expect((await as(c, 'GET', `/companies/${coA}`)).statusCode).toBe(200);
     expect((await login('student', aCode, 'ลงบัญชีทุกวัน2')).json().mustChange).toBe(false);
   });

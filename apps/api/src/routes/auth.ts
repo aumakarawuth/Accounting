@@ -4,7 +4,7 @@ import { clientInfo, newToken, tokenHash, type AuthAdapter } from '../auth.js';
 import type { AuthConfig } from '../config.js';
 import { withUser } from '../db.js';
 import { HttpError } from '../errors.js';
-import { checkPassword, hashPassword, verifyPassword } from '../passwords.js';
+import { checkPassword, hashPassword, keyboardLayoutVariants, verifyPassword } from '../passwords.js';
 import type { RateLimiter } from '../ratelimit.js';
 import { ChangePassword, Login } from '../schemas-auth.js';
 
@@ -45,9 +45,15 @@ export function authRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
       throw new HttpError(423, 'locked', 'บัญชีถูกล็อกชั่วคราว', { minutes });
     }
 
-    // ช่องว่างหัว/ท้ายที่คีย์บอร์ดมือถือเติมให้เอง ไม่ถือว่าผิด
+    // ช่องว่างหัว/ท้ายที่คีย์บอร์ดมือถือเติมให้เอง และพิมพ์ตอนแป้นอยู่ผิดภาษา (ไทย ↔ อังกฤษ) ไม่ถือว่าผิด
+    // จำนวนครั้งที่ตรวจขึ้นกับสิ่งที่พิมพ์เท่านั้น (ไม่พบผู้ใช้ก็ตรวจกับค่าหลอกเท่ากัน) กันการวัดเวลาเดาว่ามีบัญชีนี้
     let ok = await verifyPassword(found?.password_hash ?? null, body.password);
-    if (!ok && found && body.password.trim() !== body.password) ok = await verifyPassword(found.password_hash, body.password.trim());
+    const trimmed = body.password.trim();
+    const retries = [...new Set([trimmed, ...keyboardLayoutVariants(trimmed)])].filter((p) => p !== body.password && p.length > 0);
+    for (const p of retries) {
+      if (ok) break;
+      ok = await verifyPassword(found?.password_hash ?? null, p);
+    }
     await pool.query('select app.auth_record($1, $2, $3, $4, $5, $6, $7::interval)', [
       kind, ident, req.ip, found?.user_id ?? null, ok, cfg.maxFailures, window,
     ]);

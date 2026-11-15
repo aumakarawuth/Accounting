@@ -47,7 +47,7 @@ async function newClass(browser: Browser, teacher: Page, t: string) {
   const imp = await teacher.request.post(`/api/classrooms/${roomId}/import`, { data: { rows: [{ studentCode: code, name: `นักเรียนสอบ ${t}`, password: temp }] } });
   expect(imp.status()).toBe(200);
   await teacher.goto('/teacher');
-  return { roomName, code, temp, password: `สอบบัญชี-${randomUUID().slice(0, 8)}` };
+  return { roomName, code, temp };
 }
 
 async function fillItem(page: Page, no: number, date: string, narrative: string, lines: [string, string, 'D' | 'C'][]) {
@@ -100,11 +100,8 @@ test('ครูสร้างโจทย์ → สอบ → นักเร�
     await expect(teacher.getByText('ยังไม่เปิดเฉลย')).toBeVisible();
 
     // ---- นักเรียนเริ่มสอบ ----
-    await login(student, 'student', room.code, room.temp);
-    await student.waitForURL('**/change-password');
+    await login(student, 'student', room.code, room.temp); // ใช้รหัสบนใบได้เลย ไม่บังคับเปลี่ยน
     await student.context().setExtraHTTPHeaders({ origin: originOf(student) });
-    expect((await student.request.post('/api/auth/change-password', { data: { newPassword: room.password } })).status()).toBe(200);
-    await student.goto('/');
     await student.waitForURL(/\/c\/[0-9a-f-]{36}$/); // บริษัทเดียว (ของงานนี้) เข้าให้เลย
     const co = student.url().split('/').pop()!;
     await student.goto(`/c/${co}/work`);
