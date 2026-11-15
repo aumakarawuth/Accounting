@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { postJson, type ApiError, type AssignmentMode, type Feedback, type Reveal } from '@/lib/api';
+import { postJson, type ApiError, type AssignmentMode, type Distribution, type ExerciseSetSummary, type Feedback, type Reveal } from '@/lib/api';
 import { th } from '@/i18n/th';
 
 const a = th.assign;
@@ -12,7 +12,9 @@ const field = 'h-11 w-full rounded-doc border border-rule-input bg-paper px-2 te
 const toIso = (v: string) => (v ? new Date(v).toISOString() : null);
 
 // มอบหมายชุดโจทย์ให้ห้อง (หรือสร้างบริษัทสาธิต) แล้วเปิดบริษัทให้ทันที
-export function AssignForm({ setId, defaultCompany, classrooms }: { setId: string; defaultCompany: string; classrooms: { id: string; name: string }[] }) {
+export function AssignForm({ setId, defaultCompany, classrooms, otherSets = [] }: {
+  setId: string; defaultCompany: string; classrooms: { id: string; name: string }[]; otherSets?: ExerciseSetSummary[];
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<AssignmentMode>('submit');
   const [classroomId, setClassroomId] = useState(classrooms[0]?.id ?? '');
@@ -23,6 +25,8 @@ export function AssignForm({ setId, defaultCompany, classrooms }: { setId: strin
   const [duration, setDuration] = useState('50');
   const [opensAt, setOpensAt] = useState('');
   const [closesAt, setClosesAt] = useState('');
+  const [extraSets, setExtraSets] = useState<string[]>([]);
+  const [distribution, setDistribution] = useState<Distribution>('rotate');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const demo = mode === 'demo';
@@ -42,7 +46,7 @@ export function AssignForm({ setId, defaultCompany, classrooms }: { setId: strin
       const r = await postJson<{ assignmentId: string; companies: number; companyId: string | null }>(`/teacher/exercises/${setId}/assign`, {
         mode, classroomId: demo ? null : classroomId, companyName, feedback, reveal: exam ? 'after_release' : reveal, checkDate,
         ...(exam ? { durationMinutes: Number(duration) } : {}),
-        ...(demo ? {} : { opensAt: toIso(opensAt), closesAt: toIso(closesAt) }),
+        ...(demo ? {} : { opensAt: toIso(opensAt), closesAt: toIso(closesAt), extraSets, distribution }),
       });
       if (demo && r.companyId) { router.push(`/c/${r.companyId}/work`); return; }
       setMsg({ ok: true, text: a.created(r.companies) });
@@ -116,6 +120,35 @@ export function AssignForm({ setId, defaultCompany, classrooms }: { setId: strin
           </>
         )}
       </div>
+      {!demo && (
+        <fieldset className="flex flex-col gap-1 border-t border-rule pt-3">
+          <legend className="text-sm font-medium">{a.extraSets}</legend>
+          {otherSets.length === 0 ? <p className="text-[13px] text-ink2">{a.noOtherSets}</p> : (
+            <>
+              <p className="text-[13px] text-ink2">{a.extraSetsNote}</p>
+              <p className="text-sm"><span className="font-semibold">{a.setLabel(1)}</span> · {a.thisSet}</p>
+              {otherSets.map((x) => {
+                const i = extraSets.indexOf(x.id);
+                const full = i < 0 && extraSets.length >= 3;
+                return (
+                  <label key={x.id} className={`flex min-h-11 items-center gap-3 text-[15px] ${full ? 'text-ink2' : ''}`}>
+                    <input type="checkbox" className="size-5 text-base accent-ink" checked={i >= 0} disabled={full}
+                      onChange={(e) => setExtraSets((cur) => (e.target.checked ? [...cur, x.id] : cur.filter((y) => y !== x.id)))} />
+                    <span>{i >= 0 && <span className="font-semibold">{a.setLabel(i + 2)} · </span>}{a.setOption(x.title, x.items, x.points)}</span>
+                  </label>
+                );
+              })}
+              {extraSets.length > 0 && (
+                <label className="flex flex-col gap-1 text-sm sm:max-w-md">{a.distribution}
+                  <select className={field} value={distribution} onChange={(e) => setDistribution(e.target.value as Distribution)}>
+                    {(['rotate', 'random'] as const).map((d) => <option key={d} value={d}>{a.distributions[d]}</option>)}
+                  </select>
+                </label>
+              )}
+            </>
+          )}
+        </fieldset>
+      )}
       <button type="submit" disabled={busy || (!demo && !classroomId)}
         className="min-h-11 self-start rounded-doc bg-ink px-4 font-medium text-paper disabled:bg-disabled disabled:text-ink2 max-sm:min-h-13 max-sm:self-stretch">
         {demo ? a.demoSubmit : a.submit}

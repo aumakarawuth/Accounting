@@ -26,6 +26,7 @@ export default async function AssignmentPage({ params }: { params: Promise<{ ass
   });
   const as = ov.assignment;
   const exam = as.mode === 'exam';
+  const multi = ov.sets.length > 1; // งานนี้สลับชุดโจทย์
   const cell = 'border border-rule px-2.5 py-2';
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
@@ -53,6 +54,7 @@ export default async function AssignmentPage({ params }: { params: Promise<{ ass
               <tr>
                 <th className={`${cell} font-medium`}>{a.code}</th>
                 <th className={`${cell} font-medium`}>{a.name}</th>
+                {multi && <th className={`${cell} font-medium`}>{a.set}</th>}
                 <th className={`${cell} text-right font-medium`}>{a.score}</th>
                 <th className={`${cell} font-medium`}>{a.status}</th>
                 <th className={`${cell} font-medium`}>{a.items}</th>
@@ -64,6 +66,7 @@ export default async function AssignmentPage({ params }: { params: Promise<{ ass
                 <tr key={s.studentId}>
                   <td className={`${cell} font-num`}>{s.studentCode}</td>
                   <td className={cell}>{s.name}</td>
+                  {multi && <td className={`${cell} whitespace-nowrap`}>{s.setNo ? th.assign.setLabel(s.setNo) : ''}</td>}
                   <td className={`${cell} text-right font-num`}>
                     {s.grade ? `${s.grade.score}/${s.grade.maxScore}` : ''}
                     {s.teacherScore && <span className="block text-[13px] text-ink2">{a.teacherScore} {s.teacherScore}</span>}
@@ -91,7 +94,7 @@ export default async function AssignmentPage({ params }: { params: Promise<{ ass
           {ov.students.map((s) => {
             const body = (
               <>
-                <span><span className="font-num">{s.studentCode}</span> {s.name}</span>
+                <span><span className="font-num">{s.studentCode}</span> {s.name}{multi && s.setNo ? ` · ${th.assign.setLabel(s.setNo)}` : ''}</span>
                 <span className="font-num">{s.grade ? `${s.grade.score}/${s.grade.maxScore}` : ''}</span>
                 <span className="text-[13px] text-ink2">{status(s, exam)}</span>
                 <span className="text-right font-num text-[13px]">{s.grade?.items.map((g) => a.itemShort[g.status]).join(' ')}</span>
@@ -108,16 +111,18 @@ export default async function AssignmentPage({ params }: { params: Promise<{ ass
         <p className="text-[13px] text-ink2">{a.legend}</p>
       </section>
 
-      <section aria-label={th.exercises.title} className="flex flex-col gap-2">
-        <h2 className="text-[17px] font-semibold">{th.exercises.title}</h2>
-        <ol className="border-t border-rule-strong bg-paper">
-          {ov.items.map((i) => (
-            <li key={i.no} className="border-b border-rule px-4 py-2 text-[15px]">
-              <span className="font-semibold">{a.item(i.no)}</span> · {i.narrative}
-            </li>
-          ))}
-        </ol>
-      </section>
+      {(multi ? ov.sets : [{ no: 1, setId: '', title: th.exercises.title, items: ov.items }]).map((set) => (
+        <section key={set.no} aria-label={multi ? `${th.assign.setLabel(set.no)} ${set.title}` : th.exercises.title} className="flex flex-col gap-2">
+          <h2 className="text-[17px] font-semibold">{multi ? `${th.assign.setLabel(set.no)} · ${set.title}` : th.exercises.title}</h2>
+          <ol className="border-t border-rule-strong bg-paper">
+            {set.items.map((i) => (
+              <li key={i.no} className="border-b border-rule px-4 py-2 text-[15px]">
+                <span className="font-semibold">{a.item(i.no)}</span> · {i.narrative}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
     </div>
   );
 }
