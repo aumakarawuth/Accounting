@@ -306,6 +306,7 @@ export type CompanyAssignment = {
 };
 export type ExerciseLine = { account_code: string; debit?: string | null; credit?: string | null };
 export type ExerciseItem = { no?: number; date: string; narrative: string; points: string; lines: ExerciseLine[] };
+export type Distribution = 'rotate' | 'random';
 export type ExerciseSetSummary = { id: string; title: string; companyName: string; version: number; updatedAt: string; items: number; points: string; assignments: number };
 export type AssignmentSummary = {
   id: string; mode: AssignmentMode; title: string; companyName: string; classroom: string | null; createdAt: string;
@@ -344,12 +345,14 @@ export type AssignmentView = {
 export type OverviewStudent = {
   studentId: string; studentCode: string; name: string; companyId: string | null; companyName: string | null; status: WorkStatus | null;
   teacherScore: string | null; maxScore: string | null; startedAt: string | null; deadline: string | null; extraMinutes: number | null;
-  lockReason: LockReason | null; entries: number;
+  lockReason: LockReason | null; entries: number; setNo: number | null;
   grade: null | { score: string; maxScore: string; correct: number; extra: number; items: { no: number; status: ItemStatus; earned: string }[] };
 };
 export type AssignmentOverview = {
-  assignment: AssignmentInfo & { companyName: string; setId: string | null; classroomId: string | null; classroom: string | null; createdAt: string };
+  assignment: AssignmentInfo & { companyName: string; setId: string | null; classroomId: string | null; classroom: string | null; createdAt: string; distribution: Distribution };
   items: { no: number; date: string; narrative: string; points: string }[];
+  /** ชุดโจทย์ของงาน (ชุด 1 = ชุดหลัก) ส่วน items = ข้อของชุด 1 */
+  sets: { no: number; setId: string; title: string; items: { no: number; date: string; narrative: string; points: string }[] }[];
   students: OverviewStudent[];
   now: string;
 };
