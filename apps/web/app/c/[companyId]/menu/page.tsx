@@ -15,7 +15,7 @@ export default function AllMenu() {
         <div key={i}>
           {g.title && <h2 className="bg-band px-4 py-2 text-[13px] font-semibold text-ink2">{g.title}</h2>}
           {g.items.map((it) => (
-            <Link key={it.href} href={it.href} className="flex min-h-12 items-center border-b border-rule bg-paper px-4">
+            <Link key={it.href} href={it.href} prefetch={false} className="flex min-h-12 items-center border-b border-rule bg-paper px-4">
               {it.label}
             </Link>
           ))}

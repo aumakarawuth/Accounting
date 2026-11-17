@@ -87,6 +87,9 @@ export function SideNav({ companyId }: { companyId: string }) {
             <Link
               key={it.href}
               href={it.href}
+              // ไม่โหลดล่วงหน้าทุกเมนู (~35 ลิงก์ต่อการเปิดหน้า): ทดสอบ 50 คนพบคำขอหน้าเว็บ 40,000 ครั้งใน 9 นาที ส่วนใหญ่มาจากตรงนี้
+              // บน Vercel ทุกครั้งคือการเรียกฟังก์ชันที่นับโควตา · ยังโหลดล่วงหน้าเมื่อชี้เมาส์ (docs/load-test-class50.md)
+              prefetch={false}
               aria-current={it.href === current ? 'page' : undefined}
               className="flex min-h-11 items-center px-4 text-[15px] aria-[current=page]:bg-ink aria-[current=page]:text-paper lg:min-h-9"
             >
