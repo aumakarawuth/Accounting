@@ -13,7 +13,7 @@ x-api-env: &api-env
   WEB_ORIGIN: https://${SITE_ADDRESS:-localhost}
   # เชื่อ X-Forwarded-For เฉพาะจาก Caddy (IP คงที่ด้านล่าง)
   TRUST_PROXY: 172.29.0.10
-  REQUESTS_PER_USER_PER_MINUTE: ${REQUESTS_PER_USER_PER_MINUTE:-600}
+  REQUESTS_PER_USER_PER_MINUTE: ${REQUESTS_PER_USER_PER_MINUTE:-1500}
   REQUESTS_PER_IP_PER_MINUTE: ${REQUESTS_PER_IP_PER_MINUTE:-60000}
   LOGIN_PER_IP_PER_MINUTE: ${LOGIN_PER_IP_PER_MINUTE:-1200}
   # ตัวชี้วัด Prometheus พอร์ตแยกในเครือข่ายภายใน (Caddy ไม่ส่งต่อ)

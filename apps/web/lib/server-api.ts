@@ -25,14 +25,23 @@ export async function serverApi<T>(path: string): Promise<T> {
   const { status, body } = await call(path);
   if (status === 401) redirect('/login');
   if (status === 403 && body.code === 'must_change_password') redirect('/change-password');
-  if (status < 200 || status >= 300) throw { status, ...body } as ApiError;
+  if (status < 200 || status >= 300) throw apiError(status, body);
   return body as T;
 }
 
-/** ผู้ใช้ปัจจุบัน; ไม่มีเซสชัน = null (ไม่ redirect เอง) */
+// โยนเป็น Error จริง (React ไม่ชอบวัตถุธรรมดา: error #441 ตอนทดสอบ 50 คน) ผู้เรียกยังอ่าน status/code ได้เหมือนเดิม
+function apiError(status: number, body: Record<string, unknown>): ApiError {
+  return Object.assign(new Error(String(body.message ?? status)), { status, ...body }) as unknown as ApiError;
+}
+
+/** ผู้ใช้ปัจจุบัน; ไม่มีเซสชัน (401) = null (ไม่ redirect เอง)
+ * ข้อผิดพลาดอื่น (ส่งคำขอถี่เกิน 429, เซิร์ฟเวอร์ล่ม) โยนต่อให้หน้า error ไม่ใช่ถือว่าออกจากระบบแล้ว
+ * (ทดสอบห้องเรียน 50 คน: ครูที่ตรวจเร็วโดนจำกัดคำขอแล้วถูกพาไปหน้าเข้าสู่ระบบ docs/load-test-class50.md) */
 export async function getMe(): Promise<Me | null> {
   const { status, body } = await call('/auth/me');
-  return status === 200 ? (body as unknown as Me) : null;
+  if (status === 200) return body as unknown as Me;
+  if (status === 401) return null;
+  throw apiError(status, body);
 }
 
 /** ใช้ใน layout: ต้องล็อกอิน ต้องไม่ค้างเปลี่ยนรหัส และ (ถ้าระบุ) ต้องเป็นบทบาทนี้ */

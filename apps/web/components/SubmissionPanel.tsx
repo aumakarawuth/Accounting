@@ -10,28 +10,37 @@ const when = (iso: string) =>
 
 // วงจรงาน: นักเรียนส่งตรวจ (กดสองจังหวะ), ครูเริ่มตรวจ/ส่งกลับ/ให้ผ่าน/ปิด
 // ส่ง expected = สถานะที่เห็นอยู่ ถ้าอีกฝั่งเปลี่ยนไปก่อน DB ตอบ 409 แล้วโหลดใหม่
-export function SubmissionPanel({ companyId, sub, viewer }: { companyId: string; sub: Submission; viewer: 'student' | 'teacher' }) {
+// autoScore: คะแนนตรวจอัตโนมัติ (ครู) เติมเป็นค่าเริ่มต้นของช่องคะแนน ครูแก้ได้ (docs/phase4-spec.md ข้อ 3)
+export function SubmissionPanel({ companyId, sub, viewer, autoScore = null }: {
+  companyId: string; sub: Submission; viewer: 'student' | 'teacher'; autoScore?: string | null;
+}) {
   const router = useRouter();
   const [confirm, setConfirm] = useState(false);
   const [note, setNote] = useState('');
-  const [score, setScore] = useState('');
+  const [score, setScore] = useState(autoScore ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const status = sub.status ?? 'draft';
+  // ทำรายการสำเร็จแล้วปุ่มยังล็อกจนสถานะใหม่มาถึง: กันกดปุ่มถัดไปด้วยสถานะเก่า (เริ่มตรวจแล้วกดให้ผ่านทันที = 409)
+  const [shown, setShown] = useState(`${status}:${sub.round}`);
+  if (shown !== `${status}:${sub.round}`) {
+    setShown(`${status}:${sub.round}`);
+    setBusy(false);
+    setScore(autoScore ?? '');
+  }
 
   async function act(action: string, extra: object = {}) {
     setBusy(true);
     setError(null);
     try {
       await postJson(`/companies/${companyId}/submission`, { action, expected: status, ...extra });
-      setConfirm(false); setNote(''); setScore('');
-      router.refresh();
+      setConfirm(false); setNote('');
+      router.refresh(); // busy ปลดเมื่อสถานะใหม่มาถึง (ด้านบน)
     } catch (e) {
       const err = e as ApiError;
       setError(err.message);
-      if (err.code === '40001') router.refresh();
-    } finally {
       setBusy(false);
+      if (err.code === '40001') router.refresh();
     }
   }
 
