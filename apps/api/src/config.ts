@@ -27,7 +27,9 @@ export function authConfigFromEnv(env = process.env): AuthConfig {
     // การเดารหัสยังถูกจำกัดด้วยล็อกต่อบัญชี (5 ครั้ง) และเพดานล็อกอินผิดต่อ IP (ipMaxFailures)
     loginPerIpPerMinute: Number(env.LOGIN_PER_IP_PER_MINUTE ?? 1200),
     requestsPerIpPerMinute: Number(env.REQUESTS_PER_IP_PER_MINUTE ?? 60000),
-    requestsPerUserPerMinute: Number(env.REQUESTS_PER_USER_PER_MINUTE ?? 600),
+    // หน้าเว็บหนึ่งหน้าเรียก API ~10 คำขอ (แสดงฝั่งเซิร์ฟเวอร์) ตรวจงานหนึ่งคน = 3 ครั้ง (เปิด เริ่มตรวจ ให้ผ่าน)
+    // ค่าเดิม 600 ครูที่ตรวจเร็วโดนจำกัด (docs/load-test-class50.md) · 1,500 ยังกันสคริปต์ยิงถี่ได้
+    requestsPerUserPerMinute: Number(env.REQUESTS_PER_USER_PER_MINUTE ?? 1500),
     allowedOrigins: (env.WEB_ORIGIN ?? vercelOrigins(env) ?? 'http://localhost:3000').split(',').map((s) => s.trim()),
   };
 }

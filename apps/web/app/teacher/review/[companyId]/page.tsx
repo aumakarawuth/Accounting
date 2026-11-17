@@ -42,7 +42,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ company
         </h1>
         <p className="text-sm text-ink2">{th.submission.viewLogged}</p>
       </div>
-      <SubmissionPanel companyId={companyId} sub={sub} viewer="teacher" />
+      <SubmissionPanel companyId={companyId} sub={sub} viewer="teacher" autoScore={view?.result?.score ?? null} />
       {view && <AssignmentPanel view={view} companyId={companyId} accounts={accounts} canWrite={false} />}
       <StatementsView st={st} company={company.name} />
       <section className="flex flex-col gap-2" aria-label={th.closing.teacherTitle}>
