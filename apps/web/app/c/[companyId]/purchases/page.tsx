@@ -6,9 +6,9 @@ import type { Company, PurchaseKindSql, PurchaseRow } from '@/lib/api';
 import { isMonth, monthLabel, todayIso } from '@/lib/date';
 import { th } from '@/i18n/th';
 
-const KINDS: PurchaseKindSql[] = ['purchase_invoice', 'cash_purchase', 'purchase_credit_note'];
+const KINDS: PurchaseKindSql[] = ['purchase_invoice', 'cash_purchase', 'purchase_credit_note', 'purchase_debit_note'];
 
-// เอกสารซื้อรายเดือน แยกตามชนิด (ซื้อเชื่อ ซื้อสด ใบลดหนี้ผู้ขาย) — ใบสำคัญจ่ายอยู่ที่หน้าจ่ายชำระ
+// เอกสารซื้อรายเดือน แยกตามชนิด (ซื้อเชื่อ ซื้อสด ใบลด/เพิ่มหนี้ผู้ขาย) — ใบสำคัญจ่าย ใบรับสินค้า เงินมัดจำอยู่หน้าของตัวเอง
 export default async function PurchaseList({
   params, searchParams,
 }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ month?: string; kind?: string }> }) {
@@ -20,7 +20,7 @@ export default async function PurchaseList({
     serverApi<Company>(`/companies/${companyId}`),
     serverApi<PurchaseRow[]>(`/companies/${companyId}/purchases?month=${month}${kind ? `&kind=${kind}` : ''}`),
   ]);
-  const list = kind ? rows : rows.filter((r) => r.kind !== 'payment');
+  const list = kind ? rows : rows.filter((r) => KINDS.includes(r.kind));
   const url = (m: string, k: string | null) => `/c/${companyId}/purchases?month=${m}${k ? `&kind=${k}` : ''}`;
   const canPost = company.can_write && !company.locked;
   const primary = 'inline-flex min-h-11 items-center justify-center rounded-doc bg-ink px-4 font-medium text-paper max-sm:min-h-13';

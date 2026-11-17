@@ -6,6 +6,7 @@ import { PasswordSlips, type Slip } from '../PasswordSlips';
 import { AdminClassrooms } from './AdminClassrooms';
 import { AdminSettings } from './AdminSettings';
 import { AdminStaff } from './AdminStaff';
+import { AdminResetStudent } from './AdminResetStudent';
 
 // ใบรหัสผ่านจากการสร้างบัญชี/รีเซ็ต/นำเข้า รวมไว้ที่เดียวเพื่อพิมพ์ทีเดียว
 export function AdminWorkspace({ staff, rooms, worksheetFormats }: { staff: Staff[]; rooms: AdminClassroom[]; worksheetFormats: number[] }) {
@@ -14,6 +15,7 @@ export function AdminWorkspace({ staff, rooms, worksheetFormats }: { staff: Staf
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
       <AdminStaff staff={staff} onIssued={add} />
+      <AdminResetStudent onIssued={add} />
       <AdminClassrooms rooms={rooms} teachers={staff.filter((s) => s.role === 'teacher' && s.active)} onIssued={add} />
       <AdminSettings worksheetFormats={worksheetFormats} />
       <PasswordSlips slips={slips} onClear={() => setSlips([])} />

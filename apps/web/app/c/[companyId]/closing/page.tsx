@@ -1,14 +1,17 @@
 import Link from 'next/link';
 import { PeriodTable } from '@/components/PeriodTable';
+import { YearEndPanel } from '@/components/YearEndPanel';
+import { EndingInventoryPanel } from '@/components/EndingInventoryPanel';
 import { serverApi } from '@/lib/server-api';
-import type { Company, Periods } from '@/lib/api';
+import type { Company, FiscalYears, Periods } from '@/lib/api';
 import { th } from '@/i18n/th';
 
 export default async function ClosingPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
-  const [company, periods] = await Promise.all([
+  const [company, periods, years] = await Promise.all([
     serverApi<Company>(`/companies/${companyId}`),
     serverApi<Periods>(`/companies/${companyId}/periods`),
+    serverApi<FiscalYears>(`/companies/${companyId}/fiscal-years`),
   ]);
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6">
@@ -26,6 +29,9 @@ export default async function ClosingPage({ params }: { params: Promise<{ compan
         )}
       </section>
       <PeriodTable companyId={companyId} data={periods} linkJournal />
+      <EndingInventoryPanel companyId={companyId} months={periods.periods.filter((p) => !p.closed).map((p) => p.month)}
+        writable={company.can_write && !company.locked} />
+      <YearEndPanel companyId={companyId} data={years} teacher={!company.can_write} />
     </div>
   );
 }

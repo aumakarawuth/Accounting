@@ -50,14 +50,14 @@ describe('นำเข้านักเรียนจาก CSV', () => {
     { studentCode: `${tag}-02`, name: 'เขมินท์ รักเรียน' },
   ];
 
-  it('ครูนำเข้าห้องตัวเอง: สร้างบัญชี ได้รหัสชั่วคราวเฉพาะคนใหม่ และเข้าใช้ได้แบบต้องเปลี่ยนรหัส', async () => {
+  it('ครูนำเข้าห้องตัวเอง: สร้างบัญชี ได้รหัสเฉพาะคนใหม่ และเข้าใช้ด้วยรหัสบนใบได้เลย (ไม่บังคับเปลี่ยน)', async () => {
     const r = await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows });
     expect(r.statusCode).toBe(200);
     const res = r.json().results;
     expect(res.map((x: { status: string }) => x.status)).toEqual(['created', 'created']);
     expect(res[0].tempPassword).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
     const l = await login('student', rows[0].studentCode, res[0].tempPassword);
-    expect(l.res.json()).toEqual({ role: 'student', mustChange: true });
+    expect(l.res.json()).toEqual({ role: 'student', mustChange: false });
     // ไม่เก็บรหัสชั่วคราวเป็นข้อความธรรมดาที่ไหน
     const leak = await db.query(`select count(*)::int n from acc.audit_log where new_row::text like $1`, [`%${res[0].tempPassword}%`]);
     expect(leak.rows[0].n).toBe(0);
@@ -85,12 +85,12 @@ describe('นำเข้านักเรียนจาก CSV', () => {
     for (const b of bad) expect((await call(teacherC, 'POST', `/classrooms/${room}/import`, b)).statusCode, JSON.stringify(b)).toBe(400);
   });
 
-  it('ครูกำหนดรหัสผ่านเริ่มต้นในไฟล์ได้ นักเรียนเข้าด้วยรหัสนั้นแล้วต้องเปลี่ยนเอง; รหัสสั้นเกินถูกปฏิเสธ', async () => {
+  it('ครูกำหนดรหัสผ่านเริ่มต้นในไฟล์ได้ นักเรียนเข้าด้วยรหัสนั้นได้เลย; รหัสสั้นเกินถูกปฏิเสธ', async () => {
     const code = `${tag}-pw`;
     const r = await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: code, name: 'มานะ ตั้งใจ', password: 'Room5-2569' }] });
     expect(r.statusCode).toBe(200);
     expect(r.json().results[0].tempPassword).toBe('Room5-2569');
-    expect((await login('student', code, 'Room5-2569')).res.json()).toEqual({ role: 'student', mustChange: true });
+    expect((await login('student', code, 'Room5-2569')).res.json()).toEqual({ role: 'student', mustChange: false });
     const short = await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: `${tag}-sh`, name: 'x', password: '123' }] });
     expect(short.statusCode).toBe(400);
   });
@@ -216,5 +216,29 @@ describe('ลบนักเรียน', () => {
     expect((await call(otherTeacherC, 'POST', `/classrooms/${otherRoom}/companies`, { name: 'บริษัททดสอบลบ' })).statusCode).toBeLessThan(300);
     const id = (await db.query('select id from acc.users where student_code=$1', [code])).rows[0].id as string;
     expect((await call(adminC, 'POST', `/teacher/students/${id}/delete`)).statusCode).toBe(409);
+  });
+});
+
+describe('รีเซ็ตรหัสผ่านนักเรียน', () => {
+  it('ครูตั้งรหัสใหม่เองได้ ผู้ดูแลรีเซ็ตด้วยรหัสนักเรียนได้ และรหัสนักเรียนที่ไม่มีได้ 404', async () => {
+    const code = `rs${randomUUID().slice(0, 6)}`;
+    await call(teacherC, 'POST', `/classrooms/${room}/import`, { rows: [{ studentCode: code, name: 'รีเซ็ตทดสอบ' }] });
+    const id = (await db.query('select id from acc.users where student_code=$1', [code])).rows[0].id as string;
+
+    const t = await call(teacherC, 'POST', `/teacher/students/${id}/reset-password`, { password: 'ห้องห้าปีนี้' });
+    expect(t.statusCode).toBe(200);
+    expect(t.json().tempPassword).toBe('ห้องห้าปีนี้');
+    expect((await login('student', code, 'ห้องห้าปีนี้')).res.json()).toEqual({ role: 'student', mustChange: false });
+    expect((await call(teacherC, 'POST', `/teacher/students/${id}/reset-password`, { password: '123' })).statusCode).toBe(400);
+    expect((await call(otherTeacherC, 'POST', `/teacher/students/${id}/reset-password`)).statusCode).toBe(403);
+
+    const a = await call(adminC, 'POST', '/admin/students/reset-password', { studentCode: code.toUpperCase(), password: 'ผู้ดูแลตั้งให้' });
+    expect(a.statusCode).toBe(200);
+    expect(a.json()).toMatchObject({ name: 'รีเซ็ตทดสอบ', tempPassword: 'ผู้ดูแลตั้งให้' });
+    expect((await login('student', code, 'ผู้ดูแลตั้งให้')).res.statusCode).toBe(200);
+    const r = await call(adminC, 'POST', '/admin/students/reset-password', { studentCode: code });
+    expect(r.json().tempPassword).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+    expect((await call(adminC, 'POST', '/admin/students/reset-password', { studentCode: 'NOPE404' })).statusCode).toBe(404);
+    expect((await call(teacherC, 'POST', '/admin/students/reset-password', { studentCode: code })).statusCode).toBe(403);
   });
 });

@@ -9,7 +9,8 @@ import { th } from '@/i18n/th';
 // ภาษีซื้อ: เลขที่ใบกำกับเป็นของผู้ขาย เลขเอกสารของเราแสดงรอง · จอเล็กเป็นรายการ
 export function VatTable({ companyId, side, rows }: { companyId: string; side: 'sales' | 'purchases'; rows: VatRow[] }) {
   const c = th.tax.col;
-  const href = (r: VatRow) => `/c/${companyId}/${side}/documents/${r.documentId}`;
+  // ใบกำกับภาษีขายสินทรัพย์ (FD) ไม่มีหน้าเอกสารขาย: เปิดรายการในสมุดรายวัน
+  const href = (r: VatRow) => (r.kind === 'asset_sale' ? `/c/${companyId}/journal/${r.documentId}` : `/c/${companyId}/${side}/documents/${r.documentId}`);
   const invoiceNo = (r: VatRow) => (side === 'purchases' ? r.refNo ?? r.docNo : r.docNo);
   const sum = (k: 'base' | 'vat') => fromCents(rows.reduce((s, r) => s + (toCents(r[k]) ?? 0n), 0n));
   const note = (r: VatRow) => (r.status === 'normal' ? null : <span className="text-[13px] text-ink2"> · {th.tax.status[r.status]}</span>);

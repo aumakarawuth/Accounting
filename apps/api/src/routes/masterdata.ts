@@ -16,7 +16,7 @@ const PARTY = `p.code, p.name, p.is_customer as "isCustomer", p.is_vendor as "is
   p.branch_no as "branchNo", p.address, p.vat_registered as "vatRegistered", p.credit_days as "creditDays",
   p.wht_kind as "whtKind", p.wht_rate::text as "whtRate", p.active, p.version`;
 const ITEM = `i.code, i.name, i.unit, i.is_service as "isService", i.track_inventory as "trackInventory", i.sale_price::text as "salePrice",
-  i.purchase_price::text as "purchasePrice", sa.code as "salesAccount", pa.code as "purchaseAccount", i.active, i.version`;
+  i.purchase_price::text as "purchasePrice", sa.code as "salesAccount", pa.code as "purchaseAccount", i.cost_method as "costMethod", i.active, i.version`;
 const ITEM_FROM = `acc.items i
   left join acc.chart_of_accounts sa on sa.company_id = i.company_id and sa.id = i.sales_account_id
   left join acc.chart_of_accounts pa on pa.company_id = i.company_id and pa.id = i.purchase_account_id`;
@@ -153,10 +153,11 @@ export function masterDataRoutes(app: FastifyInstance, pool: pg.Pool, auth: Auth
       const purchase = await accountId(c, companyId, b.purchaseAccount, ['expense', 'asset'], 'บัญชีซื้อ');
       try {
         await c.query(
-          `insert into acc.items (company_id, code, name, unit, is_service, sale_price, purchase_price, sales_account_id, purchase_account_id, track_inventory)
-           values ($1, $2, $3, coalesce($4, ''), coalesce($5, false), $6, $7, $8, $9, coalesce($10, false))`,
+          `insert into acc.items (company_id, code, name, unit, is_service, sale_price, purchase_price, sales_account_id, purchase_account_id, track_inventory,
+                                  cost_method)
+           values ($1, $2, $3, coalesce($4, ''), coalesce($5, false), $6, $7, $8, $9, coalesce($10, false), $11)`,
           [companyId, b.code, b.name, b.unit ?? null, b.isService ?? null, b.salePrice ?? null, b.purchasePrice ?? null, sales ?? null, purchase ?? null,
-           b.trackInventory ?? null]);
+           b.trackInventory ?? null, b.costMethod ?? null]);
       } catch (e) {
         if ((e as { code?: string }).code === '23505') throw new HttpError(409, 'duplicate', `มีรหัส ${b.code} อยู่แล้ว`);
         throw e;
@@ -177,7 +178,7 @@ export function masterDataRoutes(app: FastifyInstance, pool: pg.Pool, auth: Auth
       const params: unknown[] = [companyId, code, b.version];
       const sets = setClause({
         name: 'name', unit: 'unit', isService: 'is_service', trackInventory: 'track_inventory', salePrice: 'sale_price', purchasePrice: 'purchase_price',
-        salesAccountId: 'sales_account_id', purchaseAccountId: 'purchase_account_id', active: 'active',
+        salesAccountId: 'sales_account_id', purchaseAccountId: 'purchase_account_id', costMethod: 'cost_method', active: 'active',
       }, fields, params);
       const r = await c.query(
         `update acc.items i set ${[...sets, 'version = i.version + 1'].join(', ')}

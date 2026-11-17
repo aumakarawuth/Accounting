@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { postJson, type ApiError } from '@/lib/api';
 import { th } from '@/i18n/th';
+import { PasswordInput } from './PasswordInput';
 
 type Check = 'pass' | 'fail' | 'notYet' | 'pending';
 
 // เงื่อนไขแสดงเป็นคำ (ผ่าน/ไม่ผ่าน) ไม่ใช้สีอย่างเดียว; รายการรหัสยอดแย่ตรวจที่เซิร์ฟเวอร์
-export function ChangePasswordForm({ mustChange, studentCode }: { mustChange: boolean; studentCode: string | null }) {
+export function ChangePasswordForm({ mustChange, studentCode: _studentCode }: { mustChange: boolean; studentCode: string | null }) {
   const router = useRouter();
   const [current, setCurrent] = useState('');
   const [pw, setPw] = useState('');
@@ -18,8 +19,8 @@ export function ChangePasswordForm({ mustChange, studentCode }: { mustChange: bo
   const [busy, setBusy] = useState(false);
 
   const len = [...pw].length;
-  const lengthOk: Check = len >= 8 ? 'pass' : 'notYet';
-  const codeOk: Check = !pw ? 'notYet' : studentCode && pw.toLowerCase().includes(studentCode.toLowerCase()) ? 'fail' : 'pass';
+  const lengthOk: Check = len >= 6 ? 'pass' : 'notYet';
+  const codeOk: Check = 'pass'; // ผ่อนกติกา: รหัสผ่านมีรหัสนักเรียนได้
   const commonOk: Check = commonFor === pw && pw ? 'fail' : 'pending';
   const matches = confirm.length > 0 && confirm === pw;
   const canSubmit = !busy && lengthOk === 'pass' && codeOk === 'pass' && commonOk !== 'fail' && matches && (mustChange || current.length > 0);
@@ -61,24 +62,14 @@ export function ChangePasswordForm({ mustChange, studentCode }: { mustChange: bo
         {mustChange && <p className="text-sm text-ink2">{th.password.hint}</p>}
       </div>
       {!mustChange && (
-        <label className="flex flex-col gap-1 text-sm">
-          {th.password.current}
-          <input type="password" autoComplete="current-password" className={input} value={current} onChange={(e) => setCurrent(e.target.value)} />
-        </label>
+        <PasswordInput label={th.password.current} autoComplete="current-password" className={input} value={current} onChange={setCurrent} />
       )}
-      <label className="flex flex-col gap-1 text-sm">
-        {th.password.newPassword}
-        <input type="password" autoComplete="new-password" className={input} value={pw} onChange={(e) => setPw(e.target.value)} />
-      </label>
+      <PasswordInput label={th.password.newPassword} autoComplete="new-password" className={input} value={pw} onChange={setPw} />
       <ul aria-live="polite">
         {row(lengthOk, lengthOk === 'pass' ? th.password.rule.length : th.password.rule.lengthNow(len))}
-        {studentCode && row(codeOk, th.password.rule.notStudentCode)}
         {row(commonOk, commonOk === 'fail' ? th.password.rule.isCommon : th.password.rule.notCommon)}
       </ul>
-      <label className="flex flex-col gap-1 text-sm">
-        {th.password.confirm}
-        <input type="password" autoComplete="new-password" className={input} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-      </label>
+      <PasswordInput label={th.password.confirm} autoComplete="new-password" className={input} value={confirm} onChange={setConfirm} />
       {confirm && <p className={`text-sm ${matches ? '' : 'neg'}`}>{matches ? th.password.match : th.password.mismatch}</p>}
       <p className="text-sm text-ink2">{th.password.advice}</p>
       {error && <p role="alert" className="neg text-sm">{error}</p>}

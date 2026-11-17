@@ -44,7 +44,8 @@ async function loginFirst(kind, identifier, temp, next) {
   const s = session();
   await s.json('POST', '/api/auth/login', { kind, identifier, password: temp });
   if (![...s.jar.keys()].includes('__Host-sid')) fail('cookie ไม่ใช่ __Host-sid (COOKIE_SECURE)');
-  await s.json('POST', '/api/auth/change-password', { newPassword: next });
+  // currentPassword: ครู/ผู้ดูแลที่ต้องเปลี่ยนรหัสไม่ใช้ค่านี้ นักเรียน (ไม่บังคับเปลี่ยนตั้งแต่ migration 118) ต้องใส่
+  await s.json('POST', '/api/auth/change-password', { currentPassword: temp, newPassword: next });
   return s;
 }
 

@@ -3,7 +3,7 @@ import { buildApp } from '../apps/api/src/app';
 import { sessionAuth } from '../apps/api/src/auth';
 import { authConfigFromEnv, type AuthConfig } from '../apps/api/src/config';
 import { createPool } from '../apps/api/src/db';
-import { hashPassword, checkPassword, temporaryPassword } from '../apps/api/src/passwords';
+import { hashPassword, checkPassword, keyboardLayoutVariants, temporaryPassword } from '../apps/api/src/passwords';
 import { apiUrl } from './global-setup';
 import { pool as admin, newSchool, newUser, newClassroom, newCompany } from './helpers';
 
@@ -132,32 +132,37 @@ describe('จำกัดอัตรา', () => {
 });
 
 describe('ล็อกชั่วคราว', () => {
-  it('ผิด 5 ครั้งล็อก 15 นาที (รหัสถูกก็เข้าไม่ได้) และครูประจำห้องได้รับแจ้ง', async () => {
+  it('ผิด 10 ครั้งล็อก 3 นาที (รหัสถูกก็เข้าไม่ได้) และครูประจำห้องได้รับแจ้ง', async () => {
     const lefts: number[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 9; i++) {
       const r = await login('student', aCode, 'ผิดแน่นอน');
       expect(r.statusCode).toBe(401);
       lefts.push(r.json().left);
     }
-    expect(lefts).toEqual([4, 3, 2, 1]);
+    expect(lefts).toEqual([9, 8, 7, 6, 5, 4, 3, 2, 1]);
     const fifth = await login('student', aCode, 'ผิดแน่นอน');
     expect(fifth.statusCode).toBe(423);
-    expect(fifth.json()).toMatchObject({ code: 'locked', minutes: 15 });
+    expect(fifth.json()).toMatchObject({ code: 'locked', minutes: 3 });
     expect((await login('student', aCode, 'ลงบัญชีทุกวัน')).statusCode).toBe(423);
 
     const tc = sid(await login('staff', teacherEmail, 'ครูบัญชีห้องห้า'));
     const alerts = (await as(tc, 'GET', '/teacher/alerts')).json();
     expect(alerts[0]).toMatchObject({ kind: 'locked', studentCode: aCode });
 
-    // ครบ 15 นาทีแล้วปลดล็อกเอง
-    await admin.query(`update acc.login_attempts set at = at - interval '16 minutes' where identifier = $1`, [aCode]);
+    // ครบ 3 นาทีแล้วปลดล็อกเอง
+    await admin.query(`update acc.login_attempts set at = at - interval '4 minutes' where identifier = $1`, [aCode]);
     expect((await login('student', aCode, 'ลงบัญชีทุกวัน')).statusCode).toBe(200);
+  });
+
+  it('กรอกผิดหน้า (ครูในหน้านักเรียน/นักเรียนในหน้าครู) ก็เข้าได้ และช่องว่างท้ายรหัสผ่านไม่นับว่าผิด', async () => {
+    expect((await login('staff', aCode, 'ลงบัญชีทุกวัน')).statusCode).toBe(200);
+    expect((await login('student', aCode, 'ลงบัญชีทุกวัน ')).statusCode).toBe(200);
   });
 
   it('รหัสนักเรียนที่ไม่มีอยู่จริงตอบแบบเดียวกัน (เดาไม่ได้ว่ารหัสไหนมีอยู่)', async () => {
     const r = await login('student', 'NOPE999', 'อะไรก็ได้');
     expect(r.statusCode).toBe(401);
-    expect(r.json()).toEqual({ code: 'bad_credentials', message: 'ข้อมูลเข้าใช้งานไม่ถูกต้อง', left: 4, lockMinutes: 15 });
+    expect(r.json()).toEqual({ code: 'bad_credentials', message: 'ข้อมูลเข้าใช้งานไม่ถูกต้อง', left: 9, lockMinutes: 3 });
   });
 
   it('ต่อ IP: ผิดเกินเพดานจาก IP เดียวได้ 429 แต่ IP อื่นยังเข้าได้', async () => {
@@ -171,9 +176,10 @@ describe('ล็อกชั่วคราว', () => {
 });
 
 describe('รหัสผ่านและการรีเซ็ตโดยครู', () => {
-  it('กติการหัสผ่าน: ≥ 8 ตัว, ไม่ใช่รหัสนักเรียน, ไม่อยู่ในรายการยอดแย่, ไม่บังคับสัญลักษณ์', () => {
+  it('กติการหัสผ่าน (ผ่อนแล้ว): ≥ 6 ตัว และไม่อยู่ในรายการยอดแย่ มีรหัสนักเรียนได้', () => {
     expect(checkPassword('ลงบัญ', {})).toBe('length');
-    expect(checkPassword('abc65012xyz', { studentCode: '65012' })).toBe('student_code');
+    expect(checkPassword('abc650', {})).toBeNull();
+    expect(checkPassword('abc65012xyz', { studentCode: '65012' })).toBeNull();
     expect(checkPassword('password', {})).toBe('common');
     expect(checkPassword('12345678', {})).toBe('common');
     expect(checkPassword('aaaaaaaa', {})).toBe('common');
@@ -182,7 +188,20 @@ describe('รหัสผ่านและการรีเซ็ตโดย�
     expect(temporaryPassword()).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
   });
 
-  it('ครูรีเซ็ต: ได้รหัสชั่วคราว, เตะทุกอุปกรณ์, บังคับเปลี่ยนรหัสก่อนใช้งาน', async () => {
+  // แป้นเกษมณี: ล=] ง=' บ=[ ั=y ญ=P ช== ี=u ท=m ุ=6 ก=d ว=; น=o · a=ฟ b=ิ c=แ 1=ๅ 2=/ 3=- x=ป
+  it('พิมพ์รหัสตอนแป้นอยู่ผิดภาษาก็เข้าได้ (ไทย ↔ อังกฤษ) · รหัสผิดจริงยังผิด', async () => {
+    expect(keyboardLayoutVariants('ลงบัญชีทุกวัน')).toEqual([`]'[yP=um6d;yo`]);
+    expect(keyboardLayoutVariants('abc123x')).toEqual(['ฟิแๅ/-ป']);
+    expect(keyboardLayoutVariants('ฟิแๅ/-ป')).toEqual(['abc123x']);
+    expect((await login('student', aCode, `]'[yP=um6d;yo`)).statusCode).toBe(200);   // รหัสไทยพิมพ์ตอนแป้นอังกฤษ
+    expect((await login('student', aCode, ` ]'[yP=um6d;yo `)).statusCode).toBe(200); // + ช่องว่างหัวท้าย
+    expect((await login('student', aCode, `]'[yP=um6d;yp`)).statusCode).toBe(401);   // ผิดหนึ่งตัว
+    await setPassword(teacher, 'abc123x');
+    expect((await login('staff', teacherEmail, 'ฟิแๅ/-ป')).statusCode).toBe(200);           // รหัสอังกฤษพิมพ์ตอนแป้นไทย
+    await setPassword(teacher, 'ครูบัญชีห้องห้า');
+  });
+
+  it('ครูรีเซ็ต: ได้รหัสใหม่, เตะทุกอุปกรณ์, นักเรียนใช้รหัสบนใบได้เลย (ไม่บังคับเปลี่ยน) และเปลี่ยนเองได้', async () => {
     const studentCookie = sid(await login('student', aCode, 'ลงบัญชีทุกวัน'));
     const tc = sid(await login('staff', teacherEmail, 'ครูบัญชีห้องห้า'));
     const reset = await as(tc, 'POST', `/teacher/students/${a}/reset-password`);
@@ -191,18 +210,16 @@ describe('รหัสผ่านและการรีเซ็ตโดย�
     expect((await as(studentCookie, 'GET', '/auth/me')).statusCode).toBe(401); // ถูกเตะ
 
     const r = await login('student', aCode, temp);
-    expect(r.json()).toEqual({ role: 'student', mustChange: true });
+    expect(r.json()).toEqual({ role: 'student', mustChange: false });
     const c = sid(r);
-    const blocked = await as(c, 'GET', `/companies/${coA}`);
-    expect(blocked.statusCode).toBe(403);
-    expect(blocked.json().code).toBe('must_change_password');
+    expect((await as(c, 'GET', `/companies/${coA}`)).statusCode).toBe(200);
 
-    for (const [pw, reason] of [['สั้น', 'length'], [`x${aCode}yz`, 'student_code'], ['qwerty123', 'common'], [temp, 'same']] as const) {
-      const w = await as(c, 'POST', '/auth/change-password', { newPassword: pw });
+    for (const [pw, reason] of [['สั้น', 'length'], ['qwerty123', 'common'], [temp, 'same']] as const) {
+      const w = await as(c, 'POST', '/auth/change-password', { currentPassword: temp, newPassword: pw });
       expect(w.statusCode, pw).toBe(422);
       expect(w.json().reason, pw).toBe(reason);
     }
-    expect((await as(c, 'POST', '/auth/change-password', { newPassword: 'ลงบัญชีทุกวัน2' })).statusCode).toBe(200);
+    expect((await as(c, 'POST', '/auth/change-password', { currentPassword: temp, newPassword: 'ลงบัญชีทุกวัน2' })).statusCode).toBe(200);
     expect((await as(c, 'GET', `/companies/${coA}`)).statusCode).toBe(200);
     expect((await login('student', aCode, 'ลงบัญชีทุกวัน2')).json().mustChange).toBe(false);
   });

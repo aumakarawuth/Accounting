@@ -14,7 +14,7 @@ const apiPool = createPool(apiUrl());
 const app = buildApp({ pool: apiPool, auth: devAuth(), cfg: { ...authConfigFromEnv({}), allowedOrigins: false } });
 afterAll(async () => { await app.close(); await apiPool.end(); await db.end(); });
 
-type Method = 'GET' | 'POST' | 'PATCH';
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT';
 let owner: string;
 const as = (method: Method, url: string, payload?: unknown) =>
   app.inject({ method, url, payload: payload as object, headers: { 'x-dev-user-id': owner, 'x-dev-role': 'student', 'idempotency-key': randomUUID() } });
@@ -255,27 +255,42 @@ describe('พฤศจิกายน 2569: เช็ค นำส่งภา�
       .toEqual({ 1310: ['0.00', '32.66'], 5260: ['32.66', '0.00'] });
   });
 
-  it('ขายคอมพิวเตอร์ 30,000 ใน พ.ย.: ไม่คิดค่าเสื่อมเดือนที่จำหน่าย (assumptions ข้อ 32) → ราคาตามบัญชี 35,000 ขาดทุน 5,000', async () => {
-    // ลงค่าเสื่อม พ.ย. ก่อนแล้วจำหน่ายใน พ.ย. ไม่ได้ (กติกาของระบบ ต่างจาก Express ที่คิดตามวันถึงวันจำหน่าย: docs/accounting-audit.md)
-    const d = await ok('POST', `/companies/${co}/fixed-assets/${id.fa}/dispose`, { date: `${M2}-30`, proceeds: '30000', proceedsAccount: '1120' });
+  it('ขายคอมพิวเตอร์ 30,000 + VAT 2,100 ใน พ.ย.: คิดค่าเสื่อมรายเดือน ไม่คิดเดือนที่จำหน่าย → ราคาตามบัญชี 35,000 ขาดทุน 5,000', async () => {
+    // สินทรัพย์รายเดือน: ลงค่าเสื่อม พ.ย. ก่อนแล้วจำหน่ายใน พ.ย. ไม่ได้ (รายวันดู tests/daily-depreciation-asset-vat.test.ts)
+    // บริษัทจด VAT ขายสินทรัพย์ = ออกใบกำกับภาษี ภาษีขาย 7% (assumptions ข้อ 49)
+    const d = await ok('POST', `/companies/${co}/fixed-assets/${id.fa}/dispose`, { date: `${M2}-30`, proceeds: '30000', proceedsAccount: '1120',
+      buyerName: 'นายสมศักดิ์ ใจดี' });
+    expect([d.docNo, d.vat, d.gainLoss]).toEqual(['FD-0001', '2100.00', '-5000.00']);
     const e = (await db.query(`select entry_id from acc.asset_disposals where id = $1`, [d.id])).rows[0].entry_id;
-    expect(await lines(e)).toEqual({ 1120: ['30000.00', '0.00'], 1630: ['0.00', '36000.00'], 1631: ['1000.00', '0.00'], 5320: ['5000.00', '0.00'] });
+    expect(await lines(e)).toEqual({ 1120: ['32100.00', '0.00'], 1630: ['0.00', '36000.00'], 1631: ['1000.00', '0.00'], 2210: ['0.00', '2100.00'],
+      5320: ['5000.00', '0.00'] });
     // สินทรัพย์ที่จำหน่ายแล้วไม่ถูกคิดค่าเสื่อมอีก
     expect((await as('POST', `/companies/${co}/depreciation`, { month: M2 })).statusCode).toBe(409);
   });
 
-  it('ภ.พ.30 พ.ย. ชำระเกินอีก 133 (สะสม 1,409.32) · งบทดลอง/งบการเงินสะสม ตรงเฉลย', async () => {
+  it('ภ.พ.30 พ.ย.: ภาษีขาย 602 + 2,100 (ขายสินทรัพย์) − ภาษีซื้อ 735 = 1,967 หักภาษีชำระเกินยกมา 1,276.32 ชำระ 690.68 · งบทดลอง/งบการเงินสะสม ตรงเฉลย', async () => {
     const vat = await ok('GET', `/companies/${co}/tax/vat?month=${M2}`);
-    expect([vat.preview.outputVat, vat.preview.inputVat]).toEqual(['602.00', '735.00']);
+    expect([vat.preview.outputVat, vat.preview.inputVat]).toEqual(['2702.00', '735.00']);
+    // รายงานภาษีขายมีใบกำกับภาษีขายสินทรัพย์ (เลขที่ FD) ผลรวมเท่าบัญชี 2210
+    const fd = vat.sales.find((r: { kind: string }) => r.kind === 'asset_sale');
+    expect([fd.docNo, fd.partyName, fd.base, fd.vat]).toEqual(['FD-0001', 'นายสมศักดิ์ ใจดี', '30000.00', '2100.00']);
+    expect(vat.sales.reduce((s: number, r: { vat: string }) => s + Math.round(Number(r.vat) * 100), 0)).toBe(270200);
     await ok('POST', `/companies/${co}/tax/vat/${M2}/close`);
     expect(await tbNet(co, M2)).toEqual({
-      1110: '17539.00', 1120: '473486.00', 1210: '9202.00', 1310: '7456.03', 1420: '600.00', 1430: '1409.32',
-      2110: '-17369.57', 2310: '-1500.00', 3110: '-500000.00',
+      1110: '17539.00', 1120: '475586.00', 1210: '9202.00', 1310: '7456.03', 1420: '600.00',
+      2110: '-17369.57', 2220: '-690.68', 2310: '-1500.00', 3110: '-500000.00',
       4110: '-18700.00', 4120: '-20000.00', 4220: '800.00', 5130: '11544.56', 5210: '15000.00', 5220: '10000.00', 5230: '1500.00',
       5250: '1000.00', 5260: '3032.66', 5320: '5000.00' });
     const ytd = await ok('GET', `/companies/${co}/statements?month=${M2}&scope=ytd`);
     expect([ytd.totalRevenue, ytd.totalExpense, ytd.netIncome]).toEqual(['37900.00', '47077.22', '-9177.22']);
-    expect([ytd.totalAssets, ytd.totalLiabilities, ytd.totalEquity, ytd.balanced]).toEqual(['509692.35', '18869.57', '490822.78', true]);
+    expect([ytd.totalAssets, ytd.totalLiabilities, ytd.totalEquity, ytd.balanced]).toEqual(['510383.03', '19560.25', '490822.78', true]);
+    // งบหลายขั้น (phase5-spec ข้อ 2): กำไรสุทธิเท่าขั้นเดียว · สินทรัพย์หมุนเวียน + ไม่หมุนเวียน = รวม
+    expect(ytd.multiStep.netIncome).toBe('-9177.22');
+    const k = ytd.classified;
+    expect((Number(k.totalCurrentAssets) * 100 + Number(k.totalNonCurrentAssets) * 100) / 100).toBe(510383.03);
+    const cogsCents = ytd.expense.filter((l: { code: string }) => l.code.startsWith('51'))
+      .reduce((s: number, l: { amount: string }) => s + Math.round(Number(l.amount) * 100), 0);
+    expect(Math.round(Number(ytd.multiStep.costOfSales.total) * 100)).toBe(cogsCents);
     const mo = await ok('GET', `/companies/${co}/statements?month=${M2}&scope=month`);
     expect([mo.totalRevenue, mo.totalExpense, mo.netIncome]).toEqual(['8600.00', '25591.69', '-16991.69']);
     // ทะเบียนลูกหนี้/เจ้าหนี้ = ยอดคุม
@@ -486,8 +501,9 @@ describe('ต้นทุนถัวเฉลี่ยตามลำดับ�
     await glMatches(c);
   });
 
-  it('สุ่ม 80 เอกสาร (ซื้อ/ขาย/รับคืน/ยกเลิก วันที่สุ่ม): ต้นทุนทุกใบตรงโมเดลถัวเฉลี่ยตามวันที่ที่คิดแยก · ไม่มีวันไหนติดลบ · 1310 = บัตรสต็อก', async () => {
+  it.each(['average', 'fifo'] as const)('สุ่ม 80 เอกสาร (ซื้อ/ขาย/รับคืน/ยกเลิก วันที่สุ่ม) %s: ต้นทุนทุกใบตรงโมเดลตามวันที่ที่คิดแยก · ไม่มีวันไหนติดลบ · 1310 = บัตรสต็อก', async (method) => {
     const c = await setup();
+    if (method === 'fifo') await ok('PUT', `/companies/${c}/inventory/method`, { method }); // FIFO: phase5-spec ข้อ 7
     let seed = 20261110;
     const rnd = (k: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return Math.floor(seed / 65536) % k; };
     type Doc = { id: string; kind: 'buy' | 'sell' | 'ret'; date: string; seq: number; qty: bigint; cents?: bigint; ref?: string; voided?: boolean };
@@ -529,16 +545,29 @@ describe('ต้นทุนถัวเฉลี่ยตามลำดับ�
     let Q = 0n, V = 0n;
     const unit = new Map<string, bigint>(); // ต้นทุนต่อหน่วย × 10^6 บาท = สตางค์ × 10^4
     const cost = new Map<string, bigint>();
+    const layers: { q: bigint; v: bigint }[] = []; // FIFO: ชั้นเก่าสุดก่อน
     for (const d of live) {
-      if (d.kind === 'buy') { Q += d.qty; V += d.cents!; continue; }
+      if (d.kind === 'buy') { Q += d.qty; V += d.cents!; layers.push({ q: d.qty, v: d.cents! }); continue; }
       if (d.kind === 'sell') {
         expect(Q >= d.qty, `สต็อก ณ ${d.date} ต้องพอ`).toBe(true);
-        const u = div(V * 10000n, Q);
-        const cst = d.qty === Q ? V : div(d.qty * u, 10000n);
-        unit.set(d.id, u); cost.set(d.id, cst); Q -= d.qty; V -= cst;
+        let cst: bigint;
+        if (method === 'fifo') {
+          let need = d.qty; cst = 0n;
+          while (need > 0n) {
+            const l = layers[0]!;
+            if (l.q <= need) { cst += l.v; need -= l.q; layers.shift(); }
+            else { const part = div(l.v * need, l.q); cst += part; l.v -= part; l.q -= need; need = 0n; }
+          }
+          unit.set(d.id, div(cst * 10000n, d.qty));
+        } else {
+          const u = div(V * 10000n, Q);
+          cst = d.qty === Q ? V : div(d.qty * u, 10000n);
+          unit.set(d.id, u);
+        }
+        cost.set(d.id, cst); Q -= d.qty; V -= cst;
       } else {
         const cst = div(d.qty * unit.get(d.ref!)!, 10000n);
-        cost.set(d.id, cst); Q += d.qty; V += cst;
+        cost.set(d.id, cst); Q += d.qty; V += cst; layers.push({ q: d.qty, v: cst });
       }
       expect(Q >= 0n).toBe(true);
     }

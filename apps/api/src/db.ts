@@ -1,5 +1,6 @@
 import pg from 'pg';
 import type { AuthUser } from './auth.js';
+import { HttpError } from './errors.js';
 
 // ทุกคำขอผ่าน pooler แบบ transaction pooling: ตั้งค่าตัวตนด้วย set_config(..., true)
 // ซึ่งหมดอายุพร้อมทรานแซกชัน จึงไม่รั่วข้ามคำขอบน connection เดียวกัน
@@ -26,7 +27,8 @@ export async function withUser<T>(
   try {
     // begin + ตั้งตัวตนในการไปกลับฐานข้อมูลรอบเดียว (simple query หลายคำสั่งรับพารามิเตอร์ไม่ได้ จึง escape ด้วย pg เอง)
     // ประหยัด 1 รอบต่อคำขอ ซึ่งมีผลเมื่อฐานข้อมูลอยู่คนละเครื่อง (Vercel → Supabase) docs/performance.md
-    await c.query(`begin; select set_config('app.user_id', ${c.escapeLiteral(user.id)}, true), set_config('app.client_info', ${c.escapeLiteral(user.clientInfo)}, true)`);
+    // statement_timeout ต่อทรานแซกชัน (ใช้กับ transaction pooling ได้): คำสั่งที่ค้างไม่ยึด connection ไว้ตลอด
+    await c.query(`begin; set local statement_timeout = '30s'; select set_config('app.user_id', ${c.escapeLiteral(user.id)}, true), set_config('app.client_info', ${c.escapeLiteral(user.clientInfo)}, true)`);
     const result = await fn(c);
     await c.query('commit');
     return result;
@@ -49,3 +51,12 @@ export async function querySequence<T extends readonly (() => Promise<unknown>)[
   for (const query of queries) results.push(await query());
   return results as { -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> };
 }
+
+/** เลือกคลังให้เอกสารในทรานแซกชันนี้ (บรรทัดบัตรสต็อกและเอกสารที่ลงต่อจากนี้อยู่คลังนี้) ไม่ระบุ = คลังหลัก */
+export async function useWarehouse(c: pg.PoolClient, companyId: string, code: string | undefined) {
+  if (!code) return;
+  const w = (await c.query('select id from acc.warehouses where company_id = $1 and code = $2 and active', [companyId, code.toUpperCase()])).rows[0];
+  if (!w) throw new HttpError(422, 'ACC04', `ไม่พบคลังรหัส ${code} ที่เปิดใช้`);
+  await c.query(`select set_config('acc.warehouse', $1, true)`, [w.id]);
+}
+

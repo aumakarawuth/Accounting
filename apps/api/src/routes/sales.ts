@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { querySequence, withUser } from '../db.js';
+import { querySequence, useWarehouse, withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
@@ -44,6 +44,7 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
         company: company.rows[0], customers: customers.rows, items: items.rows,
         revenueAccounts: accounts.rows.filter((a) => a.type === 'revenue').map(({ code, name }) => ({ code, name })),
         cashAccounts: accounts.rows.filter((a) => a.type === 'asset').map(({ code, name }) => ({ code, name })),
+        warehouses: (await c.query(`select code, name from acc.warehouses where company_id = $1 and active order by is_main desc, code`, [companyId])).rows,
       };
     });
   });
@@ -54,16 +55,25 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     if ((kind === 'credit-note' || kind === 'debit-note') ? !b.refDocumentId : !b.partyCode) {
       throw new HttpError(400, 'invalid', kind.endsWith('note') ? 'ต้องเลือกใบขายเชื่อที่อ้างถึง' : 'ต้องเลือกลูกค้า');
     }
+    if (kind !== 'invoice' && (b.orderId || b.deposits?.length || b.lines.some((l) => l.orderLineNo))) {
+      throw new HttpError(400, 'invalid', 'อ้างใบสั่งขายหรือหักเงินมัดจำได้เฉพาะใบขายเชื่อ');
+    }
     const key = idemKey(req);
     const payload = {
       date: b.date, party_code: b.partyCode, is_service: b.isService, price_mode: b.priceMode, discount: b.discount,
       description: b.description, credit_days: b.creditDays, cash_account: b.cashAccount, wht_amount: b.whtAmount,
-      ref_document_id: b.refDocumentId, reason: b.reason,
-      lines: b.lines.map((l) => ({ item_code: l.itemCode, description: l.description, qty: l.qty, unit: l.unit, unit_price: l.unitPrice, account_code: l.accountCode })),
+      ref_document_id: b.refDocumentId, reason: b.reason, order_id: b.orderId,
+      deposits: (b.deposits ?? []).map((d) => ({ document_id: d.documentId, amount: d.amount })),
+      lines: b.lines.map((l) => ({ item_code: l.itemCode, description: l.description, qty: l.qty, unit: l.unit, unit_price: l.unitPrice,
+        account_code: l.accountCode, order_line_no: l.orderLineNo })),
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
-      const id = (await c.query('select acc.post_sales_document($1, $2, $3::jsonb, $4) id', [companyId, SALES_KIND_SQL[kind], JSON.stringify(payload), key])).rows[0].id;
+      await useWarehouse(c, companyId, b.warehouse);
+      // ขายเชื่อผ่านฟังก์ชันต่อยอด (อ้างใบสั่งขาย + หักมัดจำในธุรกรรมเดียว) ใบอื่นเหมือนเดิม
+      const id = kind === 'invoice'
+        ? (await c.query('select acc.post_sales_invoice_ext($1, $2::jsonb, $3) id', [companyId, JSON.stringify(payload), key])).rows[0].id
+        : (await c.query('select acc.post_sales_document($1, $2, $3::jsonb, $4) id', [companyId, SALES_KIND_SQL[kind], JSON.stringify(payload), key])).rows[0].id;
       return { id, docNo: await docNo(c, companyId, id) };
     });
     return reply.code(201).send(row);
@@ -75,7 +85,7 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
     const key = idemKey(req);
     const payload = {
       date: b.date, party_code: b.partyCode, cash_account: b.cashAccount, wht_amount: b.whtAmount, description: b.description,
-      allocations: b.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount })),
+      allocations: b.allocations.map((a) => ({ document_id: a.documentId, amount: a.amount, discount: a.discount })),
     };
     const row = await withUser(pool, await user(req), async (c) => {
       await requireWritable(c, companyId);
@@ -112,7 +122,8 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
         `select ${DOC}, d.party_tax_id as "partyTaxId", d.party_branch_no as "partyBranchNo", d.party_address as "partyAddress",
                 d.seller_name as "sellerName", d.seller_tax_id as "sellerTaxId", d.seller_branch_no as "sellerBranchNo",
                 d.seller_address as "sellerAddress", ca.code as "cashAccount", e.id as "entryId", e.doc_no as "entryDocNo",
-                ve.doc_no as "voidDocNo", r.doc_no as "refDocNo", (d.total - s.amount)::text as open
+                ve.doc_no as "voidDocNo", (select w.code || ' ' || w.name from acc.warehouses w where w.company_id = d.company_id and w.id = d.warehouse_id and not w.is_main) as warehouse,
+                r.doc_no as "refDocNo", (d.total - s.amount)::text as open
            from acc.documents d
            join acc.journal_entries e on e.company_id = d.company_id and e.id = d.entry_id
            left join acc.journal_entries ve on ve.company_id = d.company_id and ve.id = d.void_entry_id
@@ -126,10 +137,10 @@ export function salesRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdapt
                         a.code as "accountCode", a.name as "accountName"
                    from acc.document_lines l join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
                   where l.company_id = $1 and l.document_id = $2 order by l.line_no`, [companyId, documentId]),
-        () => c.query(`select t.id, t.doc_no as "docNo", a.amount::text, a.vat_transfer::text as "vatTransfer"
+        () => c.query(`select t.id, t.doc_no as "docNo", a.amount::text, a.vat_transfer::text as "vatTransfer", a.discount::text
                    from acc.allocations a join acc.documents t on t.company_id = a.company_id and t.id = a.target_id
                   where a.company_id = $1 and a.source_id = $2 order by a.id`, [companyId, documentId]),
-        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, s.voided_at is not null as voided
+        () => c.query(`select s.id, s.kind, s.doc_no as "docNo", to_char(s.doc_date, 'YYYY-MM-DD') as date, a.amount::text, a.discount::text, s.voided_at is not null as voided
                    from acc.allocations a join acc.documents s on s.company_id = a.company_id and s.id = a.source_id
                   where a.company_id = $1 and a.target_id = $2 order by s.doc_date, s.doc_no`, [companyId, documentId]),
         () => c.query(`select x.id, x.kind, x.doc_no as "docNo", x.total::text, x.voided_at is not null as voided

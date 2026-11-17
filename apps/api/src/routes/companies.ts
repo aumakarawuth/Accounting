@@ -7,7 +7,7 @@ import { HttpError } from '../errors.js';
 import { ledger, ledgerAccounts, statements, trialBalance } from '../reports.js';
 import {
   AccountParams, CommentParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, NewComment, PeriodParams,
-  PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery,
+  EndingInventory, FiscalYearStart, PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery, YearEndParams,
 } from '../schemas.js';
 
 // ชั้นบาง: ตรวจรูปแบบด้วย Zod แล้วเรียกฟังก์ชันใน Postgres; สิทธิ์ตัดสินที่ RLS/ฟังก์ชัน
@@ -83,10 +83,10 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       await requireReadable(c, companyId);
       const r = await c.query(
         `select e.id, e.doc_no, e.entry_date::text as date, e.description, e.total_amount::text as total,
-                r.doc_no as reverses_doc_no,
+                -- subquery ราย entry (หาด้วย primary key) แทน self join: บริษัทใหม่ที่ยังไม่มีสถิติ join ซ้อนรายการ × รายการ
+                (select r.doc_no from acc.journal_entries r where r.company_id = e.company_id and r.id = e.reverses_entry_id) as reverses_doc_no,
                 (select count(*)::int from acc.comments m where m.company_id = e.company_id and m.entry_id = e.id) as comments
            from acc.journal_entries e
-           left join acc.journal_entries r on r.company_id = e.company_id and r.id = e.reverses_entry_id
           where e.company_id = $1
             and ($2::text is null or to_char(e.entry_date, 'YYYY-MM') = $2)
           order by e.entry_date desc, e.doc_no desc
@@ -100,10 +100,10 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
   // งบทดลอง แยกประเภท งบการเงิน: SQL อยู่ที่ reports.ts (ใช้ร่วมกับไฟล์ส่งออก PDF/Excel)
   app.get('/companies/:companyId/trial-balance', async (req) => {
     const { companyId } = CompanyParams.parse(req.params);
-    const { month, all } = TrialBalanceQuery.parse(req.query);
+    const { month, all, stage } = TrialBalanceQuery.parse(req.query);
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, companyId);
-      return trialBalance(c, companyId, month, all === '1');
+      return trialBalance(c, companyId, month, all === '1', stage);
     });
   });
 
@@ -346,5 +346,103 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
     const { companyId, month } = PeriodParams.parse(req.params);
     await withUser(pool, await user(req), (c) => c.query('select acc.reopen_period($1, $2::date)', [companyId, `${month}-01`]));
     return { month, closed: false };
+  });
+
+  // ---- ปีบัญชี / ปิดบัญชีสิ้นปี (docs/phase5-spec.md ข้อ 1) ----
+  // ปีบัญชีตั้งแต่ปีของรายการแรกถึงปีของรายการล่าสุด พร้อมสถานะปิดบัญชีและกำไรที่โอน
+  app.get('/companies/:companyId/fiscal-years', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const co = (await c.query(
+        `select c.fiscal_year_start as "startMonth", c.version, app.can_write_company(c.id) as "canClose",
+                app.company_locked(c.id) as locked,
+                not exists (select 1 from acc.fiscal_year_closings f where f.company_id = c.id) as "canChangeStart"
+           from acc.companies c where c.id = $1`, [companyId])).rows[0];
+      const years = (await c.query(
+        `with r as (select min(entry_date) lo, max(entry_date) hi from acc.journal_entries where company_id = $1),
+         y as (
+           select gs::date as s from r,
+             generate_series(acc.fiscal_year_start($1, r.lo), acc.fiscal_year_start($1, r.hi), interval '1 year') gs
+            where r.lo is not null
+         )
+         select y.s::text as start, (y.s + interval '1 year - 1 day')::date::text as "end",
+                (select count(*)::int from acc.journal_entries e where e.company_id = $1 and e.entry_date between y.s and (y.s + interval '1 year - 1 day')::date) as entries,
+                (select json_build_object('closedAt', f.closed_at, 'netIncome', f.net_income::text, 'docNo', e.doc_no)
+                   from acc.fiscal_year_closings f left join acc.journal_entries e on e.company_id = f.company_id and e.id = f.entry_id
+                  where f.company_id = $1 and f.year_start = y.s and f.reopened_at is null) as closing,
+                (select coalesce(json_agg(json_build_object('closedAt', f.closed_at, 'reopenedAt', f.reopened_at, 'netIncome', f.net_income::text, 'docNo', e.doc_no) order by f.closed_at), '[]')
+                   from acc.fiscal_year_closings f left join acc.journal_entries e on e.company_id = f.company_id and e.id = f.entry_id
+                  where f.company_id = $1 and f.year_start = y.s and f.reopened_at is not null) as reopened
+           from y order by y.s`, [companyId])).rows;
+      return { ...co, years };
+    });
+  });
+
+  // รายการปิดบัญชีที่จะลง (ให้ตรวจก่อนยืนยัน)
+  app.get('/companies/:companyId/fiscal-years/:yearEnd/preview', async (req) => {
+    const { companyId, yearEnd } = YearEndParams.parse(req.params);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const lines = (await c.query(
+        `select code, name, debit::text, credit::text from acc.year_closing_lines($1, $2::date)`, [companyId, yearEnd])).rows;
+      const t = (await c.query(
+        `select coalesce(sum(debit) - sum(credit), 0)::numeric(18,2)::text as net,
+                coalesce(sum(debit), 0)::numeric(18,2)::text as total
+           from acc.year_closing_lines($1, $2::date) where code <> '3210'`, [companyId, yearEnd])).rows[0];
+      const all = (await c.query(`select coalesce(sum(debit), 0)::numeric(18,2)::text as total from acc.year_closing_lines($1, $2::date)`, [companyId, yearEnd])).rows[0];
+      return { yearEnd, lines, netIncome: t.net, totalDebit: all.total };
+    });
+  });
+
+  app.post('/companies/:companyId/fiscal-years/:yearEnd/close', async (req, reply) => {
+    const { companyId, yearEnd } = YearEndParams.parse(req.params);
+    const key = idemKey(req);
+    const out = await withUser(pool, await user(req), async (c) => {
+      const id = (await c.query('select acc.close_fiscal_year($1, $2::date, $3) as id', [companyId, yearEnd, key])).rows[0].id;
+      return (await c.query(
+        `select f.net_income::text as "netIncome", e.doc_no as "docNo" from acc.fiscal_year_closings f
+           left join acc.journal_entries e on e.company_id = f.company_id and e.id = f.entry_id
+          where f.company_id = $1 and f.id = $2`, [companyId, id])).rows[0];
+    });
+    return reply.code(201).send({ yearEnd, ...out });
+  });
+
+  app.put('/companies/:companyId/fiscal-year-start', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const body = FiscalYearStart.parse(req.body);
+    const version = await withUser(pool, await user(req), async (c) =>
+      (await c.query('select acc.set_fiscal_year_start($1, $2::smallint, $3) as v', [companyId, body.month, body.version])).rows[0].v);
+    return { startMonth: body.month, version };
+  });
+
+  // ---- ระบบสินค้าสิ้นงวด: สินค้าคงเหลือปลายงวดตามตรวจนับ (docs/phase5-spec.md ข้อ 2) ----
+  app.get('/companies/:companyId/ending-inventory', async (req) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const { month } = MonthQuery.parse(req.query);
+    if (!month) throw new HttpError(400, 'invalid', 'ต้องระบุเดือน');
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, companyId);
+      const r = (await c.query(
+        `select coalesce((select sum(l.debit - l.credit) from acc.journal_lines l
+                   join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
+                   join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+                  where l.company_id = $1 and a.code = '1310' and e.entry_date < ($2::date + interval '1 month')), 0)::numeric(18,2)::text as "glBalance",
+                exists (select 1 from acc.items where company_id = $1 and track_inventory) as perpetual,
+                app.can_write_company($1) and not app.company_locked($1) as "canWrite"`, [companyId, `${month}-01`])).rows[0];
+      return { month, ...r };
+    });
+  });
+
+  app.post('/companies/:companyId/ending-inventory', async (req, reply) => {
+    const { companyId } = CompanyParams.parse(req.params);
+    const body = EndingInventory.parse(req.body);
+    const key = idemKey(req);
+    const out = await withUser(pool, await user(req), async (c) => {
+      const end = (await c.query(`select (date_trunc('month', $1::date) + interval '1 month - 1 day')::date::text d`, [`${body.month}-01`])).rows[0].d;
+      const id = (await c.query('select acc.record_ending_inventory($1, $2::date, $3::numeric, $4) as id', [companyId, end, body.amount, key])).rows[0].id;
+      return docNo(c, companyId, id);
+    });
+    return reply.code(201).send({ id: out.id, docNo: out.doc_no });
   });
 }

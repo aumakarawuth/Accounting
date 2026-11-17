@@ -22,23 +22,32 @@ export function studentNav(companyId: string): Group[] {
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [
+      { label: n.quotesOrders, href: c('/sales/orders') },
       { label: n.taxInvoice, href: c('/sales/invoices') },
+      { label: n.deposits, href: c('/sales/deposits') },
+      { label: n.billing, href: c('/sales/billing') },
       { label: n.receipt, href: c('/sales/receipts') },
       { label: n.receivables, href: c('/sales/receivables') },
     ] },
     { title: n.group.purchase, items: [
+      { label: n.purchaseOrder, href: c('/purchases/orders') },
+      { label: n.goodsReceipt, href: c('/purchases/receipts') },
       { label: n.purchase, href: c('/purchases') },
+      { label: n.purchaseDeposits, href: c('/purchases/deposits') },
       { label: n.payment, href: c('/purchases/payments') },
       { label: n.payables, href: c('/purchases/payables') },
     ] },
     { title: n.group.inventory, items: [
       { label: n.inventory, href: c('/inventory') },
+      { label: n.warehouses, href: c('/inventory/warehouses') },
     ] },
     { title: n.group.tax, items: [
       { label: n.vat, href: c('/tax/vat') },
       { label: n.wht, href: c('/tax/wht') },
     ] },
     { title: n.group.cash, items: [
+      { label: n.pettyCash, href: c('/cash/petty-cash') },
+      { label: n.cashTransfers, href: c('/cash/transfers') },
       { label: n.cheques, href: c('/cheques') },
       { label: n.bankRec, href: c('/bank-reconciliation') },
     ] },
@@ -49,6 +58,7 @@ export function studentNav(companyId: string): Group[] {
       { label: n.parties, href: c('/parties') },
       { label: n.items, href: c('/items') },
       { label: n.companyProfile, href: c('/settings') },
+      { label: n.opening, href: c('/opening') },
     ] },
     { title: n.group.other, items: [
       { label: n.reports, href: c('/reports') },

@@ -22,6 +22,8 @@ export const postJson = <T>(path: string, data: unknown, headers: Record<string,
   api<T>(path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(data) });
 export const patchJson = <T>(path: string, data: unknown) =>
   api<T>(path, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+export const putJson = <T>(path: string, data: unknown) =>
+  api<T>(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
 
 export type Me = { id: string; role: 'admin' | 'teacher' | 'student' | 'ta'; displayName: string; studentCode: string | null; mustChange: boolean };
 export type WorkStatus = 'draft' | 'submitted' | 'reviewing' | 'returned' | 'passed' | 'closed';
@@ -41,7 +43,15 @@ export type TrialBalance = {
   month: string;
   rows: { code: string; name: string; type: string; normalSide: 'debit' | 'credit'; debit: string; credit: string }[];
   totalDebit: string; totalCredit: string;
+  stage: 'before' | 'after'; fiscalYear: FiscalYearRange; closingDocNos: string[]; priorYearUnclosed: boolean;
 };
+export type FiscalYearRange = { start: string; end: string };
+export type FiscalYearClosing = { closedAt: string; netIncome: string; docNo: string | null };
+export type FiscalYears = {
+  startMonth: number; version: number; canClose: boolean; locked: boolean; canChangeStart: boolean;
+  years: { start: string; end: string; entries: number; closing: FiscalYearClosing | null; reopened: (FiscalYearClosing & { reopenedAt: string })[] }[];
+};
+export type YearClosingPreview = { yearEnd: string; lines: { code: string; name: string; debit: string; credit: string }[]; netIncome: string; totalDebit: string };
 export type LedgerAccount = { code: string; name: string; normalSide: 'debit' | 'credit'; opening: string; debit: string; credit: string; closing: string };
 export type Ledger = {
   month: string;
@@ -55,8 +65,25 @@ export type Statements = {
   month: string; scope: 'month' | 'ytd'; from: string;
   revenue: Line[]; expense: Line[]; assets: Line[]; liabilities: Line[]; equity: Line[];
   totalRevenue: string; totalExpense: string; netIncome: string; unclosedProfit: string;
+  fiscalYear: FiscalYearRange; yearProfit: string; priorUnclosedProfit: string;
+  multiStep: IncomeMultiStep; classified: ClassifiedPosition;
   totalAssets: string; totalLiabilities: string; totalEquity: string; totalLiabilitiesEquity: string; balanced: boolean;
 };
+export type CostOfSales = {
+  opening: string; purchases: string; discounts: string; returns: string; otherCosts: Line[];
+  netPurchases: string; available: string; closing: string; adjustments: string; total: string;
+};
+export type IncomeMultiStep = {
+  sales: Line[]; netSales: string; costOfSales: CostOfSales | null; grossProfit: string;
+  otherIncome: Line[]; totalOtherIncome: string; sellingAdmin: Line[]; totalSellingAdmin: string;
+  otherExpenses: Line[]; totalOtherExpenses: string; profitBeforeFinance: string;
+  financeCosts: Line[]; totalFinanceCosts: string; profitBeforeTax: string; incomeTax: Line[]; totalIncomeTax: string; netIncome: string;
+};
+export type ClassifiedPosition = {
+  currentAssets: Line[]; totalCurrentAssets: string; nonCurrentAssets: Line[]; totalNonCurrentAssets: string;
+  currentLiabilities: Line[]; totalCurrentLiabilities: string; nonCurrentLiabilities: Line[]; totalNonCurrentLiabilities: string;
+};
+export type EndingInventory = { month: string; glBalance: string; perpetual: boolean; canWrite: boolean };
 export type SubmissionEvent = { id: number; at: string; action: string; from: string; to: string; round: number; note: string | null; score: string | null; actorName: string | null; byOwner: boolean };
 export type Submission = { mode: 'practice' | 'submit'; status: WorkStatus | null; round: number; score: string | null; maxScore: string; events: SubmissionEvent[] };
 export type TeacherSubmission = { companyId: string; company: string; classroom: string; studentCode: string; studentName: string; status: WorkStatus; round: number; score: string | null; maxScore: string; updatedAt: string };
@@ -95,25 +122,36 @@ export type Party = {
 };
 export type Item = {
   code: string; name: string; unit: string; isService: boolean; trackInventory: boolean; salePrice: string | null; purchasePrice: string | null;
-  salesAccount: string | null; purchaseAccount: string | null; active: boolean; version: number;
+  salesAccount: string | null; purchaseAccount: string | null; costMethod: CostMethod | null; active: boolean; version: number;
 };
-export type InventoryItem = { code: string; name: string; unit: string; active: boolean; quantity: string; value: string; unitCost: string };
+export type CostMethod = 'average' | 'fifo';
+export type InventoryItem = { code: string; name: string; unit: string; active: boolean; quantity: string; value: string; unitCost: string; method: CostMethod };
 export type InventoryOverview = {
-  company: { name: string; canWrite: boolean; locked: boolean };
+  company: { name: string; canWrite: boolean; locked: boolean; inventoryMethod: CostMethod };
   items: InventoryItem[]; totalValue: string; glBalance: string; accounts: { code: string; name: string }[];
+  warehouses: Warehouse[]; stock: { itemCode: string; warehouse: string; qty: string }[];
+};
+export type Warehouse = { code: string; name: string; isMain: boolean; active: boolean };
+export type InventoryTransfer = {
+  id: string; entryId: string; docNo: string; date: string; from: string; fromName: string; to: string; toName: string; description: string;
+  cancelReason: string | null; cancelled: boolean; lines: { itemCode: string; name: string; unit: string; qty: string }[];
 };
 export type StockCardRow = {
   date: string; kind: string; reference: string; entryId: string; entryDocNo: string; qtyIn: string; qtyOut: string; unitCost: string;
   valueIn: string; valueOut: string; balanceQty: string; balanceValue: string;
   restated: boolean;
 };
-export type StockCard = { item: { code: string; name: string; unit: string; trackInventory: boolean }; card: StockCardRow[] };
-export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note';
+export type StockCard = {
+  item: { code: string; name: string; unit: string; trackInventory: boolean; method: CostMethod }; card: StockCardRow[];
+  layers: { date: string; qty: string; value: string }[] | null;
+};
+export type SalesKindSql = 'sales_invoice' | 'cash_sale' | 'receipt' | 'credit_note' | 'debit_note' | 'deposit' | 'deposit_applied';
 export type SalesFormData = {
   company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };
   customers: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string }[];
   items: { code: string; name: string; unit: string; isService: boolean; trackInventory: boolean; salePrice: string | null; salesAccount: string | null }[];
   revenueAccounts: { code: string; name: string }[];
+  warehouses: { code: string; name: string }[];
   cashAccounts: { code: string; name: string }[];
 };
 export type SalesRow = {
@@ -130,10 +168,12 @@ export type SalesDocument = SalesRow & {
   lines: { lineNo: number; description: string; qty: string; unit: string; unitPrice: string; amount: string; accountCode: string; accountName: string }[];
   settles: { id: string; docNo: string; amount: string; vatTransfer: string }[];
   settledBy: { id: string; kind: SalesKindSql; docNo: string; date: string; amount: string; voided: boolean }[];
+  warehouse?: string | null;
   notes: { id: string; kind: SalesKindSql; docNo: string; total: string; voided: boolean }[];
 };
 export type AgingBucket = 'current' | 'd30' | 'd60' | 'd90' | 'over90';
-export type PurchaseKindSql = 'purchase_invoice' | 'cash_purchase' | 'purchase_credit_note' | 'payment';
+export type PurchaseKindSql = 'purchase_invoice' | 'cash_purchase' | 'purchase_credit_note' | 'payment'
+  | 'goods_receipt' | 'purchase_debit_note' | 'deposit' | 'deposit_applied';
 export type PurchaseFormData = {
   company: { name: string; taxId: string | null; branchNo: string; address: string; vatRegistered: boolean; vatRate: string; canWrite: boolean; locked: boolean };
   vendors: { code: string; name: string; creditDays: number; vatRegistered: boolean; taxId: string | null; branchNo: string; address: string; whtKind: WhtKind | null; whtRate: string | null }[];
@@ -141,6 +181,7 @@ export type PurchaseFormData = {
   expenseAccounts: { code: string; name: string }[];
   cashAccounts: { code: string; name: string }[];
   systemAccounts: { code: string; name: string }[];
+  warehouses: { code: string; name: string }[];
 };
 export type PurchaseRow = {
   id: string; kind: PurchaseKindSql; docNo: string; date: string; vendorDocNo: string | null; partyCode: string; partyName: string;
@@ -160,7 +201,14 @@ export type PurchaseDocument = PurchaseRow & {
   partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
   companyName: string; companyTaxId: string | null; companyBranchNo: string; companyAddress: string;
   cashAccount: string | null; cashAccountName: string | null; entryId: string; entryDocNo: string; voidDocNo: string | null; refDocNo: string | null;
-  lines: { lineNo: number; description: string; qty: string; unit: string; unitPrice: string; amount: string; accountCode: string; accountName: string }[];
+  warehouse: string | null;
+  refKind: PurchaseKindSql | null; depositRemaining: string | null; order: { id: string; docNo: string } | null;
+  lines: {
+    lineNo: number; itemCode: string | null; description: string; qty: string; unit: string; unitPrice: string; amount: string;
+    accountCode: string; accountName: string; invoiced: string;
+  }[];
+  /** ใบรับสินค้า ↔ ใบซื้อ ที่จับคู่กัน (docNo = เอกสารอีกฝั่ง) */
+  matches: { id: string; docNo: string; invoiceLineNo: number; receiptLineNo: number; qty: string; amount: string; voided: boolean }[];
   settles: { id: string; docNo: string; vendorDocNo: string | null; amount: string; vatTransfer: string }[];
   settledBy: { id: string; kind: PurchaseKindSql; docNo: string; date: string; amount: string; voided: boolean }[];
   notes: { id: string; kind: PurchaseKindSql; docNo: string; total: string; voided: boolean }[];
@@ -214,6 +262,7 @@ export type Worksheet = {
   month: string; formats: number[]; format: number | null; rows?: WorksheetRow[];
   totals?: { tb: WsPair; adj: WsPair; atb: WsPair; is: WsPair; bs: WsPair };
   netIncome?: string; result?: { is: WsPair; bs: WsPair }; grand?: { is: WsPair; bs: WsPair };
+  fiscalYear?: FiscalYearRange; priorYearUnclosed?: boolean;
 };
 
 // ---- เฟส 3.3 เช็ค ----
@@ -234,15 +283,16 @@ export type ChequePage = {
 export type AssetStatus = 'active' | 'fully_depreciated' | 'disposed' | 'voided';
 export type AssetRow = {
   id: string; code: string; name: string; acquiredDate: string; depStart: string; cost: string; salvage: string; lifeMonths: number;
-  monthly: string; assetCode: string; accumCode: string; expenseCode: string; monthsPosted: number; accumulated: string;
+  monthly: string | null; assetCode: string; accumCode: string; expenseCode: string; monthsPosted: number; accumulated: string;
   depThisMonth: string; bookValue: string; status: AssetStatus; disposalId: string | null; disposalDate: string | null;
   proceeds: string | null; gainLoss: string | null; entryId: string | null; disposalEntryId: string | null; nextMonth: string | null;
+  depMethod: 'monthly' | 'daily'; totalMonths: number; disposalVat: string | null;
 };
 export type DepreciationRunRow = { id: string; month: string; entryId: string | null; docNo: string | null; date: string | null; amount: string; lines: number; voided: boolean; voidDocNo: string | null };
 export type AssetPage = {
-  company: { name: string; canWrite: boolean; locked: boolean };
+  company: { name: string; canWrite: boolean; locked: boolean; vatRegistered: boolean; vatRate: string };
   month: string; assets: AssetRow[]; runs: DepreciationRunRow[];
-  assetAccounts: CodeName[]; expenseAccounts: CodeName[]; accounts: CodeName[];
+  assetAccounts: CodeName[]; expenseAccounts: CodeName[]; accounts: CodeName[]; customers: CodeName[];
 };
 
 // ---- เฟส 4 โจทย์ / มอบหมาย / สอบ / สาธิต ----
@@ -302,4 +352,88 @@ export type AssignmentOverview = {
   items: { no: number; date: string; narrative: string; points: string }[];
   students: OverviewStudent[];
   now: string;
+};
+
+// ---- เฟส 5 โมดูล 3: ยอดยกมา ----
+export type OpeningItem = { docNo: string; ref?: string; partyCode: string; partyName: string; date: string; dueDate: string; amount: string; undueVat: string };
+export type OpeningData = {
+  opening: null | {
+    id: string; date: string; entryId: string; docNo: string; total: string; createdAt: string;
+    receivables: OpeningItem[]; payables: OpeningItem[];
+    assets: { code: string; name: string; cost: string; accumulated: string; months: number }[];
+    inventory: { itemCode: string; name: string; qty: string; unitCost: string; value: string }[];
+  };
+  canWrite: boolean; vatRegistered: boolean; firstEntryDate: string | null;
+  accounts: { code: string; name: string; type: string }[];
+  customers: { code: string; name: string; creditDays: number }[];
+  vendors: { code: string; name: string; creditDays: number }[];
+  items: { code: string; name: string; unit: string }[];
+};
+
+// ---- เฟส 5 โมดูล 4: ใบเสนอราคา ใบสั่งขาย เงินมัดจำ ใบวางบิล ----
+export type OrderKind = 'quotation' | 'sales_order';
+export type OrderStatus = 'open' | 'expired' | 'accepted' | 'partial' | 'closed' | 'cancelled';
+export type SalesOrderRow = {
+  id: string; kind: OrderKind; docNo: string; date: string; untilDate: string | null; partyCode: string; partyName: string;
+  isService: boolean; priceMode: 'exclusive' | 'inclusive' | 'none'; vatRate: string; gross: string; discount: string; base: string;
+  vat: string; total: string; description: string; cancelReason: string | null; status: OrderStatus;
+};
+export type SalesOrderDetail = SalesOrderRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
+  sellerName: string; sellerTaxId: string | null; sellerBranchNo: string; sellerAddress: string;
+  source: { id: string; docNo: string } | null;
+  lines: { lineNo: number; itemCode: string | null; description: string; qty: string; unit: string; unitPrice: string; amount: string; delivered: string }[];
+  invoices: { id: string; docNo: string; date: string; total: string; voided: boolean }[];
+  deposits: { id: string; docNo: string; date: string; total: string; voided: boolean; remaining: string }[];
+  orders: { id: string; docNo: string; cancelled: boolean }[];
+};
+export type OpenDeposit = { id: string; docNo: string; date: string; partyCode: string; partyName: string; total: string; vat: string; remaining: string; orderDocNo: string | null; orderId: string | null };
+export type BillingNoteRow = { id: string; docNo: string; date: string; dueDate: string; partyCode: string; partyName: string; total: string; description: string; cancelReason: string | null; open: string; status: 'open' | 'paid' | 'cancelled' };
+export type BillingNoteDetail = BillingNoteRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
+  sellerName: string; sellerTaxId: string | null; sellerBranchNo: string; sellerAddress: string;
+  items: { id: string; docNo: string; date: string; dueDate: string; amount: string; open: string }[];
+};
+
+// ---- เฟส 5 โมดูล 5: ใบสั่งซื้อ ใบรับสินค้า เงินมัดจำจ่าย ----
+export type PurchaseOrderStatus = 'open' | 'partial' | 'closed' | 'cancelled';
+export type PurchaseOrderRow = {
+  id: string; docNo: string; date: string; untilDate: string | null; partyCode: string; partyName: string; isService: boolean;
+  priceMode: 'exclusive' | 'inclusive' | 'none'; vatRate: string; gross: string; discount: string; base: string; vat: string; total: string;
+  description: string; cancelReason: string | null; status: PurchaseOrderStatus;
+};
+export type PurchaseOrderDetail = PurchaseOrderRow & {
+  partyTaxId: string | null; partyBranchNo: string; partyAddress: string;
+  buyerName: string; buyerTaxId: string | null; buyerBranchNo: string; buyerAddress: string;
+  lines: { lineNo: number; itemCode: string | null; isService: boolean | null; description: string; qty: string; unit: string; unitPrice: string; amount: string; received: string }[];
+  documents: { id: string; kind: PurchaseKindSql; docNo: string; date: string; total: string; voided: boolean }[];
+  deposits: { id: string; docNo: string; date: string; total: string; voided: boolean; remaining: string }[];
+};
+export type OpenReceiptLine = {
+  receiptId: string; docNo: string; vendorDocNo: string; date: string; partyCode: string; lineNo: number; itemCode: string;
+  description: string; unit: string; qty: string; unitPrice: string; amount: string; account: string; remaining: string; remainingAmount: string;
+};
+export type OpenPurchaseDeposit = {
+  id: string; docNo: string; vendorDocNo: string; date: string; partyCode: string; partyName: string; total: string; vat: string;
+  remaining: string; remainingVat: string; orderDocNo: string | null; orderId: string | null;
+};
+
+// ---- เฟส 5 โมดูล 9 เงินสดย่อย + โอนเงินระหว่างบัญชี ----
+type CashCompany = { name: string; canWrite: boolean; locked: boolean };
+export type CashTransferRow = {
+  id: string; entryId: string; docNo: string; date: string; from: string; fromName: string; to: string; toName: string; amount: string; fee: string;
+  feeAccount: string | null; description: string; voided: boolean; voidReason: string | null; voidDocNo: string | null;
+};
+export type CashTransferPage = { company: CashCompany; transfers: CashTransferRow[]; cashAccounts: CodeName[]; expenseAccounts: CodeName[] };
+export type PettyVoucherStatus = 'pending' | 'reimbursed' | 'cancelled';
+export type PettyVoucher = {
+  id: string; docNo: string; date: string; payee: string; description: string; account: string; accountName: string; amount: string;
+  receiptNo: string | null; cancelReason: string | null; status: PettyVoucherStatus;
+};
+export type PettyCashPage = {
+  company: CashCompany; fund: string; pending: string; onHand: string; custodian: string | null;
+  funds: { id: string; docNo: string; date: string; fund: string; change: string; cashAccount: string; custodian: string }[];
+  vouchers: PettyVoucher[];
+  reimbursements: { id: string; docNo: string; date: string; cashAccount: string; total: string; voided: boolean; voidReason: string | null; vouchers: string[] }[];
+  cashAccounts: CodeName[]; expenseAccounts: CodeName[];
 };

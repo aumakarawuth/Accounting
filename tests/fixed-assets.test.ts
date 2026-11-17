@@ -20,6 +20,8 @@ async function setup() {
   const owner = await newUser(school, 'student');
   await db.query('insert into acc.enrollments values ($1, $2)', [room, owner]);
   const co = await newCompany(owner, room);
+  // บริษัทไม่จด VAT: เทสต์นี้ดูค่าเสื่อม/กำไรขาดทุน (ขายสินทรัพย์ของบริษัทจด VAT อยู่ใน tests/daily-depreciation-asset-vat.test.ts)
+  await db.query('update acc.companies set vat_registered = false, version = version + 1 where id = $1', [co]);
   return { owner, co };
 }
 

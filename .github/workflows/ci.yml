@@ -43,6 +43,8 @@ jobs:
   # หน้าจอจริง 3 ขนาด (มือถือ/iPad/คอม): เว็บ + API + ฐานข้อมูลตัวอย่าง แล้วอัปโหลดภาพให้เจ้าของโปรเจกต์ดูก่อน merge
   e2e:
     runs-on: ubuntu-latest
+    # ปกติ ~15 นาที ถ้าค้าง (เช่น apt หาเซิร์ฟเวอร์ไม่เจอ) ให้ล้มเร็ว ไม่ค้างถึง 6 ชั่วโมง
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
@@ -59,7 +61,29 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # WebKit = เอนจินของ Safari (iPhone/iPad) ทดสอบเพิ่มอีก 2 จอ
-      - run: pnpm --filter @accounting/tests exec playwright install --with-deps chromium webkit
+      # แยกเป็น 2 ขั้น: ตัวเบราว์เซอร์ (เก็บ cache ตาม lockfile) และไลบรารีระบบผ่าน apt (ลองซ้ำ มีเวลาหมด)
+      # เพราะ apt ของ runner เคยหาเซิร์ฟเวอร์ Ubuntu ไม่เจอ (DNS) แล้วค้างแพ็กเกจละ ~40 วินาที รวมเป็นชั่วโมง
+      - name: เก็บเบราว์เซอร์ Playwright ไว้ใช้ซ้ำ
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: ดาวน์โหลดเบราว์เซอร์ (chromium + webkit)
+        timeout-minutes: 10
+        run: pnpm --filter @accounting/tests exec playwright install chromium webkit
+      - name: ไลบรารีระบบของเบราว์เซอร์ (ลองซ้ำ 3 ครั้ง)
+        timeout-minutes: 20
+        run: |
+          printf 'Acquire::Retries "2";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci-timeouts
+          for i in 1 2 3; do
+            timeout 360 pnpm --filter @accounting/tests exec playwright install-deps chromium webkit && exit 0
+            echo "ติดตั้งไลบรารีระบบไม่สำเร็จ ครั้งที่ $i"
+            # timeout หยุดแค่ pnpm แต่ apt-get (รันผ่าน sudo) ยังค้างถือ lock ของ dpkg อยู่ ต้องหยุดเองก่อนลองใหม่
+            sudo pkill -9 -x apt-get || true; sudo pkill -9 -x dpkg || true; sleep 5
+            sudo dpkg --configure -a || true
+            sleep 25
+          done
+          echo "apt ของ runner ใช้ไม่ได้ (ดู log ข้างบนว่าหาเซิร์ฟเวอร์ไม่เจอหรือไม่) รันซ้ำภายหลัง"; exit 1
       - name: ฐานข้อมูลตัวอย่าง (ครู + นักเรียน + บริษัท)
         run: |
           psql "$PG_ADMIN" -c 'create database accounting_dev'
