@@ -64,7 +64,7 @@ jobs:
       # แยกเป็น 2 ขั้น: ตัวเบราว์เซอร์ (เก็บ cache ตาม lockfile) และไลบรารีระบบผ่าน apt (ลองซ้ำ มีเวลาหมด)
       # เพราะ apt ของ runner เคยหาเซิร์ฟเวอร์ Ubuntu ไม่เจอ (DNS) แล้วค้างแพ็กเกจละ ~40 วินาที รวมเป็นชั่วโมง
       - name: เก็บเบราว์เซอร์ Playwright ไว้ใช้ซ้ำ
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
