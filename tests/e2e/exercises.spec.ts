@@ -207,3 +207,53 @@ test('โหมดสาธิต: ครูสร้างบริษัทส
   await expect(page.getByText('ถูก · รายการของคุณ JV-0001')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+// ทดสอบห้องเรียน 50 คน (docs/load-test-class50.md): ครูกด "เริ่มตรวจ" แล้วกด "ให้ผ่าน" ต่อทันที
+// เดิมปุ่มกดได้ก่อนสถานะใหม่มาถึง → "สถานะงานเปลี่ยนไปแล้ว" · ช่องคะแนนต้องเติมคะแนนตรวจอัตโนมัติไว้ให้
+test('ส่งงาน: ครูเริ่มตรวจแล้วให้ผ่านต่อทันทีได้ ช่องคะแนนเติมคะแนนตรวจอัตโนมัติ', async ({ browser }, info) => {
+  test.setTimeout(120_000);
+  const t = tag(info);
+  const { tctx, sctx, teacher, student } = await contexts(browser, info);
+  const errors = [...watchErrors(teacher), ...watchErrors(student)];
+  let assignmentId = '';
+  try {
+    await teacher.goto('/login/staff');
+    const room = await newClass(browser, teacher, t);
+    const set = await teacher.request.post('/api/teacher/exercises', { data: { title: `ส่งงาน ${t}`, companyName: `ร้านส่งงาน ${t}`, items: [
+      { date: '2026-10-01', narrative: 'นำเงินสดมาลงทุน 9,000 บาท', points: '2', lines: [{ account_code: '1110', debit: '9000' }, { account_code: '3110', credit: '9000' }] },
+      { date: '2026-10-02', narrative: 'จ่ายค่าเช่า 1,000 บาท', points: '1', lines: [{ account_code: '5220', debit: '1000' }, { account_code: '1110', credit: '1000' }] }] } });
+    expect(set.status()).toBe(201);
+    const asg = await teacher.request.post(`/api/teacher/exercises/${(await set.json()).id}/assign`, { data: {
+      classroomId: (await (await teacher.request.get('/api/teacher/classrooms')).json()).find((c: { name: string }) => c.name === room.roomName).id,
+      mode: 'submit', companyName: `ส่งงาน ${t}`, feedback: 'score', reveal: 'after_submit' } });
+    expect(asg.status()).toBe(201);
+    assignmentId = (await asg.json()).assignmentId;
+
+    await login(student, 'student', room.code, room.temp);
+    await student.context().setExtraHTTPHeaders({ origin: originOf(student) });
+    await student.waitForURL(/\/c\/[0-9a-f-]{36}$/);
+    const co = student.url().split('/').pop()!;
+    expect((await student.request.post(`/api/companies/${co}/journal`, { headers: { 'idempotency-key': randomUUID() },
+      data: { date: '2026-10-01', lines: [{ account_code: '1110', debit: '9000' }, { account_code: '3110', credit: '9000' }] } })).status()).toBe(201);
+    await student.reload();
+    await student.getByRole('button', { name: 'ส่งตรวจ (หลังส่งแก้ไม่ได้)' }).click();
+    await student.getByRole('button', { name: 'ยืนยันส่งตรวจ' }).click();
+    await expect(student.getByText('งานนี้ส่งตรวจแล้ว แก้ไขไม่ได้จนกว่าครูจะส่งกลับให้แก้')).toBeVisible();
+
+    await teacher.goto(`/teacher/review/${co}`);
+    await expect(teacher.getByText('ได้ 2.00 จาก 3.00 คะแนน')).toBeVisible();
+    await expect(teacher.getByLabel(/^คะแนน \(เต็ม 3\.00\)/)).toHaveValue('2.00');
+    await teacher.getByRole('button', { name: 'เริ่มตรวจ' }).click();
+    await teacher.getByRole('button', { name: 'ให้ผ่าน' }).click(); // ทันที ไม่รอหน้าโหลด
+    await expect(teacher.getByText('ผ่าน', { exact: true }).first()).toBeVisible();
+    await expect(teacher.getByText('สถานะงานเปลี่ยนไปแล้ว')).toHaveCount(0);
+    await checkScreen(teacher, info, 'teacher-review-passed');
+    const sub = await (await teacher.request.get(`/api/companies/${co}/submission`)).json();
+    expect([sub.status, sub.score, sub.events.map((e: { action: string }) => e.action)]).toEqual(['passed', '2.00', ['submit', 'review', 'pass']]);
+    expect(errors).toEqual([]);
+  } finally {
+    if (assignmentId) await teacher.request.post(`/api/teacher/assignments/${assignmentId}/actions`, { data: { action: 'close' } });
+    await tctx.close();
+    await sctx.close();
+  }
+});
