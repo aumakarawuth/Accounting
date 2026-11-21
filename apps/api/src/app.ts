@@ -23,6 +23,7 @@ import { purchaseFlowRoutes } from './routes/purchaseFlow.js';
 import { inventoryRoutes } from './routes/inventory.js';
 import { cashRoutes } from './routes/cash.js';
 import { exerciseRoutes } from './routes/exercises.js';
+import { curriculumRoutes } from './routes/curriculum.js';
 import type { RealtimeBus } from './realtime.js';
 import { teacherRoutes } from './routes/teacher.js';
 
@@ -107,6 +108,7 @@ export function buildApp(opts: {
     inventoryRoutes(scope, opts.pool, auth);
     cashRoutes(scope, opts.pool, auth);
     exerciseRoutes(scope, opts.pool, auth);
+    curriculumRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
     liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs, onStream: opts.metrics?.stream });

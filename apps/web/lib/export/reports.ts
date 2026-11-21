@@ -1,7 +1,7 @@
 import { th } from '../../i18n/th';
-import type { AssignmentOverview, Ledger, Statements, TrialBalance, Worksheet, WsPair } from '../api';
+import type { AssignmentOverview, Ledger, SpecialJournal, Statements, TrialBalance, Worksheet, WsPair } from '../api';
 import { isoToThai, monthEndLabel, monthLabel } from '../date';
-import { fromCents, toCents } from '../money';
+import { formatMoney, fromCents, toCents } from '../money';
 import type { Column, Report, Row, Section } from './model';
 
 // แปลงข้อมูลจาก API (ชุดเดียวกับหน้าจอ) เป็นโครงรายงานกลาง หัวคอลัมน์/ข้อความมาจาก i18n/th.ts
@@ -128,6 +128,59 @@ export function statementsReport(company: string, st: Statements, now = new Date
     subtitle: `${st.scope === 'month' ? s.scopeMonth : s.scopeYtd} · ${th.export.asOf(monthEndLabel(st.month))}`,
     orientation: 'portrait', printedAt: printedAt(now), sections: [income, position],
     notes: [st.balanced ? s.balanced : s.unbalanced(st.totalAssets, st.totalLiabilitiesEquity), s.contraNote, s.unit],
+  };
+}
+
+/** สมุดรายวันเฉพาะ (docs/phase6-spec.md ข้อ 1): ตารางหลายช่องตามแบบที่สอน + ยอดรวมผ่านไปบัญชีแยกประเภท */
+export function specialJournalReport(company: string, j: SpecialJournal, now = new Date()): Report {
+  const t = th.books;
+  const title = t.names[j.book]!;
+  const general = j.book === 'general';
+  const label = (r: SpecialJournal['rows'][number]) => (r.reversal && r.reversesDocNo ? t.reversalOf(r.reversesDocNo) : (r.party ?? r.description) || '');
+  let main: Section;
+  if (general) {
+    main = {
+      columns: [{ label: t.date, width: 11, kind: 'mono' }, { label: t.docNo, width: 11, kind: 'mono' }, { label: t.account, width: 40 },
+        { label: t.ref, width: 8, kind: 'mono' }, money(t.debit, 14), money(t.credit, 14)],
+      rows: [],
+    };
+    main.rows = j.rows.flatMap((r): Row[] => [
+      { cells: [isoToThai(r.date), r.docNo, r.reversal && r.reversesDocNo ? t.reversalOf(r.reversesDocNo) : r.description, null, null, null], style: 'heading' },
+      ...r.others.map((o): Row => ({ cells: [null, null, o.memo ? `${o.name} · ${o.memo}` : o.name, o.code, blankZero(o.debit), blankZero(o.credit)], indent: blankZero(o.debit) ? 0 : 1 })),
+    ]);
+  } else {
+    const rows: Row[] = j.rows.flatMap((r): Row[] => {
+      const n = Math.max(1, r.others.length);
+      return Array.from({ length: n }, (_, i): Row => {
+        const o = r.others[i];
+        const head = i === 0
+          ? [isoToThai(r.date), r.docNo, label(r), ...j.columns.map((c) => blankZero(r.cells[c.key]))]
+          : [null, null, null, ...j.columns.map(() => null)];
+        return { cells: [...head, o ? o.name : null, o ? o.code : null, o ? blankZero(o.debit) : null, o ? blankZero(o.credit) : null] };
+      });
+    });
+    rows.push({ cells: [null, null, t.total, ...j.columns.map((c) => c.total), null, null, j.othersTotal.debit, j.othersTotal.credit], style: 'total' });
+    main = {
+      groups: [{ label: '', span: 3 + j.columns.length }, { label: t.others, span: 4 }],
+      columns: [{ label: t.date, width: 10, kind: 'mono' }, { label: t.docNo, width: 10, kind: 'mono' }, { label: t.party[j.book]!, width: 20 },
+        ...j.columns.map((c): Column => money(`${t.column(c.side, c.name)} ${c.code}`, 12)),
+        { label: t.othersAccount, width: 16 }, { label: t.ref, width: 6, kind: 'mono' }, money(t.debit, 11), money(t.credit, 11)],
+      rows,
+    };
+  }
+  const posting: Section = {
+    heading: t.posting,
+    columns: [{ label: t.ref, width: 8, kind: 'mono' }, { label: t.othersAccount, width: 34 }, { label: '', width: 14 }, money(t.debit, 14), money(t.credit, 14)],
+    rows: [
+      ...j.posting.map((p): Row => ({ cells: [p.code, p.name, t.via[p.via]!, blankZero(p.debit), blankZero(p.credit)] })),
+      { cells: [null, t.total, null, j.totalDebit, j.totalCredit], style: 'total' },
+    ],
+  };
+  return {
+    fileName: fileName(title, company, j.month), sheetName: title, company, title,
+    subtitle: th.export.period(monthLabel(j.month)), orientation: general ? 'portrait' : 'landscape', printedAt: printedAt(now),
+    sections: j.rows.length ? [main, posting] : [{ columns: [{ label: t.account, width: 60 }], rows: [{ cells: [t.empty] }] }],
+    notes: [j.balanced ? t.balanced(formatMoney(j.totalDebit)) : t.unbalanced(formatMoney(j.totalDebit), formatMoney(j.totalCredit)), t.postingNote, t.rule, th.export.unit],
   };
 }
 

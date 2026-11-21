@@ -56,6 +56,11 @@ export const SubmissionAction = z.object({
   score: z.string().regex(/^\d{1,3}(\.\d{1,2})?$/, 'คะแนนต้องเป็นตัวเลข').optional(),
 }).strict();
 export const LedgerQuery = z.object({ month: Month, account: z.string().min(1).max(20) });
+// เฟส 6 (docs/phase6-spec.md)
+export const BookQuery = z.object({
+  companyId: z.string().uuid(), month: Month,
+  book: z.enum(['sales', 'purchases', 'receipts', 'payments', 'general']).default('sales'),
+});
 
 // ผังบัญชี: รหัสตัวเลข 3–10 หลัก (ตรงกับ check ใน DB) ประเภทตามหมวดบัญชี
 const AccountCode = z.string().regex(/^[0-9]{3,10}$/, 'รหัสบัญชีต้องเป็นตัวเลข 3–10 หลัก');
