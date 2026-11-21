@@ -1927,6 +1927,14 @@ export const th = {
     demoSubmit: 'สร้างบริษัทสาธิต',
     noClassrooms: 'ยังไม่มีห้องที่สอน ให้ผู้ดูแลระบบสร้างห้องก่อน',
     examReveal: 'การสอบ: ผลและเฉลยซ่อนจนครูกด "เปิดเฉลย"',
+    extraSets: 'สลับชุดโจทย์ (นักเรียนได้คนละชุด)',
+    extraSetsNote: 'เลือกชุดเพิ่มได้อีกไม่เกิน 3 ชุด ควรยากเท่ากัน ตรวจและให้คะแนนตามชุดที่แต่ละคนได้ · เวียนตามรหัส = รหัสติดกันได้คนละชุด',
+    noOtherSets: 'ยังไม่มีชุดโจทย์อื่น สร้างชุดเพิ่มก่อนถ้าต้องการสลับชุด',
+    setLabel: (n: number) => `ชุด ${'กขคง'[n - 1] ?? n}`,
+    thisSet: 'ชุดนี้ (ชุดหลัก)',
+    setOption: (title: string, items: number, points: string) => `${title} (${items} ข้อ ${points} คะแนน)`,
+    distribution: 'วิธีแจกชุด',
+    distributions: { rotate: 'เวียนตามรหัสนักเรียน', random: 'สุ่ม' },
   },
 
   assignment: {
@@ -1941,6 +1949,8 @@ export const th = {
     students: 'นักเรียน',
     code: 'รหัส',
     name: 'ชื่อ',
+    set: 'ชุด',
+    setsHeading: (n: number) => `ชุดโจทย์ ${n} ชุด`,
     score: 'คะแนนตรวจอัตโนมัติ',
     teacherScore: 'คะแนนครู',
     correct: 'ถูก',

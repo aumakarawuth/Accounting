@@ -25,7 +25,8 @@ export function exerciseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
           `select s.id, s.title, s.company_name as "companyName", s.version, s.updated_at as "updatedAt",
                   (select count(*)::int from acc.exercise_items i where i.set_id = s.id) as items,
                   (select coalesce(sum(points), 0)::text from acc.exercise_items i where i.set_id = s.id) as points,
-                  (select count(*)::int from acc.assignments a where a.set_id = s.id) as assignments
+                  (select count(*)::int from acc.assignments a where a.set_id = s.id
+                     or exists (select 1 from acc.assignment_sets x where x.assignment_id = a.id and x.set_id = s.id)) as assignments
              from acc.exercise_sets s order by s.updated_at desc`),
         () => c.query(
           `select a.id, a.mode, a.title, a.company_name as "companyName", r.name as classroom, a.created_at as "createdAt",
@@ -71,7 +72,9 @@ export function exerciseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
         () => c.query(
           `select a.id, a.mode, r.name as classroom, a.company_name as "companyName", a.created_at as "createdAt", a.closed_at as "closedAt",
                   (select c.id from acc.companies c where c.assignment_id = a.id and a.mode = 'demo' limit 1) as "demoCompanyId"
-             from acc.assignments a left join acc.classrooms r on r.id = a.classroom_id where a.set_id = $1 order by a.created_at desc`, [setId]),
+             from acc.assignments a left join acc.classrooms r on r.id = a.classroom_id
+            where a.set_id = $1 or exists (select 1 from acc.assignment_sets x where x.assignment_id = a.id and x.set_id = $1)
+            order by a.created_at desc`, [setId]),
         () => c.query(`select id, name from acc.classrooms where teacher_id = app.current_user_id() order by name`),
       ] as const);
       return { ...s, items: items.rows, assignments: assignments.rows, classrooms: rooms.rows };
@@ -103,6 +106,7 @@ export function exerciseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
       const id = (await c.query('select acc.create_assignment($1, $2, $3::jsonb) id', [setId, b.mode === 'demo' ? null : b.classroomId, JSON.stringify({
         mode: b.mode, company_name: b.companyName, feedback: b.feedback, reveal: b.reveal, check_date: b.checkDate,
         opens_at: b.opensAt ?? null, closes_at: b.closesAt ?? null, duration_minutes: b.durationMinutes ?? null,
+        extra_sets: b.extraSets, distribution: b.distribution,
       })])).rows[0].id as string;
       return assignmentCreated(c, id);
     });
