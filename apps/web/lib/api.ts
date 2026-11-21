@@ -93,6 +93,20 @@ export type EquityChanges = {
   rows: { key: string; values: Partial<Record<EquityCol, string>>; total: string }[];
   netIncome: string; positionEquity: string; matches: boolean;
 };
+export type AllowancePreview = {
+  method: 'sales' | 'receivables' | 'aging'; asOf: string; base: string; required: string; previous: string; amount: string;
+  buckets: { bucket: string; open: string; count: number; rate: string; required: string }[];
+};
+export type BadDebtPage = {
+  canWrite: boolean; locked: boolean; asOf: string; allowance: string; receivables: string; subledger: string; matches: boolean;
+  open: { id: string; docNo: string; date: string; dueDate: string | null; partyName: string; total: string; open: string }[];
+  allowances: { id: string; docNo: string; month: string; method: string; base: string; required: string; previous: string; amount: string; voided: boolean; voidDocNo: string | null }[];
+  writeoffs: {
+    id: string; docNo: string; date: string; invoiceNo: string; partyName: string; amount: string; vat: string; reason: string;
+    voided: boolean; voidDocNo: string | null; unrecovered: string;
+    recoveries: { id: string; docNo: string; date: string; amount: string; credit: string; voided: boolean }[];
+  }[];
+};
 export type MyCompany = { id: string; name: string; classroom: string | null };
 type Line = { code: string; name: string; amount: string };
 export type Statements = {

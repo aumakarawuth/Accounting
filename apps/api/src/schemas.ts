@@ -57,6 +57,16 @@ export const SubmissionAction = z.object({
 }).strict();
 export const LedgerQuery = z.object({ month: Month, account: z.string().min(1).max(20) });
 // เฟส 6 (docs/phase6-spec.md)
+const PercentRate = z.string().regex(/^\d{1,3}(\.\d{1,2})?$/, 'อัตราร้อยละเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง');
+export const AllowanceInput = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'เดือนต้องเป็น YYYY-MM'),
+  method: z.enum(['sales', 'receivables', 'aging']),
+  rate: PercentRate.optional(), scope: z.enum(['month', 'ytd']).optional(),
+  rates: z.object({ current: PercentRate, d30: PercentRate, d60: PercentRate, d90: PercentRate, over90: PercentRate }).strict().optional(),
+}).strict();
+export const WriteOffInput = z.object({ documentId: z.string().uuid(), date: IsoDate, amount: Money, reason: z.string().trim().min(1, 'ต้องระบุเหตุผล').max(300) }).strict();
+export const RecoveryInput = z.object({ writeoffId: z.string().uuid(), date: IsoDate, amount: Money, credit: z.enum(['1211', '4340']).default('1211') }).strict();
+export const BadDebtVoidParams = z.object({ companyId: z.string().uuid(), kind: z.enum(['allowance', 'writeoff', 'recovery']), id: z.string().uuid() });
 export const BookQuery = z.object({
   companyId: z.string().uuid(), month: Month,
   book: z.enum(['sales', 'purchases', 'receipts', 'payments', 'general']).default('sales'),
