@@ -391,6 +391,9 @@ export const AssignBody = z.object({
   opensAt: Instant.nullable().optional(),
   closesAt: Instant.nullable().optional(),
   durationMinutes: z.number().int().min(1).max(600).optional(),
+  // ชุดโจทย์เพิ่ม (ชุด ข/ค/ง) แจกนักเรียนคนละชุด: เวียนตามรหัสนักเรียน หรือสุ่ม
+  extraSets: z.array(Uuid).max(3, 'ใช้ได้ไม่เกิน 4 ชุดต่องาน').default([]),
+  distribution: z.enum(['rotate', 'random']).default('rotate'),
 }).strict();
 export const DemoBody = z.object({ companyName: z.string().trim().min(1, 'ต้องมีชื่อบริษัท').max(120) }).strict();
 export const AssignmentOptionsBody = z.object({ feedback: Feedback.optional(), reveal: Reveal.optional(), checkDate: z.boolean().optional() }).strict();

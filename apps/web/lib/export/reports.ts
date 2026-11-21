@@ -263,7 +263,11 @@ export function worksheetReport(company: string, ws: Worksheet, now = new Date()
 export function scoresReport(ov: AssignmentOverview, opts: { maxItemColumns?: number; orientation?: 'portrait' | 'landscape' } = {}, now = new Date()): Report {
   const a = th.assignment;
   const a4 = ov.assignment;
-  const showItems = ov.items.length <= (opts.maxItemColumns ?? Infinity);
+  // งานสลับชุด: เพิ่มคอลัมน์ชุด และคอลัมน์รายข้อตามชุดที่มีข้อมากสุด (ข้อที่ n ของแต่ละคน = ข้อที่ n ของชุดตัวเอง)
+  const sets = ov.sets ?? [];
+  const multi = sets.length > 1;
+  const itemNos = multi ? Array.from({ length: Math.max(...sets.map((x) => x.items.length)) }, (_, i) => i + 1) : ov.items.map((i) => i.no);
+  const showItems = itemNos.length <= (opts.maxItemColumns ?? Infinity);
   const graded = ov.students.filter((s) => s.grade);
   const sum = graded.reduce((acc, s) => acc + (toCents(s.grade!.score) ?? 0n), 0n);
   const avg = graded.length ? (sum * 2n + BigInt(graded.length)) / (2n * BigInt(graded.length)) : 0n; // ปัดครึ่งขึ้น
@@ -274,21 +278,26 @@ export function scoresReport(ov: AssignmentOverview, opts: { maxItemColumns?: nu
           : s.status ? th.work.state[s.status] : '';
   const columns: Column[] = [
     { label: a.code, width: 11, kind: 'mono' }, { label: a.name, width: 24 },
+    ...(multi ? [{ label: a.set, width: 7 } as Column] : []),
     { label: a.score, width: 11, kind: 'money' }, { label: a.correct, width: 7, kind: 'number' },
     { label: a.teacherScore, width: 9, kind: 'money' }, { label: a.status, width: 14 },
-    ...(showItems ? ov.items.map((i): Column => ({ label: a.item(i.no), width: 6, kind: 'money' })) : []),
+    ...(showItems ? itemNos.map((no): Column => ({ label: a.item(no), width: 6, kind: 'money' })) : []),
   ];
   const rows: Row[] = ov.students.map((s) => ({
-    cells: [s.studentCode, s.name, s.grade?.score ?? null, s.grade ? String(s.grade.correct) : null, s.teacherScore, status(s),
-      ...(showItems ? ov.items.map((i) => s.grade?.items.find((x) => x.no === i.no)?.earned ?? null) : [])],
+    cells: [s.studentCode, s.name, ...(multi ? [s.setNo ? th.assign.setLabel(s.setNo) : null] : []),
+      s.grade?.score ?? null, s.grade ? String(s.grade.correct) : null, s.teacherScore, status(s),
+      ...(showItems ? itemNos.map((no) => s.grade?.items.find((x) => x.no === no)?.earned ?? null) : [])],
   }));
-  rows.push({ cells: [null, `${a.average} (${a.count(graded.length)})`, fromCents(avg), null, null, null, ...(showItems ? ov.items.map(() => null) : [])], style: 'total' });
-  const max = graded[0]?.grade?.maxScore ?? fromCents(ov.items.reduce((acc, i) => acc + (toCents(i.points) ?? 0n), 0n));
+  rows.push({ cells: [null, `${a.average} (${a.count(graded.length)})`, ...(multi ? [null] : []), fromCents(avg), null, null, null,
+    ...(showItems ? itemNos.map(() => null) : [])], style: 'total' });
+  const total = (items: { points: string }[]) => fromCents(items.reduce((acc, i) => acc + (toCents(i.points) ?? 0n), 0n));
+  const max = multi ? sets.map((x) => `${th.assign.setLabel(x.no)} ${total(x.items)}`).join(' · ')
+    : graded[0]?.grade?.maxScore ?? total(ov.items);
   return {
     fileName: fileName(th.export.scores, a4.title, a4.classroom ?? ''), sheetName: th.export.scores, company: a4.title,
     title: th.export.scoresTitle(a4.classroom ?? ''),
     subtitle: `${th.assign.modes[a4.mode]} · ${a4.companyName} · ${th.export.maxScore(max)}`,
-    orientation: opts.orientation ?? (showItems && ov.items.length > 6 ? 'landscape' : 'portrait'), printedAt: printedAt(now),
+    orientation: opts.orientation ?? (showItems && itemNos.length > 6 ? 'landscape' : 'portrait'), printedAt: printedAt(now),
     sections: [{ columns, rows }],
     notes: showItems ? [] : [th.export.itemsInExcel],
   };

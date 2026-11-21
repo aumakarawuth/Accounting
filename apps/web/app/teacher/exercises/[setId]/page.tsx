@@ -4,20 +4,23 @@ import { AssignForm } from '@/components/exercises/AssignForm';
 import { DeleteSet } from '@/components/exercises/DeleteSet';
 import { ExerciseEditor } from '@/components/exercises/ExerciseEditor';
 import { serverApi } from '@/lib/server-api';
-import type { Account, ApiError, ExerciseSetDetail } from '@/lib/api';
+import type { Account, ApiError, ExerciseSetDetail, ExerciseSetSummary } from '@/lib/api';
 import { th } from '@/i18n/th';
 
 const when = (iso: string) => new Date(iso).toLocaleDateString('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' });
 
 export default async function ExerciseSetPage({ params }: { params: Promise<{ setId: string }> }) {
   const { setId } = await params;
-  const [set, accounts] = await Promise.all([
+  const [set, accounts, list] = await Promise.all([
     serverApi<ExerciseSetDetail>(`/teacher/exercises/${setId}`).catch((e: ApiError) => {
       if ([400, 404].includes(e.status)) notFound();
       throw e;
     }),
     serverApi<Account[]>('/teacher/coa-template'),
+    serverApi<{ sets: ExerciseSetSummary[] }>('/teacher/exercises'),
   ]);
+  // ชุดอื่นที่มีข้อแล้ว ใช้สลับให้นักเรียนคนละชุดในงานเดียวกัน
+  const otherSets = list.sets.filter((x) => x.id !== set.id && x.items > 0);
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <div className="border-b-2 border-ink pb-2.5">
@@ -25,7 +28,7 @@ export default async function ExerciseSetPage({ params }: { params: Promise<{ se
         <h1 className="font-doc text-[22px] font-bold sm:text-2xl">{set.title}</h1>
         <p className="text-sm text-ink2">{set.companyName}</p>
       </div>
-      <AssignForm setId={set.id} defaultCompany={set.companyName} classrooms={set.classrooms} />
+      <AssignForm setId={set.id} defaultCompany={set.companyName} classrooms={set.classrooms} otherSets={otherSets} />
       {set.assignments.length > 0 && (
         <section aria-label={th.exercises.assignments} className="flex flex-col gap-2">
           <h2 className="text-[17px] font-semibold">{th.exercises.assignments}</h2>
