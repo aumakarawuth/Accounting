@@ -107,6 +107,12 @@ export type BadDebtPage = {
     recoveries: { id: string; docNo: string; date: string; amount: string; credit: string; voided: boolean }[];
   }[];
 };
+export type AdjustmentRow = {
+  id: string; month: string; kind: string; method: string | null; plAccount: string; plName: string; bsAccount: string; bsName: string;
+  amount: string; description: string; autoReverse: boolean; entryId: string; docNo: string; date: string;
+  reversalDocNo: string | null; reversalDate: string | null; voided: boolean; voidDocNo: string | null; voidReason: string | null;
+};
+export type AdjustmentPage = { canWrite: boolean; locked: boolean; accounts: { code: string; name: string; type: string }[]; adjustments: AdjustmentRow[] };
 export type MyCompany = { id: string; name: string; classroom: string | null };
 type Line = { code: string; name: string; amount: string };
 export type Statements = {

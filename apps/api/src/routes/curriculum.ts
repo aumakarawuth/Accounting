@@ -7,7 +7,7 @@ import { specialJournal } from '../books.js';
 import { cashFlow } from '../cashflow.js';
 import { equityChanges } from '../equity.js';
 import {
-  AllowanceInput, BadDebtVoidParams, BookQuery, CompanyParams, IdempotencyKey, MonthQuery, RecoveryInput, StatementsQuery, VoidDocument, WriteOffInput,
+  AdjustmentInput, AdjustmentParams, AllowanceInput, BadDebtVoidParams, BookQuery, CompanyParams, IdempotencyKey, MonthQuery, RecoveryInput, StatementsQuery, VoidDocument, WriteOffInput,
 } from '../schemas.js';
 import { HttpError } from '../errors.js';
 
@@ -149,6 +149,53 @@ export function curriculumRoutes(app: FastifyInstance, pool: pg.Pool, auth: Auth
       await requireWritable(c, co);
       const rv = (await c.query('select acc.void_bad_debt($1, $2, $3, $4, $5, $6) id', [co, kind, id, b.date, b.reason, key])).rows[0].id;
       return { voidDocNo: (await c.query('select doc_no from acc.journal_entries where company_id = $1 and id = $2', [co, rv])).rows[0].doc_no };
+    });
+  });
+
+  // ข้อ 5 รายการปรับปรุง ค้างรับ/ค้างจ่าย/รับล่วงหน้า/จ่ายล่วงหน้า + กลับรายการอัตโนมัติ
+  const ADJ = `x.id, to_char(x.month, 'YYYY-MM') as month, x.kind, x.method, pa.code as "plAccount", pa.name as "plName", ba.code as "bsAccount",
+    ba.name as "bsName", x.amount::text, x.description, x.auto_reverse as "autoReverse", x.entry_id as "entryId", j.doc_no as "docNo",
+    to_char(j.entry_date, 'YYYY-MM-DD') as date, r.doc_no as "reversalDocNo", to_char(r.entry_date, 'YYYY-MM-DD') as "reversalDate",
+    x.voided_at is not null as voided, v.doc_no as "voidDocNo", x.void_reason as "voidReason"`;
+  const ADJ_FROM = `acc.adjustment_entries x
+    join acc.chart_of_accounts pa on pa.company_id = x.company_id and pa.id = x.pl_account_id
+    join acc.chart_of_accounts ba on ba.company_id = x.company_id and ba.id = x.bs_account_id
+    join acc.journal_entries j on j.company_id = x.company_id and j.id = x.entry_id
+    left join acc.journal_entries r on r.company_id = x.company_id and r.id = x.reversal_entry_id
+    left join acc.journal_entries v on v.company_id = x.company_id and v.id = x.void_entry_id`;
+  app.get('/companies/:companyId/adjustments', async (req) => {
+    const { companyId: id } = CompanyParams.parse(req.params);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, id);
+      const [co, accounts, rows] = await querySequence([
+        () => c.query(`select app.can_write_company(id) as "canWrite", app.company_locked(id) as locked from acc.companies where id = $1`, [id]),
+        () => c.query(`select code, name, type from acc.chart_of_accounts where company_id = $1 and active order by code`, [id]),
+        () => c.query(`select ${ADJ} from ${ADJ_FROM} where x.company_id = $1 order by x.month desc, j.doc_no desc limit 300`, [id]),
+      ] as const);
+      return { ...co.rows[0], accounts: accounts.rows, adjustments: rows.rows };
+    });
+  });
+  app.post('/companies/:companyId/adjustments', async (req, reply) => {
+    const { companyId: id } = CompanyParams.parse(req.params);
+    const b = AdjustmentInput.parse(req.body);
+    const key = idemKey(req);
+    const row = await withUser(pool, await user(req), async (c) => {
+      await requireWritable(c, id);
+      const p = { month: `${b.month}-01`, kind: b.kind, method: b.method, pl_account: b.plAccount, bs_account: b.bsAccount, amount: b.amount,
+        description: b.description, auto_reverse: b.autoReverse };
+      const x = (await c.query('select acc.post_adjustment($1, $2::jsonb, $3) id', [id, JSON.stringify(p), key])).rows[0].id;
+      return (await c.query(`select ${ADJ} from ${ADJ_FROM} where x.company_id = $1 and x.id = $2`, [id, x])).rows[0];
+    });
+    return reply.code(201).send(row);
+  });
+  app.post('/companies/:companyId/adjustments/:id/void', async (req) => {
+    const { companyId: co, id } = AdjustmentParams.parse(req.params);
+    const b = VoidDocument.parse(req.body);
+    const key = idemKey(req);
+    return withUser(pool, await user(req), async (c) => {
+      await requireWritable(c, co);
+      await c.query('select acc.void_adjustment($1, $2, $3, $4, $5)', [co, id, b.date, b.reason, key]);
+      return (await c.query(`select ${ADJ} from ${ADJ_FROM} where x.company_id = $1 and x.id = $2`, [co, id])).rows[0];
     });
   });
 }

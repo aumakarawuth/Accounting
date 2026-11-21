@@ -24,12 +24,12 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
   // ไม่อย่างนั้นยอดคุม (ลูกหนี้ เจ้าหนี้ เช็ค ค่าเสื่อมสะสม ภาษี สต็อก) ไม่ตรงทะเบียน (docs/full-system-test.md)
   async function assertManual(c: pg.PoolClient, companyId: string, entryId: string) {
     const e = (await c.query(
-      `select e.doc_prefix, e.doc_no, exists (select 1 from acc.depreciation_runs r where r.company_id = e.company_id and r.entry_id = e.id) as dep
+      `select e.doc_prefix, e.doc_no, acc.entry_has_source(e.company_id, e.id) as dep
          from acc.journal_entries e where e.company_id = $1 and e.id = $2`, [companyId, entryId])).rows[0];
     if (!e) throw new HttpError(404, 'not_found', 'ไม่พบรายการนี้');
     if (e.doc_prefix === 'RV') return e; // กลับรายการของการกลับรายการ: ให้ DB ตอบ ACC12
     if ((e.doc_prefix !== 'JV' && e.doc_prefix !== 'AJ') || e.dep) {
-      throw new HttpError(422, 'ACC15', `รายการ ${e.doc_no} มาจากเอกสารหรือทะเบียน แก้หรือกลับรายการจากสมุดรายวันไม่ได้ ให้ยกเลิกที่ตัวเอกสาร`);
+      throw new HttpError(422, 'ACC15', `รายการ ${e.doc_no} มาจากเอกสาร ทะเบียน หรือหน้ารายการปรับปรุง แก้หรือกลับรายการจากสมุดรายวันไม่ได้ ให้ยกเลิกที่หน้านั้น`);
     }
     return e as { doc_prefix: string; doc_no: string };
   }
@@ -218,7 +218,7 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       const e = (await c.query(
         `select e.id, e.doc_no as "docNo", e.entry_date::text as date, e.description, e.total_amount::text as total,
                 e.posted_at as "postedAt", p.closed as "periodClosed",
-                (e.doc_prefix in ('JV', 'AJ') and not exists (select 1 from acc.depreciation_runs r where r.company_id = e.company_id and r.entry_id = e.id)) as manual,
+                (e.doc_prefix in ('JV', 'AJ') and not acc.entry_has_source(e.company_id, e.id)) as manual,
                 case when r.id is null then null else json_build_object('id', r.id, 'docNo', r.doc_no) end as reverses,
                 (select json_build_object('id', x.id, 'docNo', x.doc_no) from acc.journal_entries x
                   where x.company_id = e.company_id and x.reverses_entry_id = e.id) as "reversedBy",

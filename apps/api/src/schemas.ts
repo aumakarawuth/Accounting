@@ -66,6 +66,14 @@ export const AllowanceInput = z.object({
 }).strict();
 export const WriteOffInput = z.object({ documentId: z.string().uuid(), date: IsoDate, amount: Money, reason: z.string().trim().min(1, 'ต้องระบุเหตุผล').max(300) }).strict();
 export const RecoveryInput = z.object({ writeoffId: z.string().uuid(), date: IsoDate, amount: Money, credit: z.enum(['1211', '4340']).default('1211') }).strict();
+export const AdjustmentInput = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'เดือนต้องเป็น YYYY-MM'),
+  kind: z.enum(['accrued_expense', 'accrued_revenue', 'prepaid_expense', 'unearned_revenue']),
+  method: z.enum(['asset', 'expense', 'liability', 'revenue']).optional(),
+  plAccount: z.string().regex(/^\d{3,10}$/, 'รหัสบัญชีไม่ถูกต้อง'), bsAccount: z.string().regex(/^\d{3,10}$/).optional(),
+  amount: Money, description: z.string().trim().max(300).optional(), autoReverse: z.boolean().default(false),
+}).strict();
+export const AdjustmentParams = z.object({ companyId: z.string().uuid(), id: z.string().uuid() });
 export const BadDebtVoidParams = z.object({ companyId: z.string().uuid(), kind: z.enum(['allowance', 'writeoff', 'recovery']), id: z.string().uuid() });
 export const BookQuery = z.object({
   companyId: z.string().uuid(), month: Month,
