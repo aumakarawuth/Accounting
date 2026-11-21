@@ -1,10 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { querySequence, withUser } from '../db.js';
+import { financialRatios } from '../ratios.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import {
-  CompanyParams, DateQuery, DividendInput, DividendParams, DividendPay, DividendVoid, EntityProfile, IdempotencyKey, SetEntity, entityJson,
+  CompanyParams, DateQuery, StatementsQuery, DividendInput, DividendParams, DividendPay, DividendVoid, EntityProfile, IdempotencyKey, SetEntity, entityJson,
 } from '../schemas.js';
 
 // เฟส 7 (docs/phase7-spec.md): ประเภทกิจการ · เงินปันผล — ชั้นบาง Zod → ฟังก์ชันใน DB
@@ -53,6 +54,13 @@ export function entityRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAdap
       await c.query('select acc.save_entity_profile($1, $2::jsonb, $3)', [id, JSON.stringify(p), b.version]);
       return entityOf(c, id);
     });
+  });
+
+  // ---- วิเคราะห์อัตราส่วนทางการเงิน (docs/phase7-spec.md ข้อ 4) ----
+  app.get('/companies/:companyId/ratios', async (req) => {
+    const { companyId: id } = CompanyParams.parse(req.params);
+    const { month, scope } = StatementsQuery.parse(req.query);
+    return withUser(pool, await user(req), async (c) => { await requireReadable(c, id); return financialRatios(c, id, month, scope); });
   });
 
   // ---- เงินปันผล (บริษัทจำกัด) ----

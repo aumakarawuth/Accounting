@@ -531,3 +531,7 @@ export type PayrollPage = {
   year: { code: string; name: string; months: number; income: string; sso: string; wht: string }[];
   cashAccounts: { code: string; name: string }[];
 };
+export type Ratios = {
+  month: string; scope: 'month' | 'ytd'; from: string; days: number; figures: Record<string, string>;
+  items: { key: string; group: 'liquidity' | 'efficiency' | 'profitability' | 'leverage'; unit: 'times' | 'percent' | 'days'; value: string | null }[];
+};
