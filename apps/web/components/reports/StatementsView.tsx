@@ -1,5 +1,5 @@
 import { Money } from '@/components/Money';
-import type { CostOfSales, Statements } from '@/lib/api';
+import type { Allocation, CostOfSales, Statements } from '@/lib/api';
 import { monthEndLabel, monthLabel } from '@/lib/date';
 import { formatMoney, isNegative, toCents } from '@/lib/money';
 
@@ -66,6 +66,39 @@ function CostOfSalesBlock({ c }: { c: CostOfSales }) {
   );
 }
 
+/** การแบ่งกำไร(ขาดทุน)ของห้างหุ้นส่วนตามสัญญา (ใต้งบกำไรขาดทุน) */
+export function AllocationTable({ rows }: { rows: Allocation[] }) {
+  const e = th.entity;
+  const cell = 'border border-rule px-2 py-1.5';
+  return (
+    <div className="flex flex-col gap-1">
+      <h3 className="font-semibold">{e.allocation}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[14px]">
+          <thead className="bg-band"><tr>
+            <th className={`${cell} text-left font-medium`}>{e.partnerName}</th>
+            <th className={`${cell} text-right font-medium`}>{e.salaryCol}</th>
+            <th className={`${cell} text-right font-medium`}>{e.interestCol}</th>
+            <th className={`${cell} text-right font-medium`}>{e.shareCol}</th>
+            <th className={`${cell} text-right font-medium`}>{e.totalCol}</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.no}>
+                <th scope="row" className={`${cell} text-left font-normal`}>{a.name}</th>
+                <td className={`${cell} text-right`}><Money value={a.salary} /></td>
+                <td className={`${cell} text-right`}><Money value={a.interest} /></td>
+                <td className={`${cell} text-right`}><Money value={a.share} /></td>
+                <td className={`${cell} text-right font-medium`}><Money value={a.total} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function StatementsView({ st, company }: { st: Statements; company: string }) {
   const t = th.statements;
   const m = st.multiStep;
@@ -96,6 +129,7 @@ export function StatementsView({ st, company }: { st: Statements; company: strin
         {m.incomeTax.length > 0 && step([t.profitBeforeTax, t.lossBeforeTax], m.profitBeforeTax)}
         {m.incomeTax.length > 0 && <Section title={t.incomeTax} lines={m.incomeTax} total={m.totalIncomeTax} totalLabel={t.totalIncomeTax} />}
         <Final label={profit ? t.netProfit : t.netLoss} value={st.netIncome} />
+        {st.allocation && st.allocation.length > 0 && <AllocationTable rows={st.allocation} />}
       </article>
 
       <article className={paper} aria-label={t.position}>
@@ -111,14 +145,14 @@ export function StatementsView({ st, company }: { st: Statements; company: strin
         <Section title={t.nonCurrentLiabilities} lines={k.nonCurrentLiabilities} total={k.totalNonCurrentLiabilities} totalLabel={t.totalNonCurrentLiabilities} />
         <Row strong rule label={t.totalLiabilities} value={st.totalLiabilities} />
         <Section
-          title={t.equity}
+          title={th.entity.equityHeadings[st.entityType ?? 'sole'] ?? t.equity}
           lines={[
             ...st.equity,
             { code: '', name: t.yearProfit, amount: st.yearProfit },
             ...(isZero(st.priorUnclosedProfit) ? [] : [{ code: '', name: t.priorUnclosed, amount: st.priorUnclosedProfit }]),
           ]}
           total={st.totalEquity}
-          totalLabel={t.totalEquity}
+          totalLabel={th.entity.totalEquity[st.entityType ?? 'sole'] ?? t.totalEquity}
         />
         <Final label={t.totalLiabilitiesEquity} value={st.totalLiabilitiesEquity} />
         <p role="status" className={`text-sm ${st.balanced ? '' : 'neg font-semibold'}`}>

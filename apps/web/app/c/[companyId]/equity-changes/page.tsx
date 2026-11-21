@@ -7,6 +7,7 @@ import type { Company, EquityChanges } from '@/lib/api';
 import { isMonth, monthLabel, todayIso } from '@/lib/date';
 import { formatMoney } from '@/lib/money';
 import { th } from '@/i18n/th';
+import { equityLabels } from '@/lib/equity-labels';
 
 // งบแสดงการเปลี่ยนแปลงส่วนของเจ้าของ (docs/phase6-spec.md ข้อ 3): คอลัมน์ตามบัญชีทุน · รวมปลายงวดเทียบงบแสดงฐานะการเงิน
 export default async function EquityChangesPage({
@@ -21,6 +22,7 @@ export default async function EquityChangesPage({
     serverApi<EquityChanges>(`/companies/${companyId}/equity-changes?month=${month}&scope=${scope}`),
   ]);
   const t = th.equityChanges;
+  const L = equityLabels(e);
   const href = (m: string, s = scope) => `/c/${companyId}/equity-changes?month=${m}&scope=${s}`;
   const tab = 'flex min-h-11 items-center border border-rule-strong px-4 aria-[current=page]:bg-ink aria-[current=page]:text-paper';
   const cell = 'border border-rule px-2 py-2';
@@ -28,7 +30,7 @@ export default async function EquityChangesPage({
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6">
       <div className="flex flex-wrap items-end gap-3 border-b-2 border-ink pb-2.5">
-        <h1 className="font-doc text-[20px] font-bold sm:text-2xl">{t.title}</h1>
+        <h1 className="font-doc text-[20px] font-bold sm:text-2xl">{L.title}</h1>
         <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
           <nav aria-label={th.statements.income} className="flex">
             <Link href={href(month, 'month')} aria-current={scope === 'month' ? 'page' : undefined} className={tab}>{th.statements.scopeMonth}</Link>
@@ -39,9 +41,9 @@ export default async function EquityChangesPage({
         </div>
       </div>
 
-      <article aria-label={t.title} className="flex flex-col gap-3 border border-rule-strong bg-paper p-4 sm:p-7">
+      <article aria-label={L.title} className="flex flex-col gap-3 border border-rule-strong bg-paper p-4 sm:p-7">
         <header className="border-b-2 border-ink pb-2 text-center">
-          <h2 className="font-doc text-[20px] font-bold">{t.title}</h2>
+          <h2 className="font-doc text-[20px] font-bold">{L.title}</h2>
           <p className="text-sm">{t.period(company.name, monthLabel(e.from), monthLabel(e.month))}</p>
           <p className="text-[13px] text-ink2">{t.unit}</p>
         </header>
@@ -53,7 +55,7 @@ export default async function EquityChangesPage({
               <th className={`${cell} text-left font-medium`}>{t.item}</th>
               {e.columns.map((c) => (
                 <th key={c.key} className={`${cell} w-36 text-right font-medium`}>
-                  {t.columns[c.key]}
+                  {L.column(c)}
                   {c.accounts.length > 0 && <span className="block font-num text-[12px] text-ink2">{c.accounts.map((a) => a.code).join(', ')}</span>}
                 </th>
               ))}
@@ -65,7 +67,7 @@ export default async function EquityChangesPage({
               const strong = r.key === 'closing' ? 'border-t-2 border-t-ink font-semibold' : r.key === 'opening' ? 'font-medium' : '';
               return (
                 <tr key={r.key}>
-                  <th scope="row" className={`${cell} text-left font-normal ${strong} ${r.key === 'opening' || r.key === 'closing' ? '' : 'pl-6'}`}>{t.rows[r.key]}</th>
+                  <th scope="row" className={`${cell} text-left font-normal ${strong} ${r.key === 'opening' || r.key === 'closing' ? '' : 'pl-6'}`}>{L.row(r.key)}</th>
                   {e.columns.map((c) => (
                     <td key={c.key} className={`${cell} text-right ${strong}`}><Money value={r.values[c.key] ?? '0.00'} className={r.key === 'closing' ? 'border-b-[3px] border-double border-ink' : ''} /></td>
                   ))}
@@ -81,11 +83,11 @@ export default async function EquityChangesPage({
           {e.rows.map((r) => (
             <li key={r.key} className={`border-b border-rule-faint py-2 ${r.key === 'closing' ? 'border-t-2 border-t-ink font-semibold' : ''}`}>
               <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
-                <span>{t.rows[r.key]}</span><Money value={r.total} />
+                <span>{L.row(r.key)}</span><Money value={r.total} />
               </div>
               <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 pl-4 text-[14px] font-normal text-ink2">
                 {e.columns.filter((c) => !/^-?0\.00$/.test(r.values[c.key] ?? '0.00')).map((c) => (
-                  <div key={c.key} className="contents"><dt>{t.columns[c.key]}</dt><dd className="text-right"><Money value={r.values[c.key]!} /></dd></div>
+                  <div key={c.key} className="contents"><dt>{L.column(c)}</dt><dd className="text-right"><Money value={r.values[c.key]!} /></dd></div>
                 ))}
               </dl>
             </li>
@@ -96,7 +98,7 @@ export default async function EquityChangesPage({
           {e.matches ? t.matches(formatMoney(e.positionEquity)) : t.mismatch(formatMoney(closing.total), formatMoney(e.positionEquity))}
         </p>
       </article>
-      <p className="text-[13px] text-ink2">{t.note}</p>
+      <p className="text-[13px] text-ink2">{L.note}</p>
     </div>
   );
 }

@@ -1,11 +1,15 @@
 import { CompanyProfileForm } from '@/components/CompanyProfileForm';
+import { EntityPanel } from '@/components/EntityPanel';
 import { serverApi } from '@/lib/server-api';
-import type { CompanyProfile } from '@/lib/api';
+import type { CompanyProfile, EntityInfo } from '@/lib/api';
 import { th } from '@/i18n/th';
 
 export default async function SettingsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
-  const profile = await serverApi<CompanyProfile>(`/companies/${companyId}/profile`);
+  const [profile, entity] = await Promise.all([
+    serverApi<CompanyProfile>(`/companies/${companyId}/profile`),
+    serverApi<EntityInfo>(`/companies/${companyId}/entity`),
+  ]);
   return (
     <div className="flex max-w-3xl flex-col gap-4 p-4 sm:p-6">
       <div className="border-b-2 border-ink pb-2.5">
@@ -15,6 +19,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ compa
       {profile.locked && <p role="status" className="border border-rule-strong bg-band px-4 py-2.5">{th.submission.lockedNote}</p>}
       {!profile.canEdit && <p className="text-sm text-ink2">{th.master.readOnly}</p>}
       <CompanyProfileForm companyId={companyId} initial={profile} editable={profile.canEdit && !profile.locked} />
+      <EntityPanel companyId={companyId} initial={entity} editable={entity.canWrite && !entity.locked} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { hashPassword, temporaryPassword } from '../passwords.js';
 import { HttpError } from '../errors.js';
 import type { RateLimiter } from '../ratelimit.js';
 import { ClassroomParams, ImportStudents, JoinClassroom, JoinCodeChars, OpenCompanies, ResetPassword, SetJoinCode, StudentParams } from '../schemas-auth.js';
+import { entityJson } from '../schemas.js';
 
 // ครู: ห้องเรียน, รีเซ็ตรหัส, เตะอุปกรณ์, การแจ้งเตือนบัญชีถูกล็อก (สิทธิ์ตรวจใน DB อีกชั้น)
 export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: AuthAdapter; limiter: RateLimiter }) {
@@ -116,10 +117,10 @@ export function teacherRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth:
 
   app.post('/classrooms/:classroomId/companies', async (req) => {
     const { classroomId } = ClassroomParams.parse(req.params);
-    const { name, mode } = OpenCompanies.parse(req.body);
+    const { name, mode, entity } = OpenCompanies.parse(req.body);
     const user = await requireUser(auth, req, ['teacher', 'admin']);
     return withUser(pool, user, async (c) =>
-      (await c.query('select created, existing from acc.open_classroom_companies($1, $2, $3)', [classroomId, name, mode])).rows[0]);
+      (await c.query('select created, existing from acc.open_classroom_companies($1, $2, $3, $4::jsonb)', [classroomId, name, mode, JSON.stringify(entityJson(entity))])).rows[0]);
   });
 
   // งานที่ส่ง: ทุกห้องที่สอน เรียงงานที่รอตรวจก่อน

@@ -161,6 +161,15 @@ export async function ledger(c: pg.PoolClient, companyId: string, month: string,
   };
 }
 
+export type Allocation = { no: number; name: string; salary: string; interest: string; share: string; total: string };
+/** แบ่งกำไรขาดทุนของห้างหุ้นส่วนตามสัญญา (เดือน from ถึงเดือน to) */
+export async function partnershipAllocation(c: pg.PoolClient, companyId: string, from: string, to: string, profit: string): Promise<Allocation[]> {
+  return (await c.query(
+    `select no, name, salary::numeric(18,2)::text as salary, interest::numeric(18,2)::text as interest,
+            share::numeric(18,2)::text as share, total::numeric(18,2)::text as total
+       from acc.partnership_allocation($1, $2::date, $3::date, $4::numeric) order by no`, [companyId, from, to, profit])).rows;
+}
+
 type StLine = { code: string; name: string; amount: string };
 export type StatementsData = {
   month: string; scope: 'month' | 'ytd'; from: string;
@@ -178,6 +187,9 @@ export type StatementsData = {
   multiStep: IncomeMultiStep;
   /** งบแสดงฐานะการเงินแยกหมุนเวียน/ไม่หมุนเวียน */
   classified: ClassifiedPosition;
+  /** ประเภทกิจการ (docs/phase7-spec.md ข้อ 1) · ห้างหุ้นส่วน: การแบ่งกำไร(ขาดทุน)สุทธิของงวดตามสัญญา */
+  entityType: 'sole' | 'partnership' | 'company';
+  allocation: Allocation[] | null;
 };
 
 export type CostOfSales = {
@@ -366,7 +378,9 @@ export async function statements(c: pg.PoolClient, companyId: string, month: str
   );
   const st = r.rows[0].st;
   const parts = await multiStepParts(c, companyId, from, to, fy.start, st.revenue, st.expense, st.assets, st.liabilities);
-  return { month, scope, from: from.slice(0, 7), fiscalYear: { start: fy.start, end: fy.end }, ...st, ...parts };
+  const entityType = (await c.query(`select entity_type from acc.companies where id = $1`, [companyId])).rows[0]?.entity_type ?? 'sole';
+  const allocation = entityType === 'partnership' ? await partnershipAllocation(c, companyId, from, to, st.netIncome) : null;
+  return { month, scope, from: from.slice(0, 7), fiscalYear: { start: fy.start, end: fy.end }, ...st, ...parts, entityType, allocation };
 }
 
 // ---- กระดาษทำการ ----

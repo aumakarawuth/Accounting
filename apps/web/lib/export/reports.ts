@@ -4,6 +4,7 @@ import { isoToThai, monthEndLabel, monthLabel } from '../date';
 import { formatMoney, fromCents, toCents } from '../money';
 import type { Column, Report, Row, Section } from './model';
 import { cashFlowRows } from '../cashflow-lines';
+import { equityLabels } from '../equity-labels';
 
 // แปลงข้อมูลจาก API (ชุดเดียวกับหน้าจอ) เป็นโครงรายงานกลาง หัวคอลัมน์/ข้อความมาจาก i18n/th.ts
 
@@ -104,6 +105,10 @@ export function statementsReport(company: string, st: Statements, now = new Date
       ...(m.incomeTax.length ? [step([s.profitBeforeTax, s.lossBeforeTax], m.profitBeforeTax),
         ...group(s.incomeTax, m.incomeTax, s.totalIncomeTax, m.totalIncomeTax)] : []),
       { cells: [null, loss ? s.netLoss : s.netProfit, loss ? st.netIncome.slice(1) : st.netIncome], style: 'total' },
+      ...(st.allocation?.length ? [
+        { cells: [null, th.entity.allocation, null], style: 'heading' } as Row,
+        ...st.allocation.map((a): Row => ({ cells: [null, th.entity.allocationLine(a.name, formatMoney(a.salary), formatMoney(a.interest), formatMoney(a.share)), a.total], indent: 1 })),
+      ] : []),
     ],
   };
   const position: Section = {
@@ -116,11 +121,11 @@ export function statementsReport(company: string, st: Statements, now = new Date
       ...group(s.currentLiabilities, k.currentLiabilities, s.totalCurrentLiabilities, k.totalCurrentLiabilities),
       ...group(s.nonCurrentLiabilities, k.nonCurrentLiabilities, s.totalNonCurrentLiabilities, k.totalNonCurrentLiabilities),
       { cells: [null, s.totalLiabilities, st.totalLiabilities], style: 'subtotal' },
-      { cells: [null, s.equity, null], style: 'heading' },
+      { cells: [null, th.entity.equityHeadings[st.entityType ?? 'sole'] ?? s.equity, null], style: 'heading' },
       ...lines(st.equity),
       { cells: [null, s.yearProfit, st.yearProfit], indent: 1 },
       ...(zero(st.priorUnclosedProfit) ? [] : [{ cells: [null, s.priorUnclosed, st.priorUnclosedProfit], indent: 1 } as Row]),
-      { cells: [null, s.totalEquity, st.totalEquity], style: 'subtotal' },
+      { cells: [null, th.entity.totalEquity[st.entityType ?? 'sole'] ?? s.totalEquity, st.totalEquity], style: 'subtotal' },
       { cells: [null, s.totalLiabilitiesEquity, st.totalLiabilitiesEquity], style: 'total' },
     ],
   };
@@ -217,18 +222,19 @@ export function cashFlowReport(company: string, cf: CashFlow, method: 'indirect'
 /** งบแสดงการเปลี่ยนแปลงส่วนของเจ้าของ (docs/phase6-spec.md ข้อ 3) */
 export function equityChangesReport(company: string, e: EquityChanges, now = new Date()): Report {
   const t = th.equityChanges;
+  const L = equityLabels(e);
   return {
-    fileName: fileName(t.title, company, e.month), sheetName: t.title.slice(0, 31), company, title: t.title,
+    fileName: fileName(L.title, company, e.month), sheetName: L.title.slice(0, 31), company, title: L.title,
     subtitle: `${e.scope === 'month' ? th.statements.scopeMonth : th.statements.scopeYtd} · ${t.period(company, monthLabel(e.from), monthLabel(e.month))}`,
     orientation: 'landscape', printedAt: printedAt(now),
     sections: [{
-      columns: [{ label: t.item, width: 30 }, ...e.columns.map((c) => money(t.columns[c.key]!, 16)), money(t.total, 16)],
+      columns: [{ label: t.item, width: 30 }, ...e.columns.map((c) => money(L.column(c), 16)), money(t.total, 16)],
       rows: e.rows.map((r): Row => ({
-        cells: [t.rows[r.key]!, ...e.columns.map((c) => r.values[c.key] ?? null), r.total],
+        cells: [L.row(r.key), ...e.columns.map((c) => r.values[c.key] ?? null), r.total],
         ...(r.key === 'closing' ? { style: 'total' as const } : r.key === 'opening' ? { style: 'subtotal' as const } : { indent: 1 }),
       })),
     }],
-    notes: [e.matches ? t.matches(formatMoney(e.positionEquity)) : t.mismatch(formatMoney(e.rows.at(-1)?.total ?? '0.00'), formatMoney(e.positionEquity)), t.note, th.export.unit],
+    notes: [e.matches ? t.matches(formatMoney(e.positionEquity)) : t.mismatch(formatMoney(e.rows.at(-1)?.total ?? '0.00'), formatMoney(e.positionEquity)), L.note, th.export.unit],
   };
 }
 
