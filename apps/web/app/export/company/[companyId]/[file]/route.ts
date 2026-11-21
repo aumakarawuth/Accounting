@@ -1,8 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { serverApi } from '@/lib/server-api';
-import type { Company, Ledger, LedgerAccount, Statements, TrialBalance, Worksheet } from '@/lib/api';
+import type { CashFlow, Company, Ledger, LedgerAccount, SpecialJournal, Statements, TrialBalance, Worksheet } from '@/lib/api';
 import { isMonth } from '@/lib/date';
-import { ledgerReport, statementsReport, trialBalanceReport, worksheetReport } from '@/lib/export/reports';
+import { cashFlowReport, ledgerReport, specialJournalReport, statementsReport, trialBalanceReport, worksheetReport } from '@/lib/export/reports';
 import { exportError, sendReport, type ExportFormat } from '@/lib/export/respond';
 import { th } from '@/i18n/th';
 
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 // /export/company/<id>/<รายงาน>.<pdf|xlsx>?month=YYYY-MM — ข้อมูลจาก API ชุดเดียวกับหน้าจอ (สิทธิ์ตัดสินที่ API/RLS)
-const FILE = /^(trial-balance|ledger|statements|worksheet)\.(pdf|xlsx)$/;
+const FILE = /^(trial-balance|ledger|statements|worksheet|journal-sales|journal-purchases|journal-receipts|journal-payments|journal-general|cash-flow)\.(pdf|xlsx)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ companyId: string; file: string }> }) {
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ comp
   if (!m || !UUID.test(companyId) || !isMonth(month)) {
     return new Response(th.error.notFound, { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   }
-  const [, report, format] = m as unknown as [string, 'trial-balance' | 'ledger' | 'statements' | 'worksheet', ExportFormat];
+  const [, report, format] = m as unknown as [string, string, ExportFormat];
   const base = `/companies/${companyId}`;
   try {
     const company = await serverApi<Company>(base);
@@ -35,6 +35,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ comp
       const ledgers: Ledger[] = [];
       for (const a of accounts) ledgers.push(await serverApi<Ledger>(`${base}/ledger?month=${month}&account=${encodeURIComponent(a.code)}`));
       return sendReport(ledgerReport(company.name, month, ledgers), format, ascii);
+    }
+    if (report.startsWith('journal-')) {
+      const j = await serverApi<SpecialJournal>(`${base}/books?month=${month}&book=${report.slice('journal-'.length)}`);
+      return sendReport(specialJournalReport(company.name, j), format, ascii);
+    }
+    if (report === 'cash-flow') {
+      const scope = sp.get('scope') === 'month' ? 'month' : 'ytd';
+      const cf = await serverApi<CashFlow>(`${base}/cash-flow?month=${month}&scope=${scope}`);
+      return sendReport(cashFlowReport(company.name, cf, sp.get('method') === 'direct' ? 'direct' : 'indirect'), format, ascii);
     }
     if (report === 'statements') {
       const scope = sp.get('scope') === 'month' ? 'month' : 'ytd';

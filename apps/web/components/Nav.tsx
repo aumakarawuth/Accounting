@@ -15,10 +15,12 @@ export function studentNav(companyId: string): Group[] {
     { title: n.group.gl, items: [
       { label: n.chartOfAccounts, href: c('/accounts') },
       { label: n.journal, href: c('/journal') },
+      { label: n.specialJournals, href: c('/books') },
       { label: n.ledger, href: c('/ledger') },
       { label: n.trialBalance, href: c('/trial-balance') },
       { label: n.worksheet, href: c('/worksheet') },
       { label: n.statements, href: c('/statements') },
+      { label: n.cashFlow, href: c('/cash-flow') },
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [

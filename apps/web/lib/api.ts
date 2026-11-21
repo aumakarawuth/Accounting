@@ -59,6 +59,33 @@ export type Ledger = {
   opening: string; closing: string; totalDebit: string; totalCredit: string;
   lines: { date: string; docNo: string; description: string; memo: string; debit: string; credit: string; balance: string; reversal: boolean }[];
 };
+export type BookKey = 'sales' | 'purchases' | 'receipts' | 'payments' | 'general';
+export type SpecialJournal = {
+  month: string; book: BookKey;
+  columns: { key: string; code: string; name: string; side: 'debit' | 'credit'; total: string }[];
+  rows: {
+    entryId: string; date: string; docNo: string; vendorDocNo: string | null; party: string | null; description: string;
+    reversal: boolean; reversesDocNo: string | null; cells: Record<string, string>;
+    others: { code: string; name: string; debit: string; credit: string; memo: string }[];
+  }[];
+  othersTotal: { debit: string; credit: string };
+  posting: { code: string; name: string; debit: string; credit: string; via: 'column' | 'others' | 'both' }[];
+  totalDebit: string; totalCredit: string; balanced: boolean; counts: Record<BookKey, number>;
+};
+export type CfLine = { code: string; name: string; amount: string };
+export type CfFlow = CfLine & { kind: 'in' | 'out' };
+export type CashFlow = {
+  month: string; scope: 'month' | 'ytd'; from: string; fiscalYear: FiscalYearRange;
+  operating: {
+    netIncome: string; adjustments: CfLine[]; workingCapital: (CfLine & { kind: 'asset' | 'liability' })[];
+    direct: { key: string; amount: string }[]; total: string;
+  };
+  investing: { lines: CfFlow[]; total: string }; financing: { lines: CfFlow[]; total: string };
+  netChange: string; openingCash: string; closingCash: string;
+  cashAccounts: { code: string; name: string; opening: string; closing: string }[];
+  ledgerCash: string; matches: boolean;
+  nonCash: { docNo: string; date: string; description: string; amount: string }[];
+};
 export type MyCompany = { id: string; name: string; classroom: string | null };
 type Line = { code: string; name: string; amount: string };
 export type Statements = {
