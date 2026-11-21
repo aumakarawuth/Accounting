@@ -25,6 +25,7 @@ import { cashRoutes } from './routes/cash.js';
 import { exerciseRoutes } from './routes/exercises.js';
 import { curriculumRoutes } from './routes/curriculum.js';
 import { entityRoutes } from './routes/entities.js';
+import { incomeTaxRoutes } from './routes/incomeTax.js';
 import type { RealtimeBus } from './realtime.js';
 import { teacherRoutes } from './routes/teacher.js';
 
@@ -111,6 +112,7 @@ export function buildApp(opts: {
     exerciseRoutes(scope, opts.pool, auth);
     curriculumRoutes(scope, opts.pool, auth);
     entityRoutes(scope, opts.pool, auth);
+    incomeTaxRoutes(scope, opts.pool, auth);
     teacherRoutes(scope, { pool: opts.pool, auth, limiter });
     adminRoutes(scope, { pool: opts.pool, auth });
     liveRoutes(scope, { pool: opts.pool, auth, bus: opts.bus, streamMaxMs: opts.streamMaxMs, onStream: opts.metrics?.stream });

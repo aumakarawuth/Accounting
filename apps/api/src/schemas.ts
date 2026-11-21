@@ -557,3 +557,12 @@ export const DividendPay = z.object({ date: IsoDate, cashAccount: AccountCode })
 export const DividendParams = z.object({ companyId: Uuid, id: Uuid });
 export const DividendVoid = z.object({ what: z.enum(['payment', 'declaration']), date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
 export const DateQuery = z.object({ date: IsoDate.optional() });
+
+// ---- เฟส 7 โมดูล 2: ภาษีเงินได้นิติบุคคล ----
+export const IncomeTaxQuery = z.object({ yearEnd: IsoDate.optional() });
+export const IncomeTaxInput = z.object({
+  form: z.enum(['51', '50']), yearEnd: IsoDate, date: IsoDate.optional(),
+  estimatedProfit: SignedMoney.optional(), estimatedRevenue: Money.optional(), useWht: z.boolean().default(false), cashAccount: AccountCode.optional(),
+}).strict();
+export const IncomeTaxPay = z.object({ date: IsoDate, cashAccount: AccountCode }).strict();
+export const IncomeTaxVoid = z.object({ what: z.enum(['payment', 'filing']), date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();

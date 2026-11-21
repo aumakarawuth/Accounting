@@ -507,3 +507,17 @@ export type PettyCashPage = {
   reimbursements: { id: string; docNo: string; date: string; cashAccount: string; total: string; voided: boolean; voidReason: string | null; vouchers: string[] }[];
   cashAccounts: CodeName[]; expenseAccounts: CodeName[];
 };
+
+export type CitPreview = {
+  form: '51' | '50'; yearStart: string; yearEnd: string; periodEnd: string; date: string; actualProfit: string; actualRevenue: string;
+  profit: string; revenue: string; paidUp: string; sme: boolean; taxFull: string; tax: string; creditPrepaid: string; whtBalance: string; creditWht: string; payable: string;
+};
+export type IncomeTaxFiling = {
+  id: string; form: '51' | '50'; yearStart: string; yearEnd: string; date: string; actualProfit: string; profit: string; revenue: string; paidUp: string; sme: boolean;
+  taxFull: string; tax: string; creditPrepaid: string; creditWht: string; payable: string; entryId: string | null; docNo: string | null;
+  paidOn: string | null; payDocNo: string | null; voided: boolean; voidDocNo: string | null; voidReason: string | null;
+};
+export type IncomeTaxPage = {
+  entityType: EntityType; canWrite: boolean; locked: boolean; years: { start: string; end: string }[]; yearEnd?: string;
+  preview51?: CitPreview; preview50?: CitPreview; filings: IncomeTaxFiling[]; cashAccounts: { code: string; name: string }[];
+};

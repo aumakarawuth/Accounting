@@ -50,6 +50,7 @@ export function studentNav(companyId: string): Group[] {
     { title: n.group.tax, items: [
       { label: n.vat, href: c('/tax/vat') },
       { label: n.wht, href: c('/tax/wht') },
+      { label: n.incomeTax, href: c('/tax/income-tax') },
     ] },
     { title: n.group.cash, items: [
       { label: n.pettyCash, href: c('/cash/petty-cash') },
