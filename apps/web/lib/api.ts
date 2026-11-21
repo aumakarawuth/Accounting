@@ -72,6 +72,20 @@ export type SpecialJournal = {
   posting: { code: string; name: string; debit: string; credit: string; via: 'column' | 'others' | 'both' }[];
   totalDebit: string; totalCredit: string; balanced: boolean; counts: Record<BookKey, number>;
 };
+export type CfLine = { code: string; name: string; amount: string };
+export type CfFlow = CfLine & { kind: 'in' | 'out' };
+export type CashFlow = {
+  month: string; scope: 'month' | 'ytd'; from: string; fiscalYear: FiscalYearRange;
+  operating: {
+    netIncome: string; adjustments: CfLine[]; workingCapital: (CfLine & { kind: 'asset' | 'liability' })[];
+    direct: { key: string; amount: string }[]; total: string;
+  };
+  investing: { lines: CfFlow[]; total: string }; financing: { lines: CfFlow[]; total: string };
+  netChange: string; openingCash: string; closingCash: string;
+  cashAccounts: { code: string; name: string; opening: string; closing: string }[];
+  ledgerCash: string; matches: boolean;
+  nonCash: { docNo: string; date: string; description: string; amount: string }[];
+};
 export type MyCompany = { id: string; name: string; classroom: string | null };
 type Line = { code: string; name: string; amount: string };
 export type Statements = {

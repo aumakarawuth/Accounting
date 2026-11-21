@@ -20,6 +20,7 @@ export function studentNav(companyId: string): Group[] {
       { label: n.trialBalance, href: c('/trial-balance') },
       { label: n.worksheet, href: c('/worksheet') },
       { label: n.statements, href: c('/statements') },
+      { label: n.cashFlow, href: c('/cash-flow') },
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [

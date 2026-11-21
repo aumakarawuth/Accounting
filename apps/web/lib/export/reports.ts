@@ -1,8 +1,9 @@
 import { th } from '../../i18n/th';
-import type { AssignmentOverview, Ledger, SpecialJournal, Statements, TrialBalance, Worksheet, WsPair } from '../api';
+import type { AssignmentOverview, CashFlow, Ledger, SpecialJournal, Statements, TrialBalance, Worksheet, WsPair } from '../api';
 import { isoToThai, monthEndLabel, monthLabel } from '../date';
 import { formatMoney, fromCents, toCents } from '../money';
 import type { Column, Report, Row, Section } from './model';
+import { cashFlowRows } from '../cashflow-lines';
 
 // แปลงข้อมูลจาก API (ชุดเดียวกับหน้าจอ) เป็นโครงรายงานกลาง หัวคอลัมน์/ข้อความมาจาก i18n/th.ts
 
@@ -181,6 +182,35 @@ export function specialJournalReport(company: string, j: SpecialJournal, now = n
     subtitle: th.export.period(monthLabel(j.month)), orientation: general ? 'portrait' : 'landscape', printedAt: printedAt(now),
     sections: j.rows.length ? [main, posting] : [{ columns: [{ label: t.account, width: 60 }], rows: [{ cells: [t.empty] }] }],
     notes: [j.balanced ? t.balanced(formatMoney(j.totalDebit)) : t.unbalanced(formatMoney(j.totalDebit), formatMoney(j.totalCredit)), t.postingNote, t.rule, th.export.unit],
+  };
+}
+
+/** งบกระแสเงินสด (docs/phase6-spec.md ข้อ 2) บรรทัดชุดเดียวกับหน้าจอ */
+export function cashFlowReport(company: string, cf: CashFlow, method: 'indirect' | 'direct', now = new Date()): Report {
+  const t = th.cashFlow;
+  const rows: Row[] = cashFlowRows(cf, method).map((r): Row => ({
+    cells: [r.code ?? null, r.label, r.amount], ...(r.style === 'line' ? { indent: 1 } : { style: r.style }),
+  }));
+  const sections: Section[] = [{
+    heading: `${t.title} (${method === 'indirect' ? t.indirect : t.direct}) · ${t.period(company, monthLabel(cf.from), monthLabel(cf.month))}`,
+    columns: [{ label: th.trialBalance.code, width: 10, kind: 'mono' }, { label: th.ledger.description, width: 52 }, money(th.invoice.amount, 18)],
+    rows,
+  }, {
+    heading: t.cashAccounts,
+    columns: [{ label: th.trialBalance.code, width: 10, kind: 'mono' }, { label: th.books.othersAccount, width: 34 }, money(t.accountOpening, 18), money(t.accountClosing, 18)],
+    rows: [...cf.cashAccounts.map((a): Row => ({ cells: [a.code, a.name, a.opening, a.closing] })),
+      { cells: [null, th.books.total, cf.openingCash, cf.ledgerCash], style: 'total' }],
+  }];
+  if (cf.nonCash.length) sections.push({
+    heading: t.nonCash,
+    columns: [{ label: th.books.docNo, width: 12, kind: 'mono' }, { label: th.books.date, width: 12, kind: 'mono' }, { label: th.ledger.description, width: 38 }, money(th.invoice.amount, 16)],
+    rows: cf.nonCash.map((n): Row => ({ cells: [n.docNo, isoToThai(n.date), n.description, n.amount] })),
+  });
+  return {
+    fileName: fileName(t.title, company, cf.month), sheetName: t.title, company, title: t.title,
+    subtitle: `${cf.scope === 'month' ? th.statements.scopeMonth : th.statements.scopeYtd} · ${th.export.asOf(monthEndLabel(cf.month))}`,
+    orientation: 'portrait', printedAt: printedAt(now), sections,
+    notes: [cf.matches ? t.matches(formatMoney(cf.closingCash)) : t.mismatch(formatMoney(cf.closingCash), formatMoney(cf.ledgerCash)), t.note, th.export.unit],
   };
 }
 
