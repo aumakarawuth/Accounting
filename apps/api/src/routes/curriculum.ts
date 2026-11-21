@@ -5,6 +5,7 @@ import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser } from '../guard.js';
 import { specialJournal } from '../books.js';
 import { cashFlow } from '../cashflow.js';
+import { equityChanges } from '../equity.js';
 import { BookQuery, StatementsQuery } from '../schemas.js';
 import { HttpError } from '../errors.js';
 
@@ -31,6 +32,17 @@ export function curriculumRoutes(app: FastifyInstance, pool: pg.Pool, auth: Auth
     return withUser(pool, await user(req), async (c) => {
       await requireReadable(c, id);
       return cashFlow(c, id, month, scope);
+    });
+  });
+
+  // ข้อ 3 งบแสดงการเปลี่ยนแปลงส่วนของเจ้าของ
+  app.get('/companies/:companyId/equity-changes', async (req) => {
+    const id = companyId(req);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(400, 'invalid', 'รหัสบริษัทไม่ถูกต้อง');
+    const { month, scope } = StatementsQuery.parse(req.query);
+    return withUser(pool, await user(req), async (c) => {
+      await requireReadable(c, id);
+      return equityChanges(c, id, month, scope);
     });
   });
 }

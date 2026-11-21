@@ -1,8 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { serverApi } from '@/lib/server-api';
-import type { CashFlow, Company, Ledger, LedgerAccount, SpecialJournal, Statements, TrialBalance, Worksheet } from '@/lib/api';
+import type { CashFlow, Company, EquityChanges, Ledger, LedgerAccount, SpecialJournal, Statements, TrialBalance, Worksheet } from '@/lib/api';
 import { isMonth } from '@/lib/date';
-import { cashFlowReport, ledgerReport, specialJournalReport, statementsReport, trialBalanceReport, worksheetReport } from '@/lib/export/reports';
+import { cashFlowReport, equityChangesReport, ledgerReport, specialJournalReport, statementsReport, trialBalanceReport, worksheetReport } from '@/lib/export/reports';
 import { exportError, sendReport, type ExportFormat } from '@/lib/export/respond';
 import { th } from '@/i18n/th';
 
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 // /export/company/<id>/<รายงาน>.<pdf|xlsx>?month=YYYY-MM — ข้อมูลจาก API ชุดเดียวกับหน้าจอ (สิทธิ์ตัดสินที่ API/RLS)
-const FILE = /^(trial-balance|ledger|statements|worksheet|journal-sales|journal-purchases|journal-receipts|journal-payments|journal-general|cash-flow)\.(pdf|xlsx)$/;
+const FILE = /^(trial-balance|ledger|statements|worksheet|journal-sales|journal-purchases|journal-receipts|journal-payments|journal-general|cash-flow|equity-changes)\.(pdf|xlsx)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ companyId: string; file: string }> }) {
@@ -39,6 +39,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ comp
     if (report.startsWith('journal-')) {
       const j = await serverApi<SpecialJournal>(`${base}/books?month=${month}&book=${report.slice('journal-'.length)}`);
       return sendReport(specialJournalReport(company.name, j), format, ascii);
+    }
+    if (report === 'equity-changes') {
+      const scope = sp.get('scope') === 'month' ? 'month' : 'ytd';
+      return sendReport(equityChangesReport(company.name, await serverApi<EquityChanges>(`${base}/equity-changes?month=${month}&scope=${scope}`)), format, ascii);
     }
     if (report === 'cash-flow') {
       const scope = sp.get('scope') === 'month' ? 'month' : 'ytd';

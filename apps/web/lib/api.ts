@@ -86,6 +86,13 @@ export type CashFlow = {
   ledgerCash: string; matches: boolean;
   nonCash: { docNo: string; date: string; description: string; amount: string }[];
 };
+export type EquityCol = 'capital' | 'retained' | 'drawings' | 'other';
+export type EquityChanges = {
+  month: string; scope: 'month' | 'ytd'; from: string;
+  columns: { key: EquityCol; accounts: { code: string; name: string }[] }[];
+  rows: { key: string; values: Partial<Record<EquityCol, string>>; total: string }[];
+  netIncome: string; positionEquity: string; matches: boolean;
+};
 export type MyCompany = { id: string; name: string; classroom: string | null };
 type Line = { code: string; name: string; amount: string };
 export type Statements = {

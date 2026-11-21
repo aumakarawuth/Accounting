@@ -1,5 +1,5 @@
 import { th } from '../../i18n/th';
-import type { AssignmentOverview, CashFlow, Ledger, SpecialJournal, Statements, TrialBalance, Worksheet, WsPair } from '../api';
+import type { AssignmentOverview, CashFlow, EquityChanges, Ledger, SpecialJournal, Statements, TrialBalance, Worksheet, WsPair } from '../api';
 import { isoToThai, monthEndLabel, monthLabel } from '../date';
 import { formatMoney, fromCents, toCents } from '../money';
 import type { Column, Report, Row, Section } from './model';
@@ -211,6 +211,24 @@ export function cashFlowReport(company: string, cf: CashFlow, method: 'indirect'
     subtitle: `${cf.scope === 'month' ? th.statements.scopeMonth : th.statements.scopeYtd} · ${th.export.asOf(monthEndLabel(cf.month))}`,
     orientation: 'portrait', printedAt: printedAt(now), sections,
     notes: [cf.matches ? t.matches(formatMoney(cf.closingCash)) : t.mismatch(formatMoney(cf.closingCash), formatMoney(cf.ledgerCash)), t.note, th.export.unit],
+  };
+}
+
+/** งบแสดงการเปลี่ยนแปลงส่วนของเจ้าของ (docs/phase6-spec.md ข้อ 3) */
+export function equityChangesReport(company: string, e: EquityChanges, now = new Date()): Report {
+  const t = th.equityChanges;
+  return {
+    fileName: fileName(t.title, company, e.month), sheetName: t.title.slice(0, 31), company, title: t.title,
+    subtitle: `${e.scope === 'month' ? th.statements.scopeMonth : th.statements.scopeYtd} · ${t.period(company, monthLabel(e.from), monthLabel(e.month))}`,
+    orientation: 'landscape', printedAt: printedAt(now),
+    sections: [{
+      columns: [{ label: t.item, width: 30 }, ...e.columns.map((c) => money(t.columns[c.key]!, 16)), money(t.total, 16)],
+      rows: e.rows.map((r): Row => ({
+        cells: [t.rows[r.key]!, ...e.columns.map((c) => r.values[c.key] ?? null), r.total],
+        ...(r.key === 'closing' ? { style: 'total' as const } : r.key === 'opening' ? { style: 'subtotal' as const } : { indent: 1 }),
+      })),
+    }],
+    notes: [e.matches ? t.matches(formatMoney(e.positionEquity)) : t.mismatch(formatMoney(e.rows.at(-1)?.total ?? '0.00'), formatMoney(e.positionEquity)), t.note, th.export.unit],
   };
 }
 
