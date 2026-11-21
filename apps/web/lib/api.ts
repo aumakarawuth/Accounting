@@ -521,3 +521,13 @@ export type IncomeTaxPage = {
   entityType: EntityType; canWrite: boolean; locked: boolean; years: { start: string; end: string }[]; yearEnd?: string;
   preview51?: CitPreview; preview50?: CitPreview; filings: IncomeTaxFiling[]; cashAccounts: { code: string; name: string }[];
 };
+export type PayrollPage = {
+  month: string; canWrite: boolean; locked: boolean; ceiling: string;
+  employees: { id: string; code: string; name: string; position: string; salary: string; sso: boolean; active: boolean; version: number }[];
+  runs: { id: string; month: string; payDate: string; wages: string; ssoEmployee: string; ssoEmployer: string; wht: string; net: string; entryId: string; docNo: string;
+    cashAccount: string; voided: boolean; voidDocNo: string | null; voidReason: string | null }[];
+  lines: { runId: string; code: string; name: string; position: string; salary: string; otherIncome: string; wageBase: string; ssoEmployee: string; ssoEmployer: string; wht: string; net: string }[];
+  remittances: { id: string; kind: 'sso' | 'pnd1'; date: string; amount: string; entryId: string; docNo: string; voided: boolean; voidDocNo: string | null }[];
+  year: { code: string; name: string; months: number; income: string; sso: string; wht: string }[];
+  cashAccounts: { code: string; name: string }[];
+};

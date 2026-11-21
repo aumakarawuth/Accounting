@@ -566,3 +566,16 @@ export const IncomeTaxInput = z.object({
 }).strict();
 export const IncomeTaxPay = z.object({ date: IsoDate, cashAccount: AccountCode }).strict();
 export const IncomeTaxVoid = z.object({ what: z.enum(['payment', 'filing']), date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
+
+// ---- เฟส 7 โมดูล 3: เงินเดือน ----
+export const EmployeeInput = z.object({
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{1,20}$/, 'รหัสพนักงานใช้ตัวอักษรอังกฤษ ตัวเลข ขีด ไม่เกิน 20 ตัว'),
+  name: z.string().trim().min(1, 'ต้องมีชื่อพนักงาน').max(120), position: z.string().trim().max(120).default(''),
+  salary: Money, sso: z.boolean().default(true), active: z.boolean().default(true), version: z.number().int().positive().optional(),
+}).strict();
+export const EmployeeParams = z.object({ companyId: Uuid, id: Uuid });
+const PayrollLine = z.object({ employee: z.string().trim().toUpperCase().max(20), salary: Money, otherIncome: Money.default('0'), wht: Money.default('0') }).strict();
+export const PayrollPreview = z.object({ month: Month, lines: z.array(PayrollLine).min(1).max(500) }).strict();
+export const PayrollInput = z.object({ month: Month, payDate: IsoDate, cashAccount: AccountCode, lines: z.array(PayrollLine).min(1).max(500) }).strict();
+export const PayrollRemit = z.object({ month: Month, kind: z.enum(['sso', 'pnd1']), date: IsoDate, cashAccount: AccountCode }).strict();
+export const PayrollVoidParams = z.object({ companyId: Uuid, kind: z.enum(['run', 'remittance']), id: Uuid });

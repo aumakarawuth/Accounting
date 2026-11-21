@@ -1,5 +1,5 @@
 import { th } from '../../i18n/th';
-import type { AssignmentOverview, CashFlow, EquityChanges, Ledger, SpecialJournal, Statements, TrialBalance, Worksheet, WsPair } from '../api';
+import type { AssignmentOverview, CashFlow, EquityChanges, PayrollPage, Ledger, SpecialJournal, Statements, TrialBalance, Worksheet, WsPair } from '../api';
 import { isoToThai, monthEndLabel, monthLabel } from '../date';
 import { formatMoney, fromCents, toCents } from '../money';
 import type { Column, Report, Row, Section } from './model';
@@ -306,5 +306,35 @@ export function scoresReport(ov: AssignmentOverview, opts: { maxItemColumns?: nu
     orientation: opts.orientation ?? (showItems && itemNos.length > 6 ? 'landscape' : 'portrait'), printedAt: printedAt(now),
     sections: [{ columns, rows }],
     notes: showItems ? [] : [th.export.itemsInExcel],
+  };
+}
+
+/** รายงานเงินเดือนของเดือน: รายคน · นำส่ง · สรุปทั้งปีรายคน (docs/phase7-spec.md ข้อ 3) */
+export function payrollReport(company: string, p: PayrollPage, now = new Date()): Report {
+  const t = th.payroll;
+  const run = p.runs.find((r) => !r.voided);
+  const lines = run ? p.lines.filter((l) => l.runId === run.id) : [];
+  const y = String(Number(p.month.slice(0, 4)) + 543);
+  return {
+    fileName: fileName(t.exportTitle, company, p.month), sheetName: t.exportTitle, company, title: t.exportTitle,
+    subtitle: t.run(monthLabel(p.month)), orientation: 'landscape', printedAt: printedAt(now),
+    sections: [
+      {
+        heading: run ? `${t.run(monthLabel(p.month))} · ${run.docNo} · ${t.paidOn(isoToThai(run.payDate))}` : t.notYet,
+        columns: [{ label: t.code, width: 8, kind: 'mono' }, { label: t.name, width: 24 }, money(t.salary, 13), money(t.otherIncome, 13),
+          money(t.wageBase, 13), money(t.ssoEmployee, 13), money(t.ssoEmployer, 13), money(t.wht, 13), money(t.net, 14)],
+        rows: [
+          ...lines.map((l): Row => ({ cells: [l.code, l.name, l.salary, l.otherIncome, l.wageBase, l.ssoEmployee, l.ssoEmployer, l.wht, l.net] })),
+          ...(run ? [{ cells: [null, t.total, null, null, null, run.ssoEmployee, run.ssoEmployer, run.wht, run.net], style: 'total' } as Row] : []),
+        ],
+      },
+      {
+        heading: t.year(y),
+        columns: [{ label: t.code, width: 8, kind: 'mono' }, { label: t.name, width: 24 }, { label: t.months, width: 8, kind: 'number' },
+          money(t.income, 15), money(t.ssoEmployee, 15), money(t.wht, 15)],
+        rows: p.year.map((r): Row => ({ cells: [r.code, r.name, String(r.months), r.income, r.sso, r.wht] })),
+      },
+    ],
+    notes: [t.note(formatMoney(p.ceiling)), th.export.unit],
   };
 }

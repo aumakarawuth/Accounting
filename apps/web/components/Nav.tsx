@@ -24,6 +24,7 @@ export function studentNav(companyId: string): Group[] {
       { label: n.cashFlow, href: c('/cash-flow') },
       { label: n.adjustments, href: c('/adjustments') },
       { label: n.dividends, href: c('/dividends') },
+      { label: n.payroll, href: c('/payroll') },
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [
