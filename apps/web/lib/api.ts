@@ -59,6 +59,60 @@ export type Ledger = {
   opening: string; closing: string; totalDebit: string; totalCredit: string;
   lines: { date: string; docNo: string; description: string; memo: string; debit: string; credit: string; balance: string; reversal: boolean }[];
 };
+export type BookKey = 'sales' | 'purchases' | 'receipts' | 'payments' | 'general';
+export type SpecialJournal = {
+  month: string; book: BookKey;
+  columns: { key: string; code: string; name: string; side: 'debit' | 'credit'; total: string }[];
+  rows: {
+    entryId: string; date: string; docNo: string; vendorDocNo: string | null; party: string | null; description: string;
+    reversal: boolean; reversesDocNo: string | null; cells: Record<string, string>;
+    others: { code: string; name: string; debit: string; credit: string; memo: string }[];
+  }[];
+  othersTotal: { debit: string; credit: string };
+  posting: { code: string; name: string; debit: string; credit: string; via: 'column' | 'others' | 'both' }[];
+  totalDebit: string; totalCredit: string; balanced: boolean; counts: Record<BookKey, number>;
+};
+export type CfLine = { code: string; name: string; amount: string };
+export type CfFlow = CfLine & { kind: 'in' | 'out' };
+export type CashFlow = {
+  month: string; scope: 'month' | 'ytd'; from: string; fiscalYear: FiscalYearRange;
+  operating: {
+    netIncome: string; adjustments: CfLine[]; workingCapital: (CfLine & { kind: 'asset' | 'liability' })[];
+    direct: { key: string; amount: string }[]; total: string;
+  };
+  investing: { lines: CfFlow[]; total: string }; financing: { lines: CfFlow[]; total: string };
+  netChange: string; openingCash: string; closingCash: string;
+  cashAccounts: { code: string; name: string; opening: string; closing: string }[];
+  ledgerCash: string; matches: boolean;
+  nonCash: { docNo: string; date: string; description: string; amount: string }[];
+};
+export type EquityCol = 'capital' | 'retained' | 'drawings' | 'other';
+export type EquityChanges = {
+  month: string; scope: 'month' | 'ytd'; from: string;
+  columns: { key: EquityCol; accounts: { code: string; name: string }[] }[];
+  rows: { key: string; values: Partial<Record<EquityCol, string>>; total: string }[];
+  netIncome: string; positionEquity: string; matches: boolean;
+};
+export type AllowancePreview = {
+  method: 'sales' | 'receivables' | 'aging'; asOf: string; base: string; required: string; previous: string; amount: string;
+  buckets: { bucket: string; open: string; count: number; rate: string; required: string }[];
+};
+export type BadDebtPage = {
+  canWrite: boolean; locked: boolean; asOf: string; allowance: string; receivables: string; subledger: string; matches: boolean;
+  open: { id: string; docNo: string; date: string; dueDate: string | null; partyName: string; total: string; open: string }[];
+  allowances: { id: string; docNo: string; month: string; method: string; base: string; required: string; previous: string; amount: string; voided: boolean; voidDocNo: string | null }[];
+  writeoffs: {
+    id: string; docNo: string; date: string; invoiceNo: string; partyName: string; amount: string; vat: string; reason: string;
+    voided: boolean; voidDocNo: string | null; unrecovered: string;
+    recoveries: { id: string; docNo: string; date: string; amount: string; credit: string; voided: boolean }[];
+  }[];
+};
+export type AdjustmentRow = {
+  id: string; month: string; kind: string; method: string | null; plAccount: string; plName: string; bsAccount: string; bsName: string;
+  amount: string; description: string; autoReverse: boolean; entryId: string; docNo: string; date: string;
+  reversalDocNo: string | null; reversalDate: string | null; voided: boolean; voidDocNo: string | null; voidReason: string | null;
+};
+export type AdjustmentPage = { canWrite: boolean; locked: boolean; accounts: { code: string; name: string; type: string }[]; adjustments: AdjustmentRow[] };
 export type MyCompany = { id: string; name: string; classroom: string | null };
 type Line = { code: string; name: string; amount: string };
 export type Statements = {

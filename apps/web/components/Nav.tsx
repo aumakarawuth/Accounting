@@ -15,10 +15,14 @@ export function studentNav(companyId: string): Group[] {
     { title: n.group.gl, items: [
       { label: n.chartOfAccounts, href: c('/accounts') },
       { label: n.journal, href: c('/journal') },
+      { label: n.specialJournals, href: c('/books') },
       { label: n.ledger, href: c('/ledger') },
       { label: n.trialBalance, href: c('/trial-balance') },
       { label: n.worksheet, href: c('/worksheet') },
       { label: n.statements, href: c('/statements') },
+      { label: n.equityChanges, href: c('/equity-changes') },
+      { label: n.cashFlow, href: c('/cash-flow') },
+      { label: n.adjustments, href: c('/adjustments') },
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [
@@ -28,6 +32,7 @@ export function studentNav(companyId: string): Group[] {
       { label: n.billing, href: c('/sales/billing') },
       { label: n.receipt, href: c('/sales/receipts') },
       { label: n.receivables, href: c('/sales/receivables') },
+      { label: n.badDebts, href: c('/sales/bad-debts') },
     ] },
     { title: n.group.purchase, items: [
       { label: n.purchaseOrder, href: c('/purchases/orders') },
