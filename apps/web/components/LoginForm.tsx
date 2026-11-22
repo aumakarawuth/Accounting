@@ -1,12 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { postJson, type ApiError } from '@/lib/api';
 import { th } from '@/i18n/th';
 import { PasswordInput } from './PasswordInput';
 
 type Kind = 'student' | 'staff';
+
+// จดจำชื่อผู้ใช้/รหัสนักเรียนในเครื่องนี้ (ไม่เก็บรหัสผ่าน) · เครื่องส่วนกลางเอาเครื่องหมายออกได้
+const KEY = 'login:remember';
+function readRemembered(): { kind: Kind; identifier: string } | null {
+  try { const v = JSON.parse(localStorage.getItem(KEY) ?? 'null'); return v && typeof v.identifier === 'string' ? v : null; } catch { return null; }
+}
+function writeRemembered(v: { kind: Kind; identifier: string } | null) {
+  try { if (v) localStorage.setItem(KEY, JSON.stringify(v)); else localStorage.removeItem(KEY); } catch { /* โหมดส่วนตัว */ }
+}
 
 function message(kind: Kind, e: ApiError): string {
   switch (e.code) {
@@ -31,6 +40,15 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [remember, setRemember] = useState(true);
+  useEffect(() => {
+    // อ่านหลัง hydrate (หน้าเข้าระบบสร้างไว้ล่วงหน้า ไม่มี localStorage ฝั่งเซิร์ฟเวอร์)
+    const t = setTimeout(() => {
+      const r = readRemembered();
+      if (r && r.kind === kind) setIdentifier((cur) => cur || r.identifier);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [kind]);
   const input = 'h-12 w-full rounded-doc border bg-paper px-3 text-base max-sm:h-13';
 
   return (
@@ -44,6 +62,7 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
         setError(null);
         try {
           const r = await postJson<{ mustChange: boolean }>('/auth/login', { kind, identifier, password });
+          writeRemembered(remember ? { kind, identifier: identifier.trim() } : null);
           router.replace(r.mustChange ? '/change-password' : next?.startsWith('/') && !next.startsWith('//') ? next : '/');
           router.refresh();
         } catch (err) {
@@ -79,6 +98,10 @@ export function LoginForm({ kind, next }: { kind: Kind; next?: string }) {
           value={password}
           onChange={setPassword}
         />
+      <label className="flex min-h-11 items-center gap-2 text-sm">
+        <input type="checkbox" className="h-5 w-5 text-base" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+        {th.login.remember}
+      </label>
       {error && <p role="alert" className="neg text-sm">{error}</p>}
       <button type="submit" disabled={busy} className="min-h-12 rounded-doc bg-ink px-5 font-medium text-paper disabled:bg-disabled disabled:text-ink2 max-sm:min-h-13">
         {busy ? th.login.signingIn : th.login.submit}
