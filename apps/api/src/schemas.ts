@@ -579,3 +579,13 @@ export const PayrollPreview = z.object({ month: Month, lines: z.array(PayrollLin
 export const PayrollInput = z.object({ month: Month, payDate: IsoDate, cashAccount: AccountCode, lines: z.array(PayrollLine).min(1).max(500) }).strict();
 export const PayrollRemit = z.object({ month: Month, kind: z.enum(['sso', 'pnd1']), date: IsoDate, cashAccount: AccountCode }).strict();
 export const PayrollVoidParams = z.object({ companyId: Uuid, kind: z.enum(['run', 'remittance']), id: Uuid });
+
+// ---- เฟส 7 โมดูล 5: แม่แบบรายการ / รายการประจำ ----
+export const TemplateInput = z.object({
+  name: z.string().trim().min(1, 'ต้องมีชื่อแม่แบบ').max(120), description: z.string().trim().max(300).optional(),
+  lines: z.array(JournalLine).min(2).max(50).optional(), fromEntry: Uuid.optional(),
+  recurring: z.boolean().default(false), dayOfMonth: z.number().int().min(1).max(31).optional(), startMonth: Month.optional(),
+  active: z.boolean().optional(), version: z.number().int().positive().optional(),
+}).strict();
+export const TemplateParams = z.object({ companyId: Uuid, id: Uuid });
+export const TemplatePost = z.object({ date: IsoDate, month: Month.optional(), lines: z.array(JournalLine).min(2).max(50).optional() }).strict();

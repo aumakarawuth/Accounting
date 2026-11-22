@@ -535,3 +535,12 @@ export type Ratios = {
   month: string; scope: 'month' | 'ytd'; from: string; days: number; figures: Record<string, string>;
   items: { key: string; group: 'liquidity' | 'efficiency' | 'profitability' | 'leverage'; unit: 'times' | 'percent' | 'days'; value: string | null }[];
 };
+export type TemplateLine = { account_code: string; debit: string; credit: string; memo: string };
+export type TemplateRow = {
+  id: string; name: string; description: string; lines: TemplateLine[]; recurring: boolean; dayOfMonth: number | null; startMonth: string | null;
+  active: boolean; version: number; postedThisMonth: string | null; uses: number;
+};
+export type TemplatesPage = {
+  month: string; canWrite: boolean; locked: boolean; templates: TemplateRow[]; due: { id: string; name: string; dueDate: string }[];
+  accounts: { code: string; name: string }[];
+};

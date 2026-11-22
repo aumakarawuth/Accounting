@@ -15,6 +15,7 @@ export function studentNav(companyId: string): Group[] {
     { title: n.group.gl, items: [
       { label: n.chartOfAccounts, href: c('/accounts') },
       { label: n.journal, href: c('/journal') },
+      { label: n.templates, href: c('/templates') },
       { label: n.specialJournals, href: c('/books') },
       { label: n.ledger, href: c('/ledger') },
       { label: n.trialBalance, href: c('/trial-balance') },
