@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EntityInput } from './schemas.js';
 
 export const Login = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('student'), identifier: z.string().trim().regex(/^[0-9A-Za-z-]{1,20}$/), password: z.string().min(1).max(256) }).strict(),
@@ -39,6 +40,7 @@ export const ImportStudents = z.object({
 export const OpenCompanies = z.object({
   name: z.string().trim().min(1).max(120),
   mode: z.enum(['practice', 'submit']).default('practice'),
+  entity: EntityInput.optional(),
 }).strict();
 
 // รหัสห้อง: 6 ตัวจากชุดที่อ่านไม่สับสน (ตรงกับ check ใน DB) พิมพ์ตัวเล็ก/มีช่องว่างได้

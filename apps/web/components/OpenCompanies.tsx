@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { postJson, type ApiError } from '@/lib/api';
 import { th } from '@/i18n/th';
+import { defaultEntity, entityBody, entityError, EntityFields } from './EntityFields';
 
 // เปิดบริษัทจำลองให้นักเรียนทุกคนในห้อง (กดซ้ำได้ คนที่มีบริษัทชื่อนี้แล้วไม่ถูกสร้างซ้ำ)
 export function OpenCompanies({ classroomId }: { classroomId: string }) {
@@ -11,6 +12,7 @@ export function OpenCompanies({ classroomId }: { classroomId: string }) {
   const id = useId();
   const [name, setName] = useState<string>(th.teacher.companyNameDefault);
   const [mode, setMode] = useState<'practice' | 'submit'>('submit');
+  const [entity, setEntity] = useState(defaultEntity);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   return (
@@ -18,10 +20,12 @@ export function OpenCompanies({ classroomId }: { classroomId: string }) {
       className="flex flex-wrap items-end gap-3 border border-rule-strong bg-paper p-3"
       onSubmit={async (e) => {
         e.preventDefault();
+        const bad = entityError(entity);
+        if (bad) { setMsg({ ok: false, text: bad }); return; }
         setBusy(true);
         setMsg(null);
         try {
-          const r = await postJson<{ created: number; existing: number }>(`/classrooms/${classroomId}/companies`, { name, mode });
+          const r = await postJson<{ created: number; existing: number }>(`/classrooms/${classroomId}/companies`, { name, mode, entity: entityBody(entity) });
           setMsg({ ok: true, text: th.teacher.opened(r.created, r.existing) });
           router.refresh();
         } catch (err) {
@@ -41,6 +45,7 @@ export function OpenCompanies({ classroomId }: { classroomId: string }) {
           <option value="practice">{th.submission.modePractice}</option>
         </select>
       </label>
+      <div className="basis-full"><EntityFields value={entity} onChange={setEntity} /></div>
       <button type="submit" disabled={busy} className="min-h-11 rounded-doc bg-ink px-4 font-medium text-paper disabled:bg-disabled disabled:text-ink2">
         {th.teacher.openSubmit}
       </button>

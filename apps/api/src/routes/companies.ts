@@ -4,7 +4,7 @@ import { withUser } from '../db.js';
 import type { AuthAdapter, AuthUser } from '../auth.js';
 import { requireReadable, requireUser, requireWritable } from '../guard.js';
 import { HttpError } from '../errors.js';
-import { ledger, ledgerAccounts, statements, trialBalance } from '../reports.js';
+import { ledger, ledgerAccounts, partnershipAllocation, statements, trialBalance } from '../reports.js';
 import {
   AccountParams, CommentParams, CompanyParams, EditAccount, EntryParams, IdempotencyKey, LedgerQuery, MonthQuery, NewAccount, NewComment, PeriodParams,
   EndingInventory, FiscalYearStart, PostJournal, Reverse, StatementsQuery, SubmissionAction, TrialBalanceQuery, YearEndParams,
@@ -55,7 +55,7 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       const r = await c.query(
         `select c.id, c.name, c.version, c.mode, app.can_write_company(c.id) as can_write,
                 coalesce(s.status, case c.mode when 'submit' then 'draft' end) as status,
-                app.company_locked(c.id) as locked, app.company_assignment(c.id) as assignment
+                app.company_locked(c.id) as locked, app.company_assignment(c.id) as assignment, c.entity_type as "entityType"
            from acc.companies c left join acc.submissions s on s.company_id = c.id where c.id = $1`,
         [companyId],
       );
@@ -386,12 +386,20 @@ export function companyRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAda
       await requireReadable(c, companyId);
       const lines = (await c.query(
         `select code, name, debit::text, credit::text from acc.year_closing_lines($1, $2::date)`, [companyId, yearEnd])).rows;
-      const t = (await c.query(
-        `select coalesce(sum(debit) - sum(credit), 0)::numeric(18,2)::text as net,
-                coalesce(sum(debit), 0)::numeric(18,2)::text as total
-           from acc.year_closing_lines($1, $2::date) where code <> '3210'`, [companyId, yearEnd])).rows[0];
+      const t = (await c.query(`select acc.year_closing_net($1, $2::date)::text as net, c.entity_type as type,
+                                        acc.fiscal_year_start($1, $2::date)::text as ys
+                                   from acc.companies c where c.id = $1`, [companyId, yearEnd])).rows[0];
       const all = (await c.query(`select coalesce(sum(debit), 0)::numeric(18,2)::text as total from acc.year_closing_lines($1, $2::date)`, [companyId, yearEnd])).rows[0];
-      return { yearEnd, lines, netIncome: t.net, totalDebit: all.total };
+      // ห้างหุ้นส่วน: การแบ่งกำไรทั้งปีตามสัญญา (ปิดซ้ำหลังเปิดคืน = ทั้งปี รายการ CL ลงเฉพาะส่วนที่เหลือ)
+      const allocation = t.type === 'partnership'
+        ? await partnershipAllocation(c, companyId, t.ys, yearEnd, (await c.query(
+          `select coalesce(sum(l.credit - l.debit), 0)::numeric(18,2)::text as p from acc.journal_lines l
+             join acc.journal_entries e on e.company_id = l.company_id and e.id = l.entry_id
+             join acc.chart_of_accounts a on a.company_id = l.company_id and a.id = l.account_id
+            where l.company_id = $1 and e.entry_date between $2::date and $3::date and e.doc_prefix <> 'CL' and a.type in ('revenue', 'expense')`,
+          [companyId, t.ys, yearEnd])).rows[0].p)
+        : null;
+      return { yearEnd, lines, netIncome: t.net, totalDebit: all.total, entityType: t.type, allocation };
     });
   });
 

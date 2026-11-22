@@ -6,6 +6,7 @@ import { requireReadable, requireUser } from '../guard.js';
 import { HttpError } from '../errors.js';
 import {
   AssignBody, AssignmentActionBody, AssignmentOptionsBody, AssignmentParams, CompanyParams, DemoBody, ExerciseSetBody, SetParams,
+  entityJson,
 } from '../schemas.js';
 
 // เฟส 4: ชุดโจทย์ มอบหมาย สอบ สาธิต — ชั้นบาง Zod → ฟังก์ชันใน DB (สิทธิ์และการซ่อนเฉลยตัดสินใน DB)
@@ -16,6 +17,7 @@ export function exerciseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
   const payload = (b: ReturnType<typeof ExerciseSetBody.parse>) => ({
     title: b.title, company_name: b.companyName, description: b.description,
     items: b.items.map((i) => ({ date: i.date, narrative: i.narrative, points: i.points, lines: i.lines })),
+    ...(b.entity ? { entity: entityJson(b.entity) } : {}),
   });
 
   app.get('/teacher/exercises', async (req) =>
@@ -58,7 +60,7 @@ export function exerciseRoutes(app: FastifyInstance, pool: pg.Pool, auth: AuthAd
     const { setId } = SetParams.parse(req.params);
     return withUser(pool, await teacher(req), async (c) => {
       const s = (await c.query(
-        `select id, title, company_name as "companyName", description, version, updated_at as "updatedAt"
+        `select id, title, company_name as "companyName", description, version, updated_at as "updatedAt", entity
            from acc.exercise_sets where id = $1`, [setId])).rows[0];
       if (!s) throw new HttpError(404, 'not_found', 'ไม่พบชุดโจทย์นี้');
       const [items, assignments, rooms] = await querySequence([

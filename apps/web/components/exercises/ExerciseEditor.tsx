@@ -8,6 +8,7 @@ import { api, postJson, type Account, type ApiError, type ExerciseSetDetail } fr
 import { isoToThai, thaiToIso, maskDate } from '@/lib/date';
 import { formatMoney, fromCents, toCents } from '@/lib/money';
 import { th } from '@/i18n/th';
+import { entityAccounts, entityBody, entityError, entityFromJson, EntityFields } from '@/components/EntityFields';
 
 type Line = { key: number; code: string; debit: string; credit: string };
 type Item = { key: number; date: string; narrative: string; points: string; lines: Line[] };
@@ -49,9 +50,15 @@ export function ExerciseEditor({ set, accounts }: { set: ExerciseSetDetail | nul
     lines: i.lines.map((l) => line({ code: l.account_code, debit: l.debit ?? '', credit: l.credit ?? '' })),
   })) ?? [item()]);
   const [version, setVersion] = useState(set?.version ?? 0);
+  const [entity, setEntity] = useState(() => entityFromJson(set?.entity));
+  // ผังตั้งต้น + บัญชีส่วนของเจ้าของตามประเภทกิจการ (แทนที่รหัสเดียวกัน) + บัญชีที่ระบบสร้างให้เมื่อใช้ครั้งแรก
+  const chart = useMemo(() => {
+    const extra = entityAccounts(entity);
+    return [...accounts.filter((a) => !extra.some((x) => x.code === a.code)), ...extra];
+  }, [accounts, entity]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const issues = useMemo(() => problems(items, accounts), [items, accounts]);
+  const issues = useMemo(() => problems(items, chart), [items, chart]);
 
   const setItem = (key: number, patch: Partial<Item>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const setLine = (ik: number, lk: number, patch: Partial<Line>) =>
@@ -60,9 +67,11 @@ export function ExerciseEditor({ set, accounts }: { set: ExerciseSetDetail | nul
   async function save() {
     setMsg(null);
     if (!title.trim() || !companyName.trim() || issues.length) { setMsg({ ok: false, text: issues[0] ?? t.setTitle }); return; }
+    const bad = entityError(entity);
+    if (bad) { setMsg({ ok: false, text: bad }); return; }
     setBusy(true);
     const body = {
-      title, companyName, description,
+      title, companyName, description, entity: entityBody(entity),
       items: items.map((it) => ({
         date: thaiToIso(it.date), narrative: it.narrative, points: it.points.trim(),
         lines: it.lines.filter((l) => l.code).map((l) => {
@@ -97,6 +106,7 @@ export function ExerciseEditor({ set, accounts }: { set: ExerciseSetDetail | nul
         <TextField label={t.setTitle} value={title} onChange={setTitle} maxLength={200} />
         <TextField label={t.companyName} value={companyName} onChange={setCompanyName} maxLength={120} />
         <div className="sm:col-span-2"><TextField label={t.description} value={description} onChange={setDescription} maxLength={4000} multiline /></div>
+        <div className="sm:col-span-2"><EntityFields value={entity} onChange={setEntity} /></div>
         <p className="text-[13px] text-ink2 sm:col-span-2">{t.accountsHint}{set && set.assignments.length > 0 ? ` · ${t.editAfterAssign}` : ''}</p>
       </div>
 
@@ -142,11 +152,11 @@ export function ExerciseEditor({ set, accounts }: { set: ExerciseSetDetail | nul
                   <span />
                 </div>
                 {it.lines.map((l, k) => {
-                  const acc = accounts.find((a) => a.code === l.code);
+                  const acc = chart.find((a) => a.code === l.code);
                   return (
                     <div key={l.key} className="grid grid-cols-2 gap-x-3 border-b border-rule py-1 sm:grid-cols-[minmax(0,1fr)_9rem_9rem_5.5rem] sm:gap-0 sm:py-0">
                       <div className="col-span-2 flex items-center gap-2 sm:col-span-1 sm:px-2">
-                        <div className="w-28 shrink-0"><AccountField accounts={accounts} value={l.code} onChange={(code) => setLine(it.key, l.key, { code })}
+                        <div className="w-28 shrink-0"><AccountField accounts={chart} value={l.code} onChange={(code) => setLine(it.key, l.key, { code })}
                           label={`${t.item(i + 1)} ${t.account} ${k + 1}`} /></div>
                         <span className={`truncate text-[15px] ${(toCents(l.credit) ?? 0n) > 0n ? 'sm:pl-7' : ''} ${acc ? '' : 'text-ink2'}`}>{acc?.name ?? th.journal.accountSearchHint}</span>
                       </div>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { EntryDocument } from '@/components/EntryDocument';
 import { ReverseEntry } from '@/components/ReverseEntry';
+import { SaveAsTemplate } from '@/components/templates/Templates';
 import { serverApi } from '@/lib/server-api';
 import type { ApiError, Company, JournalEntry } from '@/lib/api';
 import { th } from '@/i18n/th';
@@ -42,6 +43,9 @@ export default async function EntryPage({ params }: { params: Promise<{ companyI
               <ReverseEntry companyId={companyId} entry={{ id: entry.id, docNo: entry.docNo, date: entry.date, periodClosed: entry.periodClosed }} locked={company.locked} />
             </div>
           )
+      )}
+      {company.can_write && !company.locked && !entry.reverses && /^(JV|AJ)-/.test(entry.docNo) && (
+        <SaveAsTemplate companyId={companyId} entryId={entry.id} description={entry.description} month={entry.date.slice(0, 7)} />
       )}
     </div>
   );

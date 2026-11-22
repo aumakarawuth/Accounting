@@ -15,6 +15,7 @@ export function studentNav(companyId: string): Group[] {
     { title: n.group.gl, items: [
       { label: n.chartOfAccounts, href: c('/accounts') },
       { label: n.journal, href: c('/journal') },
+      { label: n.templates, href: c('/templates') },
       { label: n.specialJournals, href: c('/books') },
       { label: n.ledger, href: c('/ledger') },
       { label: n.trialBalance, href: c('/trial-balance') },
@@ -22,7 +23,10 @@ export function studentNav(companyId: string): Group[] {
       { label: n.statements, href: c('/statements') },
       { label: n.equityChanges, href: c('/equity-changes') },
       { label: n.cashFlow, href: c('/cash-flow') },
+      { label: n.ratios, href: c('/ratios') },
       { label: n.adjustments, href: c('/adjustments') },
+      { label: n.dividends, href: c('/dividends') },
+      { label: n.payroll, href: c('/payroll') },
       { label: n.closing, href: c('/closing') },
     ] },
     { title: n.group.sales, items: [
@@ -49,6 +53,7 @@ export function studentNav(companyId: string): Group[] {
     { title: n.group.tax, items: [
       { label: n.vat, href: c('/tax/vat') },
       { label: n.wht, href: c('/tax/wht') },
+      { label: n.incomeTax, href: c('/tax/income-tax') },
     ] },
     { title: n.group.cash, items: [
       { label: n.pettyCash, href: c('/cash/petty-cash') },

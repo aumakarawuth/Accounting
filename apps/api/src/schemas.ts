@@ -375,6 +375,7 @@ export const ExerciseSetBody = z.object({
   description: z.string().max(4000).default(''),
   items: z.array(ExerciseItem).min(1, 'ต้องมีอย่างน้อย 1 ข้อ').max(200),
   version: z.number().int().positive().optional(),
+  entity: z.lazy(() => EntityInput).optional(),
 }).strict();
 export const SetParams = z.object({ setId: Uuid });
 export const AssignmentParams = z.object({ assignmentId: Uuid });
@@ -519,3 +520,72 @@ export const NewPettyCashReimbursement = z.object({
   voucherIds: z.array(Uuid).min(1, 'เลือกใบสำคัญที่จะเบิกชดเชยอย่างน้อย 1 ใบ').max(200),
 }).strict();
 export const CashDocParams = z.object({ companyId: Uuid, id: Uuid });
+
+// ---- เฟส 7 โมดูล 1: ประเภทกิจการ (docs/phase7-spec.md ข้อ 1) ----
+const PctRate = z.string().regex(/^\d{1,3}(\.\d{1,3})?$/, 'อัตราร้อยละไม่ถูกต้อง');
+const Ratio = z.string().regex(/^\d{1,5}(\.\d{1,4})?$/, 'อัตราส่วนต้องเป็นตัวเลข');
+export const PartnerInput = z.object({
+  name: z.string().trim().min(1, 'ต้องมีชื่อหุ้นส่วน').max(100),
+  ratio: Ratio, interestRate: PctRate.default('0'), salary: Money.default('0'),
+}).strict();
+export const EntityInput = z.object({
+  type: z.enum(['sole', 'partnership', 'company']),
+  partners: z.array(PartnerInput).min(2, 'ห้างหุ้นส่วนต้องมีหุ้นส่วนอย่างน้อย 2 คน').max(9).optional(),
+  parValue: Money.optional(),
+  registeredShares: z.string().regex(/^\d{1,15}$/, 'จำนวนหุ้นต้องเป็นจำนวนเต็ม').optional(),
+}).strict();
+export type EntityInputT = z.infer<typeof EntityInput>;
+/** ชื่อฟิลด์แบบ SQL (acc.normalize_entity) */
+export const entityJson = (e: EntityInputT | undefined) => e ? {
+  type: e.type,
+  ...(e.partners ? { partners: e.partners.map((p) => ({ name: p.name, ratio: p.ratio, interest_rate: p.interestRate, salary: p.salary })) } : {}),
+  ...(e.parValue ? { par_value: e.parValue } : {}),
+  ...(e.registeredShares ? { registered_shares: e.registeredShares } : {}),
+} : {};
+export const SetEntity = z.object({ entity: EntityInput, version: z.number().int().positive() }).strict();
+export const EntityProfile = z.object({
+  partners: z.array(PartnerInput).min(2).max(9).optional(),
+  parValue: Money.optional(),
+  registeredShares: z.string().regex(/^\d{1,15}$/).nullable().optional(),
+  version: z.number().int().positive(),
+}).strict();
+export const DividendInput = z.object({
+  date: IsoDate, perShare: z.string().regex(/^\d{1,12}(\.\d{1,4})?$/, 'เงินปันผลต่อหุ้นไม่ถูกต้อง').optional(), amount: Money.optional(),
+  reserve: Money.default('0'), description: z.string().trim().max(300).optional(),
+}).strict().refine((b) => (b.perShare === undefined) !== (b.amount === undefined), 'ระบุเงินปันผลต่อหุ้นหรือจำนวนเงินรวมอย่างใดอย่างหนึ่ง');
+export const DividendPay = z.object({ date: IsoDate, cashAccount: AccountCode }).strict();
+export const DividendParams = z.object({ companyId: Uuid, id: Uuid });
+export const DividendVoid = z.object({ what: z.enum(['payment', 'declaration']), date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
+export const DateQuery = z.object({ date: IsoDate.optional() });
+
+// ---- เฟส 7 โมดูล 2: ภาษีเงินได้นิติบุคคล ----
+export const IncomeTaxQuery = z.object({ yearEnd: IsoDate.optional() });
+export const IncomeTaxInput = z.object({
+  form: z.enum(['51', '50']), yearEnd: IsoDate, date: IsoDate.optional(),
+  estimatedProfit: SignedMoney.optional(), estimatedRevenue: Money.optional(), useWht: z.boolean().default(false), cashAccount: AccountCode.optional(),
+}).strict();
+export const IncomeTaxPay = z.object({ date: IsoDate, cashAccount: AccountCode }).strict();
+export const IncomeTaxVoid = z.object({ what: z.enum(['payment', 'filing']), date: IsoDate, reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ยกเลิก').max(300) }).strict();
+
+// ---- เฟส 7 โมดูล 3: เงินเดือน ----
+export const EmployeeInput = z.object({
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{1,20}$/, 'รหัสพนักงานใช้ตัวอักษรอังกฤษ ตัวเลข ขีด ไม่เกิน 20 ตัว'),
+  name: z.string().trim().min(1, 'ต้องมีชื่อพนักงาน').max(120), position: z.string().trim().max(120).default(''),
+  salary: Money, sso: z.boolean().default(true), active: z.boolean().default(true), version: z.number().int().positive().optional(),
+}).strict();
+export const EmployeeParams = z.object({ companyId: Uuid, id: Uuid });
+const PayrollLine = z.object({ employee: z.string().trim().toUpperCase().max(20), salary: Money, otherIncome: Money.default('0'), wht: Money.default('0') }).strict();
+export const PayrollPreview = z.object({ month: Month, lines: z.array(PayrollLine).min(1).max(500) }).strict();
+export const PayrollInput = z.object({ month: Month, payDate: IsoDate, cashAccount: AccountCode, lines: z.array(PayrollLine).min(1).max(500) }).strict();
+export const PayrollRemit = z.object({ month: Month, kind: z.enum(['sso', 'pnd1']), date: IsoDate, cashAccount: AccountCode }).strict();
+export const PayrollVoidParams = z.object({ companyId: Uuid, kind: z.enum(['run', 'remittance']), id: Uuid });
+
+// ---- เฟส 7 โมดูล 5: แม่แบบรายการ / รายการประจำ ----
+export const TemplateInput = z.object({
+  name: z.string().trim().min(1, 'ต้องมีชื่อแม่แบบ').max(120), description: z.string().trim().max(300).optional(),
+  lines: z.array(JournalLine).min(2).max(50).optional(), fromEntry: Uuid.optional(),
+  recurring: z.boolean().default(false), dayOfMonth: z.number().int().min(1).max(31).optional(), startMonth: Month.optional(),
+  active: z.boolean().optional(), version: z.number().int().positive().optional(),
+}).strict();
+export const TemplateParams = z.object({ companyId: Uuid, id: Uuid });
+export const TemplatePost = z.object({ date: IsoDate, month: Month.optional(), lines: z.array(JournalLine).min(2).max(50).optional() }).strict();

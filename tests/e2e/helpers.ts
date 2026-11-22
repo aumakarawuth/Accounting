@@ -95,7 +95,7 @@ const tag = (info: TestInfo) => `${info.project.name.toUpperCase().replace(/[^A-
  * ผู้ดูแลสร้างครู + ห้องใหม่ → ครูนำเข้านักเรียนใหม่ 1 คน แล้วเปิดบริษัทให้ (โหมดฝึกหัด)
  * ใช้กับเทสต์ที่ลงรายการซึ่งกระทบเทสต์อื่น (เช่น ปิดบัญชีสิ้นปี) แทนบริษัทตัวอย่างที่ใช้ร่วมกัน
  */
-export async function freshStudent(browser: Browser, info: TestInfo, origin: string, label: string, password?: string) {
+export async function freshStudent(browser: Browser, info: TestInfo, origin: string, label: string, password?: string, entity?: object) {
   const t = tag(info);
   const actx = await browser.newContext({ extraHTTPHeaders: { origin } });
   const admin = actx.request;
@@ -116,15 +116,15 @@ export async function freshStudent(browser: Browser, info: TestInfo, origin: str
   const code = `Y${randomUUID().replace(/-/g, '').slice(0, 10)}`;
   const temp = password ?? `ชั่วคราว-${randomUUID().slice(0, 8)}`;
   expect((await teacher.post(`${origin}/api/classrooms/${roomId}/import`, { data: { rows: [{ studentCode: code, name: `นักเรียน ${t}`, password: temp }] } })).status()).toBe(200);
-  expect((await teacher.post(`${origin}/api/classrooms/${roomId}/companies`, { data: { name: `ร้าน${label} ${t}`, mode: 'practice' } })).status()).toBeLessThan(300);
+  expect((await teacher.post(`${origin}/api/classrooms/${roomId}/companies`, { data: { name: `ร้าน${label} ${t}`, mode: 'practice', ...(entity ? { entity } : {}) } })).status()).toBeLessThan(300);
   await tctx.close();
   return { code, temp };
 }
 
 
 /** นักเรียนใหม่ (freshStudent) เข้าครั้งแรกด้วยรหัสบนใบ (ไม่บังคับเปลี่ยน) แล้วไปที่บริษัทของตัวเอง คืน path หน้าบริษัทและ id */
-export async function freshStudentHome(page: Page, browser: Browser, info: TestInfo, origin: string, label: string) {
-  const { code, temp } = await freshStudent(browser, info, origin, label);
+export async function freshStudentHome(page: Page, browser: Browser, info: TestInfo, origin: string, label: string, entity?: object) {
+  const { code, temp } = await freshStudent(browser, info, origin, label, undefined, entity);
   await login(page, 'student', code, temp);
   await page.context().setExtraHTTPHeaders({ origin });
   await page.waitForURL(/\/c\/[0-9a-f-]{36}$/);

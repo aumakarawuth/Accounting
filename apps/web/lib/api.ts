@@ -51,7 +51,7 @@ export type FiscalYears = {
   startMonth: number; version: number; canClose: boolean; locked: boolean; canChangeStart: boolean;
   years: { start: string; end: string; entries: number; closing: FiscalYearClosing | null; reopened: (FiscalYearClosing & { reopenedAt: string })[] }[];
 };
-export type YearClosingPreview = { yearEnd: string; lines: { code: string; name: string; debit: string; credit: string }[]; netIncome: string; totalDebit: string };
+export type YearClosingPreview = { yearEnd: string; lines: { code: string; name: string; debit: string; credit: string }[]; netIncome: string; totalDebit: string; entityType?: EntityType; allocation?: Allocation[] | null };
 export type LedgerAccount = { code: string; name: string; normalSide: 'debit' | 'credit'; opening: string; debit: string; credit: string; closing: string };
 export type Ledger = {
   month: string;
@@ -86,13 +86,26 @@ export type CashFlow = {
   ledgerCash: string; matches: boolean;
   nonCash: { docNo: string; date: string; description: string; amount: string }[];
 };
-export type EquityCol = 'capital' | 'retained' | 'drawings' | 'other';
+export type EntityType = 'sole' | 'partnership' | 'company';
 export type EquityChanges = {
-  month: string; scope: 'month' | 'ytd'; from: string;
-  columns: { key: EquityCol; accounts: { code: string; name: string }[] }[];
-  rows: { key: string; values: Partial<Record<EquityCol, string>>; total: string }[];
+  month: string; scope: 'month' | 'ytd'; from: string; entityType: EntityType;
+  columns: { key: string; partner?: string; accounts: { code: string; name: string }[] }[];
+  rows: { key: string; values: Record<string, string>; total: string }[];
   netIncome: string; positionEquity: string; matches: boolean;
 };
+export type EntityInfo = {
+  type: EntityType; version: number; parValue: string | null; registeredShares: string | null; canWrite: boolean; locked: boolean; canChangeType: boolean;
+  partners: { no: number; name: string; ratio: string; interestRate: string; salary: string }[];
+};
+export type DividendRow = {
+  id: string; date: string; perShare: string | null; shares: string | null; amount: string; reserve: string; description: string; entryId: string; docNo: string;
+  paidOn: string | null; payDocNo: string | null; payEntryId: string | null; cashAccount: string | null; voided: boolean; voidDocNo: string | null; voidReason: string | null;
+};
+export type DividendPage = {
+  entityType: EntityType; canWrite: boolean; locked: boolean; cashAccounts: { code: string; name: string }[]; dividends: DividendRow[];
+  preview: { date: string; retained: string; reserve: string; shareCapital: string; parValue: string | null; shares: string | null; registeredCapital: string; lastYearProfit: string | null; minReserve: string };
+};
+export type Allocation = { no: number; name: string; salary: string; interest: string; share: string; total: string };
 export type AllowancePreview = {
   method: 'sales' | 'receivables' | 'aging'; asOf: string; base: string; required: string; previous: string; amount: string;
   buckets: { bucket: string; open: string; count: number; rate: string; required: string }[];
@@ -116,7 +129,7 @@ export type AdjustmentPage = { canWrite: boolean; locked: boolean; accounts: { c
 export type MyCompany = { id: string; name: string; classroom: string | null };
 type Line = { code: string; name: string; amount: string };
 export type Statements = {
-  month: string; scope: 'month' | 'ytd'; from: string;
+  month: string; scope: 'month' | 'ytd'; from: string; entityType?: EntityType; allocation?: Allocation[] | null;
   revenue: Line[]; expense: Line[]; assets: Line[]; liabilities: Line[]; equity: Line[];
   totalRevenue: string; totalExpense: string; netIncome: string; unclosedProfit: string;
   fiscalYear: FiscalYearRange; yearProfit: string; priorUnclosedProfit: string;
@@ -367,7 +380,7 @@ export type AssignmentSummary = {
   releasedAt: string | null; closedAt: string | null; durationMinutes: number | null; companies: number; demoCompanyId: string | null;
 };
 export type ExerciseSetDetail = {
-  id: string; title: string; companyName: string; description: string; version: number; updatedAt: string;
+  id: string; title: string; companyName: string; description: string; version: number; updatedAt: string; entity?: Record<string, unknown>;
   items: (ExerciseItem & { no: number })[];
   assignments: { id: string; mode: AssignmentMode; classroom: string | null; companyName: string; createdAt: string; closedAt: string | null; demoCompanyId: string | null }[];
   classrooms: { id: string; name: string }[];
@@ -493,4 +506,41 @@ export type PettyCashPage = {
   vouchers: PettyVoucher[];
   reimbursements: { id: string; docNo: string; date: string; cashAccount: string; total: string; voided: boolean; voidReason: string | null; vouchers: string[] }[];
   cashAccounts: CodeName[]; expenseAccounts: CodeName[];
+};
+
+export type CitPreview = {
+  form: '51' | '50'; yearStart: string; yearEnd: string; periodEnd: string; date: string; actualProfit: string; actualRevenue: string;
+  profit: string; revenue: string; paidUp: string; sme: boolean; taxFull: string; tax: string; creditPrepaid: string; whtBalance: string; creditWht: string; payable: string;
+};
+export type IncomeTaxFiling = {
+  id: string; form: '51' | '50'; yearStart: string; yearEnd: string; date: string; actualProfit: string; profit: string; revenue: string; paidUp: string; sme: boolean;
+  taxFull: string; tax: string; creditPrepaid: string; creditWht: string; payable: string; entryId: string | null; docNo: string | null;
+  paidOn: string | null; payDocNo: string | null; voided: boolean; voidDocNo: string | null; voidReason: string | null;
+};
+export type IncomeTaxPage = {
+  entityType: EntityType; canWrite: boolean; locked: boolean; years: { start: string; end: string }[]; yearEnd?: string;
+  preview51?: CitPreview; preview50?: CitPreview; filings: IncomeTaxFiling[]; cashAccounts: { code: string; name: string }[];
+};
+export type PayrollPage = {
+  month: string; canWrite: boolean; locked: boolean; ceiling: string;
+  employees: { id: string; code: string; name: string; position: string; salary: string; sso: boolean; active: boolean; version: number }[];
+  runs: { id: string; month: string; payDate: string; wages: string; ssoEmployee: string; ssoEmployer: string; wht: string; net: string; entryId: string; docNo: string;
+    cashAccount: string; voided: boolean; voidDocNo: string | null; voidReason: string | null }[];
+  lines: { runId: string; code: string; name: string; position: string; salary: string; otherIncome: string; wageBase: string; ssoEmployee: string; ssoEmployer: string; wht: string; net: string }[];
+  remittances: { id: string; kind: 'sso' | 'pnd1'; date: string; amount: string; entryId: string; docNo: string; voided: boolean; voidDocNo: string | null }[];
+  year: { code: string; name: string; months: number; income: string; sso: string; wht: string }[];
+  cashAccounts: { code: string; name: string }[];
+};
+export type Ratios = {
+  month: string; scope: 'month' | 'ytd'; from: string; days: number; figures: Record<string, string>;
+  items: { key: string; group: 'liquidity' | 'efficiency' | 'profitability' | 'leverage'; unit: 'times' | 'percent' | 'days'; value: string | null }[];
+};
+export type TemplateLine = { account_code: string; debit: string; credit: string; memo: string };
+export type TemplateRow = {
+  id: string; name: string; description: string; lines: TemplateLine[]; recurring: boolean; dayOfMonth: number | null; startMonth: string | null;
+  active: boolean; version: number; postedThisMonth: string | null; uses: number;
+};
+export type TemplatesPage = {
+  month: string; canWrite: boolean; locked: boolean; templates: TemplateRow[]; due: { id: string; name: string; dueDate: string }[];
+  accounts: { code: string; name: string }[];
 };

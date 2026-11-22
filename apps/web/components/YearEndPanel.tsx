@@ -8,6 +8,7 @@ import { api, type FiscalYears, type YearClosingPreview } from '@/lib/api';
 import { isoToThai } from '@/lib/date';
 import { formatMoney, isNegative } from '@/lib/money';
 import { th } from '@/i18n/th';
+import { AllocationTable } from '@/components/reports/StatementsView';
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Bangkok' });
@@ -153,6 +154,7 @@ export function YearEndPanel({ companyId, data, teacher }: { companyId: string; 
               </tfoot>
             </table>
           )}
+          {preview.allocation && preview.allocation.length > 0 && <AllocationTable rows={preview.allocation} />}
         </ConfirmPanel>
       )}
       {!preview && action.error && <p role="alert" className="neg text-[15px]">{action.error}</p>}
