@@ -110,6 +110,11 @@ export function liveRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
 
     reply.hijack();
     const res = reply.raw;
+    const pending: string[] = [];
+    let live = false;
+    const unsub = bus.subscribe(channel, (e) => { const m = `data: ${JSON.stringify(e)}\n\n`; if (live) res.write(m); else pending.push(m); });
+    await bus.ready?.();
+    if (req.raw.destroyed) { unsub(); return; }
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache, no-transform',
@@ -117,7 +122,8 @@ export function liveRoutes(app: FastifyInstance, deps: { pool: pg.Pool; auth: Au
       'x-accel-buffering': 'no',
     });
     res.write('retry: 3000\n: ok\n\n');
-    const unsub = bus.subscribe(channel, (e) => res.write(`data: ${JSON.stringify(e)}\n\n`));
+    live = true;
+    for (const m of pending) res.write(m);
     const heartbeat = setInterval(() => res.write(': hb\n\n'), 25_000);
     const limit = setTimeout(() => res.end(), streamMaxMs);
     onStream?.('sse', 1);

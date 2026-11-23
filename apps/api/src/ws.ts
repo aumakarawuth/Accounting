@@ -76,6 +76,7 @@ export async function registerWebSocket(app: FastifyInstance, ctx: { pool: pg.Po
         }
         if (socket.readyState !== socket.OPEN) return;
         subs.set(channel, bus.subscribe(channel, (e) => send(e)));
+        await bus.ready?.();
         send({ op: 'ok', ch: channel });
       });
     });
