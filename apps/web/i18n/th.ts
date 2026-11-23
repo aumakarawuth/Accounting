@@ -2293,6 +2293,8 @@ export const th = {
   export: {
     pdf: 'ส่งออก PDF',
     xlsx: 'ส่งออก Excel',
+    preparing: 'กำลังเตรียมไฟล์…',
+    shareFailed: 'ส่งออกไม่สำเร็จ ลองใหม่อีกครั้ง',
     label: 'ส่งออก',
     page: (i: number, n: number) => `หน้า ${i}/${n}`,
     printedAt: (when: string) => `พิมพ์เมื่อ ${when}`,
