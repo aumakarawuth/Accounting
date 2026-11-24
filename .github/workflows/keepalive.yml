@@ -1,0 +1,21 @@
+# ปลุก Supabase: แพ็กเกจฟรีหยุดโปรเจกต์อัตโนมัติเมื่อไม่มีการใช้ฐานข้อมูล 7 วัน
+# เรียก /api/health วันละ 2 ครั้ง ซึ่งรัน select 1 กับฐานข้อมูลจริง (ไม่มีการเขียนข้อมูล)
+name: keepalive
+on:
+  schedule:
+    - cron: '17 1,13 * * *' # 08:17 และ 20:17 เวลาไทย
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: เรียก health (ลองซ้ำ 5 ครั้ง เผื่อเซิร์ฟเวอร์กำลังตื่น)
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsS -m 30 https://accounting-web-three.vercel.app/api/health; then echo; exit 0; fi
+            sleep 30
+          done
+          echo "health ไม่ตอบ: ตรวจ Supabase ว่าถูกหยุด (paused) หรือไม่" >&2
+          exit 1
