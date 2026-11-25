@@ -92,3 +92,18 @@ export function subscribe(channel: string, onEvent: Listener): () => void {
     if (listeners.size === 0 && ws) { const s = ws; ws = null; s.close(); }
   };
 }
+
+/**
+ * ช่องที่นักเรียนทุกคนเปิดค้าง (ป้ายครูกำลังดู, คอมเมนต์): self-host มี WebSocket = push เหมือนเดิม
+ * Vercel (ไม่มี WebSocket): ไม่เปิด SSE ค้างต่อนักเรียน เพราะแต่ละสตรีมยึด function ไว้ถึง 280 วินาที และทุก instance
+ * ต้องเปิด connection LISTEN แบบ session ไป Supabase เพิ่ม ทั้งห้องเปิดพร้อมกัน connection เต็ม (docs/performance.md)
+ * จึงถาม API เป็นรอบแทน (เฉพาะตอนหน้าจอเปิดอยู่ และทันทีที่กลับมาที่แท็บ) · หน้าดูสดของครูยังใช้ subscribe ตามเดิม
+ */
+export function subscribeOrPoll(channel: string, onEvent: Listener, poll: () => void, everyMs: number): () => void {
+  if (process.env.NEXT_PUBLIC_REALTIME === 'ws') return subscribe(channel, onEvent);
+  const visible = () => document.visibilityState === 'visible';
+  const t = setInterval(() => { if (visible()) poll(); }, everyMs);
+  const onVisible = () => { if (visible()) poll(); };
+  document.addEventListener('visibilitychange', onVisible);
+  return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
+}

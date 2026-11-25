@@ -74,6 +74,16 @@ API (เวลาที่ API ใช้ต่อคำขอ เฉลี่ย
   ใช้ CTE `materialized`, `= any(array(...))`, subquery ด้วย primary key หรือ `account_balances` และห้ามเรียกฟังก์ชันใน CTE ที่ถูกรวมเข้าลูป
   ตารางใหม่ที่มี `company_id` ให้ตั้ง `alter column company_id set statistics 1` ด้วย
 
+## นักเรียนทั้งห้องเปิดพร้อมกันบน Vercel (ตรวจ 15 พ.ย. 2569)
+- เดิมทุกหน้าของนักเรียนเปิด SSE ค้าง (`/api/realtime?channel=student:<id>` ป้ายครูกำลังดู + คอมเมนต์) บน Vercel แต่ละสตรีมยึด function ไว้ถึง 280 วินาที
+  และทุก instance ของ API ฝังเปิด connection LISTEN แบบ session (พอร์ต 5432) ไป Supabase เพิ่มอีก 1 ตัว นอกจาก pool (`PG_POOL_MAX=3`)
+  ห้อง 40 คนเปิดพร้อมกัน = หลายสิบ instance × (pool + LISTEN) ชน `max_connections` 60 ของ Supabase ขนาดนี้ได้
+- แก้: `subscribeOrPoll` ใน `apps/web/lib/realtime.ts` · self-host (`NEXT_PUBLIC_REALTIME=ws`) ยัง push ผ่าน WebSocket เหมือนเดิม
+  Vercel: ป้ายครูกำลังดูถาม `/me/watchers` ทุก 30 วินาที คอมเมนต์รีเฟรชทุก 60 วินาที เฉพาะตอนหน้าจอเปิดอยู่ และทันทีที่กลับมาที่แท็บ
+  หน้าดูสดของครูยังใช้ SSE (ครูเปิดทีละคน) · e2e `teacher.spec.ts` ตรวจว่านักเรียนไม่เปิด `/api/realtime` ทั้งสองโหมด
+- แลกกับ: ป้ายครูกำลังดูขึ้นช้าสุด 30 วินาทีบน Vercel (เดิมทันที)
+- ยังไม่ได้วัดโหลดจริงบน Vercel + Supabase (สคริปต์พร้อมแล้ว รอเจ้าของโปรเจกต์สั่งรัน)
+
 ## หมายเหตุหลังเปิด CSP แบบ nonce (10 พ.ย. 2569)
 
 ทุกหน้าเรนเดอร์ตอนมีคำขอ (`app/layout.tsx` เรียก `connection()`) เพราะ nonce ต้องใหม่ทุกคำขอ เดิมหน้าล็อกอิน/นโยบายเป็นหน้า static ที่ CDN cache ได้

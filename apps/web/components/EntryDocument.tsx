@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { Money } from '@/components/Money';
 import { api, postJson, type ApiError, type EntryComment, type JournalEntry } from '@/lib/api';
-import { subscribe } from '@/lib/realtime';
+import { subscribeOrPoll } from '@/lib/realtime';
 import { isoToThai } from '@/lib/date';
 import { formatMoney } from '@/lib/money';
 import { th } from '@/i18n/th';
@@ -22,7 +22,8 @@ export function EntryDocument({ companyId, entry, viewer, entryBase }: {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => subscribe(`company:${companyId}`, (e) => { if (e.k === 'comment') router.refresh(); }), [companyId, router]);
+  // คอมเมนต์ใหม่จากครู: push (self-host) หรือรีเฟรชทุก 60 วินาทีบน Vercel (lib/realtime subscribeOrPoll)
+  useEffect(() => subscribeOrPoll(`company:${companyId}`, (e) => { if (e.k === 'comment') router.refresh(); }, () => router.refresh(), 60_000), [companyId, router]);
 
   const rv = entry.reverses !== null;
   // แสดงแบบสมุดรายวัน: เดบิตก่อน เครดิตย่อหน้าตามหลัง (รายการกลับรายการเก็บลำดับบรรทัดตามรายการเดิม)
